@@ -29,22 +29,6 @@ import (
 	"testing"
 )
 
-//  #include "ctest.h"
-//  #include "device.h"
-//  #include "event.h"
-
-//  uint64_t   step_count;
-
-//  int        a_time;
-//  int        b_time;
-//  int        c_time;
-//  int        d_time;
-
-//  int        a_data;
-//  int        b_data;
-//  int        c_data;
-//  int        d_data;
-
 var step_count uint64
 
 type device struct {
@@ -214,14 +198,6 @@ func TestAdd_event_4(t *testing.T) {
 	if device_c.iarg != 2 {
 		t.Errorf("Event C did not set data correct %d got %d", 2, device_c.iarg)
 	}
-
-	// 	 ASSERT_EQUAL(15, a_time);
-	// 	 ASSERT_EQUAL(5, a_data);
-	// 	 ASSERT_EQUAL(20, b_time);
-	// 	 ASSERT_EQUAL(2, b_data);
-	// 	 ASSERT_EQUAL(10, c_time);
-	// 	 ASSERT_EQUAL(0, c_data);
-	//  }
 }
 
 // Schedule 3 events, last one before first, make sure all are correct
@@ -252,72 +228,111 @@ func TestAdd_event_5(t *testing.T) {
 	if device_d.iarg != 3 {
 		t.Errorf("Event D did not set data correct %d got %d", 3, device_d.iarg)
 	}
-
-	// 	 ASSERT_EQUAL(15, a_time);
-	// 	 ASSERT_EQUAL(5, a_data);
-	// 	 ASSERT_EQUAL(20, b_time);
-	// 	 ASSERT_EQUAL(2, b_data);
-	// 	 ASSERT_EQUAL(10, c_time);
-	// 	 ASSERT_EQUAL(0, c_data);
-	//  }
 }
 
-//  /* Schedule 3 events, last one before first, make sure all are correct */
-//  CTEST(event, test5) {
-// 	 struct _device  dev;
+// Cancel an event.
+func TestAdd_event_6(t *testing.T) {
+	init_test()
+	Add_event(device_a, device_a.a_callback, 10, 5)
+	Add_event(device_b, device_b.b_callback, 20, 2)
+	for range 30 {
+		step_count++
+		Advance(1)
+		if device_a.iarg == 5 {
+			Cancel_event(device_b, device_b.b_callback, 2)
+		}
+	}
+	if device_a.time != 10 {
+		t.Errorf("Event A did not fire at correct time %d got %d", 10, device_a.time)
+	}
+	if device_a.iarg != 5 {
+		t.Errorf("Event A did not set data correct %d got %d", 5, device_a.iarg)
+	}
+	if device_b.time != 0 {
+		t.Errorf("Event D did not fire at correct time %d got %d", 0, device_b.time)
+	}
+	if device_b.iarg != 0 {
+		t.Errorf("Event D did not set data correct %d got %d", 0, device_b.iarg)
+	}
+}
 
-// 	 init_test();
-// 	 add_event(&dev, &a_callback, 20, (void *)&a_data, 1);
-// 	 add_event(&dev, &b_callback, 20, (void *)&b_data, 2);
-// 	 add_event(&dev, &d_callback, 25, (void *)&d_data, 3);
-// 	 while (step_count < 30) {
-// 		 step_count++;
-// 		 advance();
-// 	 };
-// 	 ASSERT_EQUAL(20, a_time);
-// 	 ASSERT_EQUAL(1, a_data);
-// 	 ASSERT_EQUAL(20, b_time);
-// 	 ASSERT_EQUAL(2, b_data);
-// 	 ASSERT_EQUAL(25, d_time);
-// 	 ASSERT_EQUAL(3, d_data);
-//  }
-//  CTEST(event, test6) {
-// 	 struct _device  dev;
+// Schedule 3 events, cancel one while events in queue
+func TestAdd_event_7(t *testing.T) {
+	init_test()
+	Add_event(device_a, device_a.a_callback, 10, 5)
+	Add_event(device_b, device_b.b_callback, 20, 2)
+	Add_event(device_d, device_d.d_callback, 30, 3)
+	for range 30 {
+		step_count++
+		Advance(1)
+		if device_a.iarg == 5 {
+			Cancel_event(device_b, device_b.b_callback, 2)
+		}
+	}
+	if device_a.time != 10 {
+		t.Errorf("Event A did not fire at correct time %d got %d", 10, device_a.time)
+	}
+	if device_a.iarg != 5 {
+		t.Errorf("Event A did not set data correct %d got %d", 5, device_a.iarg)
+	}
+	if device_b.time != 0 {
+		t.Errorf("Event B did not fire at correct time %d got %d", 0, device_b.time)
+	}
+	if device_b.iarg != 0 {
+		t.Errorf("Event B did not set data correct %d got %d", 0, device_b.iarg)
+	}
+	if device_d.time != 30 {
+		t.Errorf("Event D did not fire at correct time %d got %d", 30, device_d.time)
+	}
+	if device_d.iarg != 3 {
+		t.Errorf("Event D did not set data correct %d got %d", 3, device_d.iarg)
+	}
+}
 
-// 	 init_test();
-// 	 add_event(&dev, &a_callback, 10, (void *)&a_data, 5);
-// 	 add_event(&dev, &b_callback, 20, (void *)&b_data, 2);
-// 	 while (step_count < 30) {
-// 		 step_count++;
-// 		 advance();
-// 		 if (a_data == 5) {
-// 			cancel_event(&dev, &b_callback);
-// 		 }
-// 	 };
-// 	 ASSERT_EQUAL(10, a_time);
-// 	 ASSERT_EQUAL(5, a_data);
-// 	 ASSERT_EQUAL(0, b_time);
-// 	 ASSERT_EQUAL(0, b_data);
-//  }
+// Schedule 4 events, cancel two while events in queue
+func TestAdd_event_8(t *testing.T) {
+	init_test()
+	Add_event(device_a, device_a.a_callback, 10, 5)
+	Add_event(device_b, device_b.b_callback, 40, 2)
+	Add_event(device_d, device_d.d_callback, 30, 3)
+	Add_event(device_d, device_d.d_callback, 50, 4)
+	for range 60 {
+		step_count++
+		Advance(1)
+		if device_a.iarg == 5 {
+			Cancel_event(device_b, device_b.b_callback, 2)
+			Cancel_event(device_d, device_a.d_callback, 4)
+		}
+	}
+	if device_a.time != 10 {
+		t.Errorf("Event A did not fire at correct time %d got %d", 10, device_a.time)
+	}
+	if device_a.iarg != 5 {
+		t.Errorf("Event A did not set data correct %d got %d", 5, device_a.iarg)
+	}
+	if device_b.time != 0 {
+		t.Errorf("Event B did not fire at correct time %d got %d", 0, device_b.time)
+	}
+	if device_b.iarg != 0 {
+		t.Errorf("Event B did not set data correct %d got %d", 0, device_b.iarg)
+	}
+	if device_d.time != 30 {
+		t.Errorf("Event D did not fire at correct time %d got %d", 30, device_d.time)
+	}
+	if device_d.iarg != 3 {
+		t.Errorf("Event D did not set data correct %d got %d", 3, device_d.iarg)
+	}
+}
 
-//  CTEST(event, test7) {
-// 	 struct _device  dev;
+// Test event at zero units
+func TestAdd_event_9(t *testing.T) {
+	init_test()
+	Add_event(device_a, device_a.a_callback, 0, 5)
+	if device_a.time != 0 {
+		t.Errorf("Event A did not fire at correct time %d got %d", 10, device_a.time)
+	}
+	if device_a.iarg != 5 {
+		t.Errorf("Event A did not set data correct %d got %d", 5, device_a.iarg)
+	}
 
-// 	 init_test();
-// 	 add_event(&dev, &a_callback, 10, (void *)&a_data, 5);
-// 	 add_event(&dev, &b_callback, 20, (void *)&b_data, 2);
-// 	 add_event(&dev, &d_callback, 30, (void *)&d_data, 3);
-// 	 while (step_count < 30) {
-// 		 step_count++;
-// 		 advance();
-// 		 if (a_data == 5) {
-// 			cancel_event(&dev, &b_callback);
-// 		 }
-// 	 };
-// 	 ASSERT_EQUAL(10, a_time);
-// 	 ASSERT_EQUAL(5, a_data);
-// 	 ASSERT_EQUAL(0, b_time);
-// 	 ASSERT_EQUAL(0, b_data);
-// 	 ASSERT_EQUAL(30, d_time);
-// 	 ASSERT_EQUAL(3, d_data);
-//  }
+}

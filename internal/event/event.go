@@ -105,7 +105,7 @@ func Cancel_event(dev D.Device, cb Callback, iarg int) {
 
 	// Scan list
 	for evptr != nil {
-		if evptr.dev == dev {
+		if evptr.dev == dev && evptr.iarg == iarg {
 			nxt := evptr.next
 			// If next event give time to next event
 			if nxt != nil {
@@ -114,12 +114,14 @@ func Cancel_event(dev D.Device, cb Callback, iarg int) {
 				nxt.prev = evptr.prev
 				// } else {
 				// 	// No next event
+			} else {
+				// No next event, point event_tail to prev
+				el.tail = evptr.prev
 			}
 
 			// Point previous event next to next
 			if evptr.prev != nil {
 				evptr.prev.next = evptr.next
-				evptr.next.prev = evptr.prev
 			} else {
 				// No previous, at head of list
 				el.head = evptr.next
