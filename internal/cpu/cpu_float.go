@@ -24,7 +24,7 @@ package cpu
 */
 
 // Floating point half register
-func (cpu *CPU) op_hd(step *stepInfo) uint16 {
+func (cpu *CPU) opFPHalf(step *stepInfo) uint16 {
 	var e1 int
 	var sign bool
 
@@ -70,11 +70,11 @@ func (cpu *CPU) op_hd(step *stepInfo) uint16 {
 	if sign {
 		step.fsrc2 |= MSIGNL
 	}
-	return cpu.op_ld(step)
+	return cpu.opFPLoad(step)
 }
 
 // Floating load register
-func (cpu *CPU) op_ld(step *stepInfo) uint16 {
+func (cpu *CPU) opFPLoad(step *stepInfo) uint16 {
 	if (step.opcode & 0x10) == 0 {
 		cpu.fpregs[step.R1] = step.fsrc2
 	} else {
@@ -84,7 +84,7 @@ func (cpu *CPU) op_ld(step *stepInfo) uint16 {
 }
 
 // Floating point load register with sign change
-func (cpu *CPU) op_lcs(step *stepInfo) uint16 {
+func (cpu *CPU) opLcs(step *stepInfo) uint16 {
 	if (step.opcode & 0x2) == 0 { // LP, LN
 		step.fsrc2 &= ^MSIGNL
 	}
@@ -109,7 +109,7 @@ func (cpu *CPU) op_lcs(step *stepInfo) uint16 {
 }
 
 // Floating point store register double
-func (cpu *CPU) op_std(step *stepInfo) uint16 {
+func (cpu *CPU) opSTD(step *stepInfo) uint16 {
 	t := uint32(step.fsrc1 & LMASKL)
 	if error := cpu.writeFull(step.address1+4, t); error != 0 {
 		return error
@@ -119,13 +119,13 @@ func (cpu *CPU) op_std(step *stepInfo) uint16 {
 }
 
 // Floating point store register short
-func (cpu *CPU) op_ste(step *stepInfo) uint16 {
+func (cpu *CPU) opSTE(step *stepInfo) uint16 {
 	t := uint32((step.fsrc1 >> 32) & LMASKL)
 	return cpu.writeFull(step.address1, t)
 }
 
 // Floating point compare short
-func (cpu *CPU) op_ce(step *stepInfo) uint16 {
+func (cpu *CPU) opCE(step *stepInfo) uint16 {
 
 	// Extract number and adjust
 	e1 := int((step.fsrc1 & EMASKL) >> 56)
@@ -192,7 +192,7 @@ func (cpu *CPU) op_ce(step *stepInfo) uint16 {
 }
 
 // Floating point short add and subtract
-func (cpu *CPU) op_sh_as(step *stepInfo) uint16 {
+func (cpu *CPU) opFPAdd(step *stepInfo) uint16 {
 	// SER 3B
 	// SUR 3F
 	// SE  7B
@@ -235,28 +235,28 @@ func (cpu *CPU) op_sh_as(step *stepInfo) uint16 {
 		e1 = e2
 	}
 
-	var d uint32
+	var r uint32
 
 	// Exponents should be equal now.
 	// Add results
 	if s1 != s2 {
 		// Different signs do subtract
 		v2 ^= XMASK
-		d = v1 + v2 + 1
-		if (d & CMASK) != 0 {
-			d &= XMASK
+		r = v1 + v2 + 1
+		if (r & CMASK) != 0 {
+			r &= XMASK
 		} else {
 			s1 = !s1
-			d ^= XMASK
-			d++
+			r ^= XMASK
+			r++
 		}
 	} else {
-		d = v1 + v2
+		r = v1 + v2
 	}
 
 	// If v1 not normal shift left + expo
-	if (d & CMASK) != 0 {
-		d >>= 4
+	if (r & CMASK) != 0 {
+		r >>= 4
 		e1++
 		if e1 >= 128 {
 			return IRC_EXPOVR
@@ -267,7 +267,7 @@ func (cpu *CPU) op_sh_as(step *stepInfo) uint16 {
 	cpu.cc = 0
 	// If not unnormalize opcode
 	if (step.opcode & 0x0e) != 0x0e {
-		if d != 0 {
+		if r != 0 {
 			if s1 {
 				cpu.cc = 1
 			} else {
@@ -280,7 +280,7 @@ func (cpu *CPU) op_sh_as(step *stepInfo) uint16 {
 			s1 = false
 		}
 	} else {
-		if (d & 0xffffff0) != 0 {
+		if (r & 0xffffff0) != 0 {
 			if s1 {
 				cpu.cc = 1
 			} else {
@@ -290,21 +290,21 @@ func (cpu *CPU) op_sh_as(step *stepInfo) uint16 {
 			if (cpu.pmask & SIGMASK) == 0 {
 				e1 = 0
 			}
-			d = 0
+			r = 0
 			s1 = false
 		}
 	}
 
-	var error uint16 = 0
+	var err uint16 = 0
 	// Check signifigance exceptions
 	if cpu.cc == 0 && (cpu.pmask&SIGMASK) != 0 {
-		error = IRC_SIGNIF
+		err = IRC_SIGNIF
 	} else {
 		// Check if we are normalized addition
 		if (step.opcode & 0x0e) != 0x0e {
 			if cpu.cc != 0 { // Only if non-zero result
-				for (d & SNMASK) == 0 {
-					d <<= 4
+				for (r & SNMASK) == 0 {
+					r <<= 4
 					e1 = 0
 				}
 				// Check if underflow
@@ -312,7 +312,7 @@ func (cpu *CPU) op_sh_as(step *stepInfo) uint16 {
 					if (cpu.pmask & EXPUNDER) != 0 {
 						return IRC_EXPUND
 					} else {
-						d = 0
+						r = 0
 						s1 = false
 						e1 = 0
 					}
@@ -320,20 +320,20 @@ func (cpu *CPU) op_sh_as(step *stepInfo) uint16 {
 			}
 
 			// Remove guard digit
-			d >>= 4
+			r >>= 4
 		}
 	}
-	d |= uint32(e1<<24) & EMASK
+	r |= uint32(e1<<24) & EMASK
 	if cpu.cc != 0 && s1 {
-		d |= MSIGN
+		r |= MSIGN
 	}
 	// Store result
-	cpu.fpregs[step.R1] = (uint64(d) << 32) | (cpu.fpregs[step.R1] & LMASKL)
-	return error
+	cpu.fpregs[step.R1] = (uint64(r) << 32) | (cpu.fpregs[step.R1] & LMASKL)
+	return err
 }
 
 // Double floating compare
-func (cpu *CPU) op_cd(step *stepInfo) uint16 {
+func (cpu *CPU) opCD(step *stepInfo) uint16 {
 	// OP_CD	0x69
 	// OP_CDR	0x29
 
@@ -401,7 +401,7 @@ func (cpu *CPU) op_cd(step *stepInfo) uint16 {
 }
 
 // Floating point double add and subtract
-func (cpu *CPU) op_db_as(step *stepInfo) uint16 {
+func (cpu *CPU) opFPAddD(step *stepInfo) uint16 {
 	// SDR 3B
 	// SWR 3F
 	// SD  6B
@@ -445,27 +445,26 @@ func (cpu *CPU) op_db_as(step *stepInfo) uint16 {
 	}
 
 	// Exponents should be equal now.
-	// Add results
-	var d uint64
+	var r uint64 // Add results
 
 	if s1 != s2 {
 		// Different signs do subtract
 		v2 ^= XMASKL
-		d = v1 + v2 + 1
-		if (d & CMASKL) != 0 {
-			d &= XMASKL
+		r = v1 + v2 + 1
+		if (r & CMASKL) != 0 {
+			r &= XMASKL
 		} else {
 			s1 = !s1
-			d ^= XMASKL
-			d++
+			r ^= XMASKL
+			r++
 		}
 	} else {
-		d = v1 + v2
+		r = v1 + v2
 	}
 
 	// If v1 not normal shift left + expo
-	if (d & CMASKL) != 0 {
-		d >>= 4
+	if (r & CMASKL) != 0 {
+		r >>= 4
 		e1++
 		if e1 >= 128 {
 			return IRC_EXPOVR
@@ -476,7 +475,7 @@ func (cpu *CPU) op_db_as(step *stepInfo) uint16 {
 	cpu.cc = 0
 	// If not unnormalize opcode
 	if (step.opcode & 0x0e) != 0x0e {
-		if d != 0 {
+		if r != 0 {
 			if s1 {
 				cpu.cc = 1
 			} else {
@@ -489,7 +488,7 @@ func (cpu *CPU) op_db_as(step *stepInfo) uint16 {
 			s1 = false
 		}
 	} else {
-		if (d & 0xffffff0) != 0 {
+		if (r & 0xffffff0) != 0 {
 			if s1 {
 				cpu.cc = 1
 			} else {
@@ -499,21 +498,21 @@ func (cpu *CPU) op_db_as(step *stepInfo) uint16 {
 			if (cpu.pmask & SIGMASK) == 0 {
 				e1 = 0
 			}
-			d = 0
+			r = 0
 			s1 = false
 		}
 	}
 
-	var error uint16 = 0
+	var err uint16 = 0
 	// Check signifigance exceptions
 	if cpu.cc == 0 && (cpu.pmask&SIGMASK) != 0 {
-		error = IRC_SIGNIF
+		err = IRC_SIGNIF
 	} else {
 		// Check if we are normalized addition
 		if (step.opcode & 0x0e) != 0x0e {
 			if cpu.cc != 0 { // Only if non-zero result
-				for (d & UMASKL) == 0 {
-					d <<= 4
+				for (r & UMASKL) == 0 {
+					r <<= 4
 					e1 = 0
 				}
 				// Check if underflow
@@ -521,7 +520,7 @@ func (cpu *CPU) op_db_as(step *stepInfo) uint16 {
 					if (cpu.pmask & EXPUNDER) != 0 {
 						return IRC_EXPUND
 					} else {
-						d = 0
+						r = 0
 						s1 = false
 						e1 = 0
 					}
@@ -529,20 +528,20 @@ func (cpu *CPU) op_db_as(step *stepInfo) uint16 {
 			}
 
 			// Remove guard digit
-			d >>= 4
+			r >>= 4
 		}
 	}
-	d |= uint64(e1<<56) & EMASKL
+	r |= uint64(e1<<56) & EMASKL
 	if cpu.cc != 0 && s1 {
-		d |= MSIGNL
+		r |= MSIGNL
 	}
 	// Store result
-	cpu.fpregs[step.R1] = d
-	return error
+	cpu.fpregs[step.R1] = r
+	return err
 }
 
 // Floating point multiply
-func (cpu *CPU) op_fp_mpy(step *stepInfo) uint16 {
+func (cpu *CPU) opFPMul(step *stepInfo) uint16 {
 	// MDR	2c
 	// MER  3c
 	// ME   7c
@@ -576,43 +575,43 @@ func (cpu *CPU) op_fp_mpy(step *stepInfo) uint16 {
 	// Add in guard digits
 	v1 <<= 4
 	v2 <<= 4
-	var d uint64 = 0
+	var r uint64 = 0 // Result
 
 	// Do actual multiply
 	for i := 0; i < 60; i++ {
 		// Add if we need too
 		if (v1 & 1) != 0 {
-			d += v2
+			r += v2
 		}
 		// Shift right by one
 		v1 >>= 1
-		d >>= 1
+		r >>= 1
 	}
 
 	// If overflow, shift right 4 bits
-	if (d & EMASKL) != 0 {
-		d >>= 4
+	if (r & EMASKL) != 0 {
+		r >>= 4
 		e1++
 	}
 
-	var error uint16 = 0
+	var err uint16 = 0
 	// Check for overflow
 	if e1 >= 128 {
-		error = IRC_EXPOVR
+		err = IRC_EXPOVR
 	}
 
 	// Align the results
-	if d != 0 {
-		for (d & NMASKL) == 0 {
-			d <<= 4
+	if r != 0 {
+		for (r & NMASKL) == 0 {
+			r <<= 4
 			e1--
 		} // Make 32 bit and create guard digit
 		// Check if underflow
 		if e1 < 0 {
 			if (cpu.pmask & EXPUNDER) != 0 {
-				error = IRC_EXPUND
+				err = IRC_EXPUND
 			} else {
-				d = 0
+				r = 0
 				s1 = false
 				e1 = 0
 			}
@@ -623,20 +622,20 @@ func (cpu *CPU) op_fp_mpy(step *stepInfo) uint16 {
 	}
 
 	// Store result'
-	d |= (uint64(e1) << 56) & EMASKL
+	r |= (uint64(e1) << 56) & EMASKL
 	if s1 {
-		d |= MSIGNL
+		r |= MSIGNL
 	}
 	if (step.opcode&0x10) == 0 || (step.opcode&0xf) == 0xc {
-		cpu.fpregs[step.R1] = d
+		cpu.fpregs[step.R1] = r
 	} else {
-		cpu.fpregs[step.R1] = (d & HMASKL) | (cpu.fpregs[step.R1] & LMASKL)
+		cpu.fpregs[step.R1] = (r & HMASKL) | (cpu.fpregs[step.R1] & LMASKL)
 	}
-	return error
+	return err
 }
 
 // Floating point divide
-func (cpu *CPU) op_fp_div(step *stepInfo) uint16 {
+func (cpu *CPU) opFPDiv(step *stepInfo) uint16 {
 	// MDR	2c
 	// MER  3c
 	// ME   7c
@@ -683,7 +682,7 @@ func (cpu *CPU) op_fp_div(step *stepInfo) uint16 {
 	// Change sign of v2 so we can add
 	v2 ^= XMASKL
 	v2++
-	var d uint64 = 0
+	var r uint64 = 0 // Result
 
 	// Do divide
 	for i := 57; i > 0; i-- {
@@ -692,44 +691,44 @@ func (cpu *CPU) op_fp_div(step *stepInfo) uint16 {
 		// Subtract remainder from dividend
 		t := v1 + v2
 		// Shift quotent left one bit
-		d <<= 1
+		r <<= 1
 		// If remainder larger then divsor replace
 		if (t & CMASKL) != 0 {
 			v1 = t
-			d |= 1
+			r |= 1
 		}
 		v1 &= XMASKL
 	}
 
-	if d == 0x01ffffffffffffff {
-		d++
+	if r == 0x01ffffffffffffff {
+		r++
 	}
-	d >>= 1
+	r >>= 1
 
 	// If overflow, shift right 4 bits
-	if (d & EMASKL) != 0 {
-		d >>= 4
+	if (r & EMASKL) != 0 {
+		r >>= 4
 		e1++
 	}
 
-	var error uint16 = 0
+	var err uint16 = 0
 	// Check for overflow
 	if e1 >= 128 {
-		error = IRC_EXPOVR
+		err = IRC_EXPOVR
 	}
 
 	// Align the results
-	if d != 0 {
-		for (d & NMASKL) == 0 {
-			d <<= 4
+	if r != 0 {
+		for (r & NMASKL) == 0 {
+			r <<= 4
 			e1--
 		} // Make 32 bit and create guard digit
 		// Check if underflow
 		if e1 < 0 {
 			if (cpu.pmask & EXPUNDER) != 0 {
-				error = IRC_EXPUND
+				err = IRC_EXPUND
 			} else {
-				d = 0
+				r = 0
 				s1 = false
 				e1 = 0
 			}
@@ -740,25 +739,21 @@ func (cpu *CPU) op_fp_div(step *stepInfo) uint16 {
 	}
 
 	// Store results
-	d |= (uint64(e1) << 56) & EMASKL
+	r |= (uint64(e1) << 56) & EMASKL
 	if s1 {
-		d |= MSIGNL
+		r |= MSIGNL
 	}
 	if (step.opcode&0x10) == 0 || (step.opcode&0xf) == 0xc {
-		cpu.fpregs[step.R1] = d
+		cpu.fpregs[step.R1] = r
 	} else {
-		cpu.fpregs[step.R1] = (d & HMASKL) | (cpu.fpregs[step.R1] & LMASKL)
+		cpu.fpregs[step.R1] = (r & HMASKL) | (cpu.fpregs[step.R1] & LMASKL)
 	}
-	return error
+	return err
 }
 
-func (cpu *CPU) op_mxr(step *stepInfo) uint16  { return 0 }
-func (cpu *CPU) op_mxdr(step *stepInfo) uint16 { return 0 }
-func (cpu *CPU) op_mx(step *stepInfo) uint16   { return 0 }
-
 // Extended precision load round
-func (cpu *CPU) op_lre(step *stepInfo) uint16 {
-	var error uint16 = 0
+func (cpu *CPU) opLRER(step *stepInfo) uint16 {
+	var err uint16 = 0
 	var v uint64 = step.fsrc2
 
 	// Check if round bit is one.
@@ -773,7 +768,7 @@ func (cpu *CPU) op_lre(step *stepInfo) uint16 {
 			v >>= 4
 			e++
 			if e > 128 {
-				error = IRC_EXPOVR
+				err = IRC_EXPOVR
 			}
 		}
 		// Store results
@@ -783,14 +778,14 @@ func (cpu *CPU) op_lre(step *stepInfo) uint16 {
 		}
 	}
 	cpu.fpregs[step.R1] = (v & HMASKL) | (cpu.fpregs[step.R1] & LMASKL)
-	return error
+	return err
 }
 
-func (cpu *CPU) op_lrd(step *stepInfo) uint16 {
+func (cpu *CPU) opLRDR(step *stepInfo) uint16 {
 	if (step.R2 & 0xb) != 0 {
 		return IRC_SPEC
 	}
-	var error uint16 = 0
+	var err uint16 = 0
 	var v uint64 = cpu.fpregs[step.R2]
 	if (cpu.fpregs[step.R2|2] & 0x0080000000000000) != 0 {
 		// Extract numbers and adjust
@@ -801,7 +796,7 @@ func (cpu *CPU) op_lrd(step *stepInfo) uint16 {
 			v >>= 4
 			e++
 			if e > 128 {
-				error = IRC_EXPOVR
+				err = IRC_EXPOVR
 			}
 		}
 		// Store results
@@ -811,14 +806,14 @@ func (cpu *CPU) op_lrd(step *stepInfo) uint16 {
 		}
 	}
 	cpu.fpregs[step.R1] = v
-	return error
+	return err
 }
 
-func (cpu *CPU) op_axr(step *stepInfo) uint16 {
+func (cpu *CPU) opAXR(step *stepInfo) uint16 {
 	if (step.R1&0xb) != 0 || (step.R2&0xb) != 0 {
 		return IRC_SPEC
 	}
-	var error uint16 = 0
+	var err uint16 = 0
 	v1l := cpu.fpregs[step.R1]
 	v1h := cpu.fpregs[step.R1|2] & MMASKL
 	v2l := cpu.fpregs[step.R2]
@@ -920,7 +915,7 @@ func (cpu *CPU) op_axr(step *stepInfo) uint16 {
 		v1h >>= 4
 		e1++
 		if e1 >= 128 {
-			error = IRC_EXPOVR
+			err = IRC_EXPOVR
 		}
 	}
 
@@ -956,7 +951,7 @@ func (cpu *CPU) op_axr(step *stepInfo) uint16 {
 		// Check if underflow
 		if e1 < 0 {
 			if (cpu.pmask & EXPUNDER) != 0 {
-				error = IRC_EXPUND
+				err = IRC_EXPUND
 			} else {
 				v1l = 0
 				v1h = 0
@@ -987,369 +982,199 @@ func (cpu *CPU) op_axr(step *stepInfo) uint16 {
 	cpu.fpregs[step.R1] = v1h
 	cpu.fpregs[step.R1|2] = v1l
 
-	return error
+	return err
 }
 
-//         case OP_MXD:
-//                 if ((cpu_unit[0].flags & FEAT_EFP) == 0) {
-//                     storepsw(OPPSW, IRC_OPR);
-//                     goto supress;
-//                 }
-//                 if ((reg1 & 0xB) != 0) {
-//                     storepsw(OPPSW, IRC_SPEC);
-//                     goto supress;
-//                 }
+// Floating Point Multiply producing extended result.
+func (cpu *CPU) opMXD(step *stepInfo) uint16 {
+	// Check if registers are valid.
+	if (step.R1 & 0xb) != 0 { // 0 or 4
+		return IRC_SPEC
+	}
 
-//                 /* src2L already has DP number */
+	// Extract number and adjust
+	e1 := int((step.fsrc1 & EMASKL) >> 56)
+	e2 := int((step.fsrc2 & EMASKL) >> 56)
+	s1 := (step.fsrc1 & MSIGNL) != (step.fsrc2 & MSIGNL)
 
-//                 /* Fall through */
-//         case OP_MXDR:
-//                 if ((cpu_unit[0].flags & FEAT_EFP) == 0) {
-//                     storepsw(OPPSW, IRC_OPR);
-//                     goto supress;
-//                 }
-//                 if ((reg1 & 0xB) != 0) {
-//                     storepsw(OPPSW, IRC_SPEC);
-//                     goto supress;
-//                 }
+	// Make 32 bit and create guard digit
+	v1 := step.fsrc1 & MMASKL
+	v2 := step.fsrc2 & MMASKL
 
-//                 /* Extract numbers and adjust */
-//                 e1 = (src1L & EMASKL) >> 56;
-//                 e2 = (src2L & EMASKL) >> 56;
-//                 fill = 0;
-//                 if ((src1L & MSIGNL) != (src2L & MSIGNL))
-//                    fill = 1;
-//                 src1L &= MMASKL;
-//                 src2L &= MMASKL;
+	// Pre-nomalize v1 and v2 */
+	if v1 != 0 {
+		for (v1 & NMASKL) == 0 {
+			v1 <<= 4
+			e1--
+		}
+	}
+	if v2 != 0 {
+		for (v2 & NMASKL) == 0 {
+			v2 <<= 4
+			e2--
+		}
+	}
+	// Compute exponent
+	e1 = e1 + e2 - 65
 
-//                 /* Pre-nomalize src2 and src1 */
-//                 if (src2L != 0) {
-//                     while ((src2L & NMASKL) == 0) {
-//                        src2L <<= 4;
-//                        e2 --;
-//                     }
-//                 }
-//                 if (src1L != 0) {
-//                     while ((src1L & NMASKL) == 0) {
-//                        src1L <<= 4;
-//                        e1 --;
-//                     }
-//                 }
+	// Add in guard digits
+	v1 <<= 4
+	v2 <<= 4
+	var r uint64 = 0
 
-//                 /* Compute exponent */
-//                 e1 = e1 + e2 - 64;
+	// Do actual multiply
+	for i := 0; i < 56; i++ {
+		// Add if we need too
+		if (v1 & 1) != 0 {
+			r += v2
+		}
+		v1 >>= 1
+		// Shift right by one
+		if (r & 1) != 0 {
+			v1 |= MSIGNL
+		}
+		r >>= 1
+	}
 
-//                 destL = 0;
-//                 /* Do multiply */
-//                 for (temp = 0; temp < 56; temp++) {
-//                      /* Add if we need too */
-//                      if (src1L & 1)
-//                          destL += src2L;
-//                      /* Shift right by one */
-//                      src1L >>= 1;
-//                      if (destL & 1)
-//                         src1L |= MSIGNL;
-//                      destL >>= 1;
-//                 }
+	var err uint16 = 0
+	// If overflow, shift right 4 bits
+	if (r & EMASKL) != 0 {
+		v1 >>= 4
+		v1 |= (r & 0xf) << 60
+		r >>= 4
+		e1++
 
-//                 /* If overflow, shift right 4 bits */
-//                 if (destL & EMASKL) {
-//                    src1L >>= 4;
-//                    src1L |= (destL & 0xF) << 60;
-//                    destL >>= 4;
-//                    e1 ++;
-//                    if (e1 >= 128) {
-//                        storepsw(OPPSW, IRC_EXPOVR);
-//                    }
-//                 }
+		// Check for overflow
+		if e1 >= 128 {
+			err = IRC_EXPOVR
+		}
 
-//                 /* Align the results */
-//                 if ((destL | src1L) != 0) {
-//                     while ((destL & NMASKL) == 0) {
-//                         destL <<= 4;
-//                         destL |= (src1L >> 60) & 0xf;
-//                         src1L <<= 4;
-//                         e1 --;
-//                     }
-//                     /* Check if underflow */
-//                     if (e1 < 0) {
-//                         if (pmsk & EXPUND) {
-//                             storepsw(OPPSW, IRC_EXPUND);
-//                         } else {
-//                             destL = src1L = 0;
-//                             fill = e1 = 0;
-//                         }
-//                     }
-//                 } else
-//                     e1 = fill = 0;
-//                 if (e1) {
-//                     destL |= (((t_uint64)e1) << 56) & EMASKL;
-//                     src1L |= ((t_uint64)(e1 - 14) << 56) & EMASKL;
-//                     if (fill) {
-//                        destL |= MSIGNL;
-//                        src1L |= MSIGNL;
-//                     }
-//                 }
-//                 fpregs[reg1] = destL;
-//                 fpregs[reg1|2] = src1L;
-//                 break;
+	}
 
-//         case OP_MXR:
-//                 if ((cpu_unit[0].flags & FEAT_EFP) == 0) {
-//                     storepsw(OPPSW, IRC_OPR);
-//                     goto supress;
-//                 }
-//                 if ((reg1 & 0xBB) != 0) {
-//                     storepsw(OPPSW, IRC_SPEC);
-//                     goto supress;
-//                 }
+	// Align the results
+	if (r | v1) != 0 {
+		for (r & NMASKL) == 0 {
+			r <<= 4
+			r |= (v1 >> 60) & 0xf
+			v1 <<= 4
+			e1--
+		}
+		// Make 32 bit and create guard digit
+		// Check if underflow
+		if e1 < 0 {
+			if (cpu.pmask & EXPUNDER) != 0 {
+				err = IRC_EXPUND
+			} else {
+				r = 0
+				v1 = 0
+				s1 = false
+				e1 = 0
+			}
+		} else {
+			e1 = 0
+			s1 = false
+		}
+	}
 
-//                 /* Extract numbers and adjust */
-//                 e1 = (src1L & EMASKL) >> 56;
-//                 e2 = (src2L & EMASKL) >> 56;
-//                 fill = 0;
-//                 if ((src1L & MSIGNL) != (src2L & MSIGNL))
-//                    fill = 1;
-//                 src1L &= MMASKL;
-//                 src2L = fpregs[reg1|2] & MMASKL;
-//                 /* Normalize first operand */
-//                 if (src1L != 0) {
-//                     while ((src1L & NMASKL) == 0) {
-//                        src1L <<= 4;
-//                        src1L |= (src2L >> 56) & 0xf;
-//                        src2L <<= 4;
-//                        e1 --;
-//                     }
-//                 }
-//                 src2L <<= 4;
-//                 src2L &= UMASKL;
+	// Store result
+	if e1 == 0 {
+		r |= (uint64(e1) << 56) & EMASKL
+		v1 |= (uint64(e1-14) << 56) & EMASKL
+		if s1 {
+			r |= MSIGNL
+			v1 |= MSIGNL
+		}
+	}
+	cpu.fpregs[step.R1] = r
+	cpu.fpregs[step.R1|2] = v1
+	return err
+}
 
-//                 /* Normalize second operand. */
-//                 fpregs[reg1|2] = fpregs[R2(reg)|2] & MMASKL;
-//                 fpregs[reg1] = fpregs[R2(reg)] & MMASKL;
-//                 /* Save second operand in result */
-//                 destL = fpregs[reg1] | fpregs[reg1|2];
-//                 if (destL != 0) {
-//                     while ((fpregs[reg1] & 0x00f00000000000LL) == 0) {
-//                        fpregs[reg1] <<= 4;
-//                        fpregs[reg1|2] <<= 4;
-//                        fpregs[reg1] |= fpregs[reg1|2] >> 56;
-//                        e2--;
-//                     }
-//                     fpregs[reg1|2] &= MMASKL;
-//                 }
+func (cpu *CPU) opMXR(step *stepInfo) uint16 {
+	if (step.R1&0xb) != 0 || (step.R2&0xb) != 0 {
+		return IRC_SPEC
+	}
+	// Extract number and adjust
+	e1 := int((step.fsrc1 & EMASKL) >> 56)
+	e2 := int((step.fsrc2 & EMASKL) >> 56)
+	s1 := (step.fsrc1 & MSIGNL) != (step.fsrc2 & MSIGNL)
 
-//                 /* Compute exponent */
-//                 e1 = e1 + e2 - 64;
+	// Make 32 bit and create guard digit
+	v1h := step.fsrc1 & MMASKL
+	v1l := cpu.fpregs[step.R1|2] & MMASKL
+	v2h := step.fsrc2 & MMASKL
+	v2l := cpu.fpregs[step.R2|2] & MMASKL
 
-//                 /* Do multiply */
-//                 destL = 0;
-//                 dest2L = 0;
-//                 for (temp = 0; temp < 112; temp++) {
-//                      /* Add if we need too */
-//                      if (fpregs[reg1|2] & 1) {
-//                          destL += src1L;
-//                          dest2L += src2L;
-//                          if (dest2L & CMASKL)
-//                              destL ++;
-//                          dest2L &= XMASKL;
-//                       }
-//                       /* Shift right by one */
-//                       dest2L >>= 1;
-//                       destL >>= 1;
-//                       if (destL & 0x8) {
-//                           dest2L |= 0x0800000000000000LL;
-//                       }
-//                       if (fpregs[reg1] & 1) {
-//                           fpregs[reg1|2] |= CMASKL >> 4;
-//                       }
-//                       fpregs[reg1|2] >>= 1;
-//                       fpregs[reg1] >>= 1;
-//                 }
-//                 /* If overflow, shift right 4 bits */
-//                 if (destL & EMASKL) {
-//                    src1L >>= 4;
-//                    src1L |= (destL & 0xF) << 60;
-//                    destL >>= 4;
-//                    e1 ++;
-//                    if (e1 >= 128) {
-//                        storepsw(OPPSW, IRC_EXPOVR);
-//                    }
-//                 }
-//                 src1L >>= 4;
-//                 if (e1) {
-//                     destL |= (((t_uint64)e1) << 56) & EMASKL;
-//                     src1L |= ((t_uint64)(e1 - 14) << 56) & EMASKL;
-//                     if (fill) {
-//                        destL |= MSIGNL;
-//                        src1L |= MSIGNL;
-//                     }
-//                 }
-//                 fpregs[reg1] = destL;
-//                 fpregs[reg1|2] = src1L;
-//                 break;
+	// Pre-nomalize v1 and v2 */
+	if v1h != 0 {
+		for (v1h & NMASKL) == 0 {
+			v1h <<= 4
+			v1h |= (v1l >> 56) & 0xf
+			v1l <<= 4
+			e1--
+		}
+	}
+	if v2h != 0 {
+		for (v2h & NMASKL) == 0 {
+			v2h <<= 4
+			v2h |= (v2l >> 56) & 0xf
+			v2l <<= 4
+			e2--
+		}
+	}
 
-//         default:   /* Unknown op code */
-//                 storepsw(OPPSW, IRC_OPR);
-//                 goto supress;
-//         }
-//         if (per_en && (cregs[9] & 0x10000000) != 0 && (cregs[9] & 0xffff & per_mod) != 0)
-//            per_code |= 0x1000;
+	// Create guard digit
+	v1l <<= 4
+	v1l &= UMASKL
 
-//
-// /* Reset */
+	// Compute exponent
+	e1 = e1 + e2 - 64
 
-// t_stat
-// cpu_reset (DEVICE *dptr)
-// {
-//     int     i;
+	// Do multiply
+	rl := uint64(0)
+	rh := uint64(0)
+	for range 112 {
+		if (v1l & 1) != 0 {
+			rl += v2l
+			rh += v2h
+			if (rl & CMASKL) != 0 {
+				rh++
+			}
+			rl &= XMASKL
+		}
+		// Shift right by one.
+		rl >>= 1
+		rh >>= 1
+		if (rl & 0x8) != 0 {
+			rh |= CMASKL >> 4
+		}
+		if (v1h & 1) != 0 {
+			v1l |= CMASKL >> 4
+		}
+	}
 
-//     /* Make sure devices are mapped correctly */
-//     chan_set_devs();
-//     sim_vm_fprint_stopped = &cpu_fprint_stopped;
-//     /* Create memory array if it does not exist. */
-//     if (M == NULL) {                        /* first time init? */
-//         sim_brk_types = sim_brk_dflt = SWMASK ('E');
-//         M = (uint32 *) calloc (((uint32) MEMSIZE) >> 2, sizeof (uint32));
-//         if (M == NULL)
-//             return SCPE_MEM;
-//     }
-//     /* Set up channels */
-//     chan_set_devs();
-
-//     sysmsk = irqcode = irqaddr = loading = 0;
-//     st_key = cc = pmsk = ec_mode = interval_irq = flags = 0;
-//     page_en = irq_en = ext_en = per_en = 0;
-//     clk_state = CLOCK_UNSET;
-//     for (i = 0; i < 256; i++)
-//        tlb[i] = 0;
-//     for (i = 0; i < 4096; i++)
-//        key[i] = 0;
-//     for (i = 0; i < 16; i++)
-//        cregs[i] = 0;
-//     clk_cmp[0] = clk_cmp[1] = 0xffffffff;
-//     if (Q370) {
-//         if (clk_state == CLOCK_UNSET) {
-//             /* Set TOD to current time */
-//             time_t seconds = sim_get_time(NULL);
-//             t_uint64  lsec = (t_uint64)seconds;
-//             /* IBM measures time from 1900, Unix starts at 1970 */
-//             /* Add in number of years from 1900 to 1970 + 17 leap days */
-//             lsec += ((70 * 365) + 17) * 86400ULL;
-//             lsec *= 1000000ULL;
-//             lsec <<= 12;
-//             tod_clock[0] = (uint32)(lsec >> 32);
-//             tod_clock[1] = (uint32)(lsec & FMASK);
-//             clk_state = CLOCK_SET;
-//         }
-//         cregs[0]  = 0x000000e0;
-//         cregs[2]  = 0xffffffff;
-//         cregs[14] = 0xc2000000;
-//         cregs[15] = 512;
-//     }
-
-//     if (cpu_unit[0].flags & (FEAT_370|FEAT_TIMER)) {
-//        sim_rtcn_init_unit (&cpu_unit[0], 1000, TMR_RTC);
-//        sim_activate(&cpu_unit[0], 100);
-//     }
-//     idle_stop_tm0 = 0;
-//     return SCPE_OK;
-// }
-
-// /* Interval timer routines */
-// t_stat
-// rtc_srv(UNIT * uptr)
-// {
-//     (void)sim_rtcn_calb (rtc_tps, TMR_RTC);
-//     sim_activate_after(uptr, 1000000/rtc_tps);
-//     M[0x50>>2] -= 0x100;
-//     if ((M[0x50>>2] & 0xfffff00) == 0)  {
-//         sim_debug(DEBUG_INST, &cpu_dev, "TIMER IRQ %08x\n", M[0x50>>2]);
-//         interval_irq = 1;
-//     }
-//     key[0] |= 0x6;
-//     sim_debug(DEBUG_INST, &cpu_dev, "TIMER = %08x\n", M[0x50>>2]);
-//     /* Time of day clock and timer on IBM 370 */
-//     if (Q370) {
-//         uint32 t;
-//         if (clk_state && (cregs[0] & 0x20000000) == 0) {
-//            t = tod_clock[1] + (13333333);
-//            if (t < tod_clock[1])
-//                 tod_clock[0]++;
-//            tod_clock[1] = t;
-//            sim_debug(DEBUG_INST, &cpu_dev, "TOD = %08x %08x\n", tod_clock[0], tod_clock[1]);
-//            check_tod_irq();
-//         }
-//         t = cpu_timer[1] - (timer_tics << 12);
-//         if (t > cpu_timer[1])
-//             cpu_timer[0]--;
-//         cpu_timer[1] = t;
-//         sim_debug(DEBUG_INST, &cpu_dev, "INTER = %08x %08x\n", cpu_timer[0], cpu_timer[1]);
-//         timer_tics = 3333;
-//         if (cpu_timer[0] & MSIGN) {
-//             sim_debug(DEBUG_INST, &cpu_dev, "CPU TIMER IRQ %08x%08x\n", cpu_timer[0],
-//               cpu_timer[1]);
-//             clk_irq = 1;
-//         }
-//     }
-//     return SCPE_OK;
-// }
-
-// void
-// check_tod_irq()
-// {
-//     tod_irq = 0;
-//     if ((clk_cmp[0] < tod_clock[0]) ||
-//        ((clk_cmp[0] == tod_clock[0]) && (clk_cmp[1] < tod_clock[1]))) {
-//         sim_debug(DEBUG_INST, &cpu_dev, "CPU TIMER CCK IRQ %08x %08x\n", clk_cmp[0],
-//                   clk_cmp[1]);
-//         tod_irq = 1;
-//     }
-// }
-
-// /* RSV: Set CPU IDLESTOP=<val>
-//  *      <val>=number of seconds.
-//  *
-//  *      Sets max time in secounds CPU is IDLE but waiting for interrupt
-//  *      from device. if <val> not zero, simulated CPU will wait for this wallclock
-//  *      number of seconds, then stop. This allows to script a BOOT command and the
-//  *      continue automatically when IPL has finished. Set to zero to disable.
-//  */
-
-// t_stat cpu_set_idle_stop (UNIT *uptr, int32 val, CONST char *cptr, void *desc)
-// {
-//     int32               n;
-//     t_stat              r;
-
-//     if (cptr == NULL) {
-//         return SCPE_ARG;
-//     }
-//     n = (int32) get_uint(cptr, 10, 60, &r);
-//     if (r != SCPE_OK) return SCPE_ARG;
-//     idle_stop_msec = n * 1000;
-//     idle_stop_tm0 = 0;
-//     return SCPE_OK;
-// }
-
-// t_bool
-// cpu_fprint_stopped (FILE *st, t_stat v)
-// {
-//     if (ec_mode) {
-//         if (Q370)
-//             fprintf(st, " PSW=%08x %08x\n",
-//                (((uint32)page_en) << 26) | ((per_en) ? 1<<30:0) | ((irq_en) ? 1<<25:0) |
-//                ((ext_en) ? 1<<24:0) | 0x80000 | (((uint32)st_key) << 16) |
-//                (((uint32)flags) << 16) | (((uint32)cc) << 12) | (((uint32)pmsk) << 8), PC);
-//         else
-//             fprintf(st, " PSW=%08x %08x\n",
-//                (((uint32)page_en) << 26) | ((irq_en) ? 1<<25:0) | ((ext_en) ? 1<<24:0) |
-//                (((uint32)st_key) << 16) | (((uint32)flags) << 16) |
-//                (((uint32)ilc) << 14) | (((uint32)cc) << 12) | (((uint32)pmsk) << 8), PC);
-//     } else {
-//         fprintf(st, " PSW=%08x %08x\n",
-//             ((uint32)(ext_en) << 24) | (((uint32)sysmsk & 0xfe00) << 16) |
-//             (((uint32)st_key) << 16) | (((uint32)flags) << 16) | ((uint32)irqcode),
-//             (((uint32)ilc) << 30) | (((uint32)cc) << 28) | (((uint32)pmsk) << 24) | PC);
-//     }
-//     return FALSE;
-// } */
+	var err uint16 = 0
+	// If overflow, shift right 4 bits
+	if (rh & EMASKL) != 0 {
+		rl >>= 4
+		rl |= (rh & 0xf) << 60
+		rh >>= 4
+		e1++
+		if e1 >= 128 {
+			err = IRC_EXPOVR
+		}
+	}
+	// Remove guard digit
+	rl >>= 4
+	if e1 != 0 {
+		rh |= (uint64(e1) << 56) & EMASKL
+		rl |= (uint64(e1-14) << 56) & EMASKL
+		if s1 {
+			rh |= MSIGNL
+			rl |= MSIGNL
+		}
+	}
+	cpu.fpregs[step.R1] = rh
+	cpu.fpregs[step.R1|2] = rl
+	return err
+}

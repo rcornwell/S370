@@ -43,8 +43,8 @@ func New() *CPU {
 func InitializeCPU() {
 	cpu.createTable()
 	cpu.PC = 0
-	cpu.sysmask = 0
-	cpu.st_key = 0
+	cpu.sysMask = 0
+	cpu.stKey = 0
 	cpu.cc = 0
 	cpu.ilc = 0
 	cpu.pmask = 0
@@ -59,8 +59,8 @@ func InitializeCPU() {
 	cpu.cpu_timer[0] = 0
 	cpu.cpu_timer[1] = 0
 	cpu.per_en = false
-	cpu.ec_mode = false
-	cpu.page_en = false
+	cpu.ecMode = false
+	cpu.pageEnb = false
 	cpu.irq_en = false
 	cpu.ext_en = false
 	cpu.ext_irq = false
@@ -68,6 +68,7 @@ func InitializeCPU() {
 	cpu.interval_en = false
 	cpu.tod_en = false
 	cpu.tod_irq = false
+	cpu.vmEnb = false
 
 	// Clear registers
 	for i := range 16 {
@@ -113,7 +114,7 @@ func InitializeCPU() {
 
 // Execute one instruction or take an interrupt
 func Cycle() int {
-	var error uint16
+	var err uint16
 	mem_cycle = 0
 	cpu.per_mod = 0
 	cpu.per_code = 0
@@ -122,7 +123,7 @@ func Cycle() int {
 	cpu.ilc = 0
 
 	// Check if we should see if an IRQ is pending
-	irq := sys_channel.Chan_scan(cpu.sysmask, cpu.irq_en)
+	irq := sys_channel.Chan_scan(cpu.sysMask, cpu.irq_en)
 	if irq != sys_channel.NO_DEV {
 		cpu.ilc = 0
 		if sys_channel.Loading != sys_channel.NO_DEV {
@@ -134,7 +135,7 @@ func Cycle() int {
 	// Check for external interrupts
 	if cpu.ext_en {
 		if cpu.ext_irq {
-			if !cpu.ec_mode || (cpu.cregs[0]&0x20) != 0 ||
+			if !cpu.ecMode || (cpu.cregs[0]&0x20) != 0 ||
 				(cpu.cregs[6]&0x40) != 0 {
 				cpu.ext_irq = false
 				cpu.suppress(OEPSW, 0x40)
@@ -189,9 +190,9 @@ func Cycle() int {
 	var step stepInfo
 
 	// Fetch the next instruction
-	t, error = cpu.readFull(cpu.PC & ^uint32(0x2))
-	if error != 0 {
-		cpu.suppress(OPPSW, error)
+	t, err = cpu.readFull(cpu.PC & ^uint32(0x2))
+	if err != 0 {
+		cpu.suppress(OPPSW, err)
 		return mem_cycle
 	}
 
@@ -213,9 +214,9 @@ func Cycle() int {
 		// Check if we need new word
 		cpu.ilc++
 		if (cpu.PC & 2) == 0 {
-			t, error = cpu.readFull(cpu.PC & ^uint32(0x2))
-			if error != 0 {
-				cpu.suppress(OPPSW, error)
+			t, err = cpu.readFull(cpu.PC & ^uint32(0x2))
+			if err != 0 {
+				cpu.suppress(OPPSW, err)
 				return mem_cycle
 			}
 			step.address1 = (t >> 16)
@@ -228,9 +229,9 @@ func Cycle() int {
 		if (step.opcode & 0xc0) == 0xc0 {
 			cpu.ilc++
 			if (cpu.PC & 2) != 0 {
-				t, error = cpu.readFull(cpu.PC & ^uint32(0x2))
-				if error != 0 {
-					cpu.suppress(OPPSW, error)
+				t, err = cpu.readFull(cpu.PC & ^uint32(0x2))
+				if err != 0 {
+					cpu.suppress(OPPSW, err)
 					return mem_cycle
 				}
 				step.address2 = (t >> 16)
@@ -242,9 +243,9 @@ func Cycle() int {
 		}
 	}
 
-	error = cpu.execute(&step)
-	if error != 0 {
-		cpu.suppress(OPPSW, error)
+	err = cpu.execute(&step)
+	if err != 0 {
+		cpu.suppress(OPPSW, err)
 	}
 
 	// See if PER event happened
@@ -258,21 +259,22 @@ func Cycle() int {
 // approperate fetch the values. Then execute the
 // instruction and return any error condition
 func (cpu *CPU) execute(step *stepInfo) uint16 {
-	var error uint16
-
-	if (step.opcode & 0xc0) != 0 {
+	// Compute addresses of operands
+	if (step.opcode & 0xc0) != 0 { // RS, RX, SS
 		temp := (step.address1 >> 12) & 0xf
 		step.address1 = step.address1 & 0xfff
 		if temp != 0 {
 			step.address1 += cpu.regs[temp]
 		}
+		step.address1 &= AMASK
+		step.src1 = step.address1
 
 		//* Handle RX type operands
 		if (step.opcode & 0x80) == 0 {
 			if step.R2 != 0 {
 				step.address1 += cpu.regs[step.R2]
 			}
-		} else if (step.opcode & 0xc0) != 0xc0 {
+		} else if (step.opcode & 0xc0) != 0xc0 { // SS
 			temp = (step.address2 >> 12) & 0xf
 			step.address2 = step.address2 & 0xfff
 			if temp != 0 {
@@ -280,8 +282,9 @@ func (cpu *CPU) execute(step *stepInfo) uint16 {
 			}
 			step.address2 &= AMASK
 		}
-		step.address1 &= AMASK
 	}
+
+	var err uint16
 
 	// Read operands
 	// Check if floating point
@@ -300,16 +303,16 @@ func (cpu *CPU) execute(step *stepInfo) uint16 {
 		// RX instruction
 		if (step.opcode & 0x40) != 0 {
 			var src1, src2 uint32
-			src1, error = cpu.readFull(step.address1)
-			if error != 0 {
-				return error
+			src1, err = cpu.readFull(step.address1)
+			if err != 0 {
+				return err
 			}
 
 			// Check for long
 			if (step.opcode & 0x10) == 0 {
-				src2, error = cpu.readFull(step.address2)
-				if error != 0 {
-					return error
+				src2, err = cpu.readFull(step.address2)
+				if err != 0 {
+					return err
 				}
 			} else {
 				src2 = 0
@@ -334,15 +337,15 @@ func (cpu *CPU) execute(step *stepInfo) uint16 {
 		step.src1 = cpu.regs[step.R1]
 		// Read half word if 010010xx or 01001100
 		if (step.opcode&0xfc) == 0x48 || step.opcode == OP_MH {
-			step.src2, error = cpu.readHalf(step.address1)
-			if error != 0 {
-				return error
+			step.src2, err = cpu.readHalf(step.address1)
+			if err != 0 {
+				return err
 			}
 			// Read full word if 0101xxx and not xxxx00xx (ST)
 		} else if (step.opcode&0x10) != 0 && (step.opcode&0x0c) != 0 {
-			step.src2, error = cpu.readFull(step.address1)
-			if error != 0 {
-				return error
+			step.src2, err = cpu.readFull(step.address1)
+			if err != 0 {
+				return err
 			}
 		} else {
 			step.address2 = step.src2
@@ -350,66 +353,66 @@ func (cpu *CPU) execute(step *stepInfo) uint16 {
 	}
 
 	// Execute the instruction.
-	error = cpu.table[step.opcode](step)
+	err = cpu.table[step.opcode](step)
 	if cpu.per_en && (cpu.cregs[9]&0x10000000) != 0 && (cpu.cregs[9]&0xffff&cpu.per_mod) != 0 {
 		cpu.per_code |= 0x1000
 	}
 
-	return error
+	return err
 }
 
 // Create function table
 func (c *CPU) createTable() {
 	c.table = [256]func(*stepInfo) uint16{
 		//  0         1         2         3          4         5         6          7
-		c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_spm, c.op_bal, c.op_bct, c.op_bc, // 0x
+		c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opSPM, c.opBAL, c.opBCT, c.opBC, // 0x
 		//  8         9         A         B          C         D         E          F
-		c.op_ssk, c.op_isk, c.op_svc, c.op_unk, c.op_unk, c.op_bas, c.op_mvcl, c.op_clcl,
+		c.opSSK, c.opISK, c.opSVC, c.opUnk, c.opUnk, c.opBAS, c.opMVCL, c.opCLCL,
 
-		c.op_lpr, c.op_lnr, c.op_ltr, c.op_lcr, c.op_n, c.op_cl, c.op_o, c.op_x, // 1x
-		c.op_l, c.op_c, c.op_a, c.op_s, c.op_m, c.op_d, c.op_al, c.op_sl,
+		c.opLPR, c.opLNR, c.opLTR, c.opLCR, c.opAnd, c.opCmpL, c.opOr, c.opXor, // 1x
+		c.opL, c.opCmp, c.opAdd, c.opSub, c.opMul, c.opDiv, c.opAddL, c.opSubL,
 
-		c.op_lcs, c.op_lcs, c.op_lcs, c.op_lcs, c.op_hd, c.op_lrd, c.op_mxr, c.op_mxdr, // 2x
-		c.op_ld, c.op_cd, c.op_db_as, c.op_db_as, c.op_fp_mpy, c.op_fp_div, c.op_db_as, c.op_db_as,
+		c.opLcs, c.opLcs, c.opLcs, c.opLcs, c.opFPHalf, c.opLRDR, c.opMXR, c.opMXD, // 2x
+		c.opFPLoad, c.opCD, c.opFPAddD, c.opFPAddD, c.opFPMul, c.opFPDiv, c.opFPAddD, c.opFPAddD,
 
-		c.op_lcs, c.op_lcs, c.op_lcs, c.op_lcs, c.op_hd, c.op_lre, c.op_axr, c.op_axr, // 3x
-		c.op_ld, c.op_ce, c.op_sh_as, c.op_sh_as, c.op_fp_mpy, c.op_fp_div, c.op_sh_as, c.op_sh_as,
+		c.opLcs, c.opLcs, c.opLcs, c.opLcs, c.opFPHalf, c.opLRER, c.opAXR, c.opAXR, // 3x
+		c.opFPLoad, c.opCE, c.opFPAdd, c.opFPAdd, c.opFPMul, c.opFPDiv, c.opFPAdd, c.opFPAdd,
 
-		c.op_sth, c.op_l, c.op_stc, c.op_ic, c.op_ex, c.op_bal, c.op_bct, c.op_bc, // 4x
-		c.op_l, c.op_c, c.op_a, c.op_s, c.op_mh, c.op_bas, c.op_cvd, c.op_cvb,
+		c.opSTH, c.opL, c.opSTC, c.opIC, c.opEX, c.opBAL, c.opBCT, c.opBC, // 4x
+		c.opL, c.opCmp, c.opAdd, c.opSub, c.opMulH, c.opBAS, c.opCVD, c.opCVB,
 
-		c.op_st, c.op_unk, c.op_unk, c.op_unk, c.op_n, c.op_cl, c.op_o, c.op_x, // 5x
-		c.op_l, c.op_c, c.op_a, c.op_s, c.op_m, c.op_d, c.op_al, c.op_sl,
+		c.opST, c.opUnk, c.opUnk, c.opUnk, c.opAnd, c.opCmpL, c.opOr, c.opXor, // 5x
+		c.opL, c.opCmp, c.opAdd, c.opSub, c.opMul, c.opDiv, c.opAddL, c.opSubL,
 
-		c.op_std, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_mx, // 6x
-		c.op_ld, c.op_cd, c.op_db_as, c.op_db_as, c.op_fp_mpy, c.op_fp_div, c.op_db_as, c.op_db_as,
+		c.opSTD, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opMXD, // 6x
+		c.opFPLoad, c.opCD, c.opFPAddD, c.opFPAddD, c.opFPMul, c.opFPDiv, c.opFPAddD, c.opFPAddD,
 
-		c.op_ste, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, // 7x
-		c.op_ld, c.op_ce, c.op_sh_as, c.op_sh_as, c.op_fp_mpy, c.op_fp_div, c.op_sh_as, c.op_sh_as,
+		c.opSTE, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, // 7x
+		c.opFPLoad, c.opCE, c.opFPAdd, c.opFPAdd, c.opFPMul, c.opFPDiv, c.opFPAdd, c.opFPAdd,
 
-		c.op_ssm, c.op_unk, c.op_lpsw, c.op_diag, c.op_unk, c.op_unk, c.op_bxh, c.op_bxle, // 8x
-		c.op_srl, c.op_sll, c.op_sra, c.op_sla, c.op_srdl, c.op_sldl, c.op_srda, c.op_slda,
+		c.opSSM, c.opUnk, c.opLPSW, c.opDIAG, c.opUnk, c.opUnk, c.opBXH, c.op_BXLE, // 8x
+		c.opSRL, c.opSLL, c.opSRA, c.opSLA, c.opSRDL, c.opSLDL, c.opSRDA, c.opSLDA,
 
-		c.op_stm, c.op_tm, c.op_mvi, c.op_ts, c.op_ni, c.op_cli, c.op_oi, c.op_xi, // 9x
-		c.op_lm, c.op_unk, c.op_unk, c.op_unk, c.op_sio, c.op_tio, c.op_hio, c.op_tch,
+		c.opSTM, c.opTM, c.opMVI, c.opTS, c.opNI, c.opCLI, c.opOI, c.opXI, // 9x
+		c.opLM, c.opUnk, c.opUnk, c.opUnk, c.opSIO, c.opTIO, c.opHIO, c.opTCH,
 
-		c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, // Ax
-		c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_stxsm, c.op_stxsm, c.op_sigp, c.op_mc,
+		c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, // Ax
+		c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opSTxSM, c.opSTxSM, c.opSIGP, c.opMC,
 
-		c.op_unk, c.op_lra, c.op_370, c.op_unk, c.op_unk, c.op_unk, c.op_stctl, c.op_lctl, // Bx
-		c.op_unk, c.op_unk, c.op_cs, c.op_cds, c.op_unk, c.op_clm, c.op_stcm, c.op_icm,
+		c.opUnk, c.opLRA, c.opB2, c.opUnk, c.opUnk, c.opUnk, c.opSTCTL, c.opLCTL, // Bx
+		c.opUnk, c.opUnk, c.opCS, c.opCDS, c.opUnk, c.opCLM, c.opSTCM, c.opICM,
 
-		c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, // Cx
-		c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk,
+		c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, // Cx
+		c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk,
 
-		c.op_unk, c.op_ss, c.op_ss, c.op_ss, c.op_ss, c.op_clc, c.op_ss, c.op_ss, // Dx
-		c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_tr, c.op_tr, c.op_ed, c.op_ed,
+		c.opUnk, c.opMem, c.opMem, c.opMem, c.opMem, c.opCLC, c.opMem, c.opMem, // Dx
+		c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opTR, c.opTR, c.opED, c.opED,
 
-		c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, // Ex
-		c.op_mvcin, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, c.op_unk,
+		c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, // Ex
+		c.opMVCIN, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opUnk,
 
-		c.op_srp, c.op_mvo, c.op_pack, c.op_unpk, c.op_unk, c.op_unk, c.op_unk, c.op_unk, // Fx
-		c.op_dadd, c.op_dadd, c.op_dadd, c.op_dadd, c.op_mul, c.op_div, c.op_unk, c.op_unk,
+		c.opSRP, c.opMVO, c.opPACK, c.opUNPK, c.opUnk, c.opUnk, c.opUnk, c.opUnk, // Fx
+		c.opDecAdd, c.opDecAdd, c.opDecAdd, c.opDecAdd, c.opMP, c.opDP, c.opUnk, c.opUnk,
 	}
 }
 
@@ -439,7 +442,7 @@ func (cpu *CPU) transAddr(va uint32) (pa uint32, error uint16) {
 	addr := va & AMASK
 
 	// If paging not enabled, return address.
-	if !cpu.page_en {
+	if !cpu.pageEnb {
 		return addr, 0
 	}
 
@@ -552,14 +555,14 @@ func (cpu *CPU) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 	if vector == OPPSW && cpu.per_en && cpu.per_code != 0 {
 		irqcode |= IRC_PER
 	}
-	if cpu.ec_mode {
+	if cpu.ecMode {
 		// Generate first word
 		word1 = uint32(0x80000) |
-			(uint32(cpu.st_key) << 16) |
+			(uint32(cpu.stKey) << 16) |
 			(uint32(cpu.flags) << 16) |
 			(uint32(cpu.cc) << 12) |
 			(uint32(cpu.pmask) << 8)
-		if cpu.page_en {
+		if cpu.pageEnb {
 			word1 |= 1 << 26
 		}
 		if cpu.per_en {
@@ -598,8 +601,8 @@ func (cpu *CPU) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 		word2 = cpu.PC
 	} else {
 		// Generate first word.
-		word1 = (uint32(cpu.sysmask&0xfe00) << 16) |
-			(uint32(cpu.st_key) << 16) |
+		word1 = (uint32(cpu.sysMask&0xfe00) << 16) |
+			(uint32(cpu.stKey) << 16) |
 			(uint32(cpu.flags) << 16) |
 			uint32(irqcode)
 		if cpu.ext_en {
@@ -625,16 +628,16 @@ func (cpu *CPU) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
  */
 func (cpu *CPU) checkProtect(addr uint32, write bool) bool {
 	/* Check storage key */
-	if cpu.st_key == 0 {
+	if cpu.stKey == 0 {
 		return false
 	}
 	k := memory.GetKey(addr)
 	if write {
-		if (k & 0xf0) != cpu.st_key {
+		if (k & 0xf0) != cpu.stKey {
 			return true
 		}
 	} else {
-		if (k&0x8) != 0 && (k&0xf0) != cpu.st_key {
+		if (k&0x8) != 0 && (k&0xf0) != cpu.stKey {
 			return true
 		}
 	}
@@ -647,8 +650,8 @@ func (cpu *CPU) checkProtect(addr uint32, write bool) bool {
 func (cpu *CPU) testAccess(va uint32, size uint32, write bool) uint16 {
 
 	// Translate address
-	if pa, error := cpu.transAddr(va); error != 0 {
-		return error
+	if pa, err := cpu.transAddr(va); err != 0 {
+		return err
 	} else {
 		if cpu.checkProtect(pa, write) {
 			return IRC_PROT
@@ -657,8 +660,8 @@ func (cpu *CPU) testAccess(va uint32, size uint32, write bool) uint16 {
 
 	if size != 0 && (va&SPMASK) != ((va+size)&SPMASK) {
 		// Translate end address
-		if pa, error := cpu.transAddr(va + size); error != 0 {
-			return error
+		if pa, err := cpu.transAddr(va + size); err != 0 {
+			return err
 		} else {
 			if cpu.checkProtect(pa, write) {
 				return IRC_PROT
@@ -673,17 +676,18 @@ func (cpu *CPU) testAccess(va uint32, size uint32, write bool) uint16 {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *CPU) readFull(addr uint32) (value uint32, error uint16) {
+func (cpu *CPU) readFull(addr uint32) (uint32, uint16) {
 	var pa uint32
 	var v uint32
 	var err bool
+	var e uint16
 
 	offset := addr & 3
 
 	// Validate address
-	pa, error = cpu.transAddr(addr)
-	if error != 0 {
-		return 0, error
+	pa, e = cpu.transAddr(addr)
+	if e != 0 {
+		return 0, e
 	}
 
 	if cpu.checkProtect(pa, false) {
@@ -704,9 +708,9 @@ func (cpu *CPU) readFull(addr uint32) (value uint32, error uint16) {
 
 		if (addr & SPMASK) != (addr2 & SPMASK) {
 			// Check if possible next page
-			pa2, error = cpu.transAddr(addr2)
-			if error != 0 {
-				return 0, error
+			pa2, e = cpu.transAddr(addr2)
+			if e != 0 {
+				return 0, e
 			}
 			// Check access protection
 			if cpu.checkProtect(pa2, false) {
@@ -732,17 +736,18 @@ func (cpu *CPU) readFull(addr uint32) (value uint32, error uint16) {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *CPU) readHalf(addr uint32) (data uint32, error uint16) {
+func (cpu *CPU) readHalf(addr uint32) (uint32, uint16) {
 	var pa uint32
 	var v uint32
 	var err bool
+	var e uint16
 
 	offset := addr & 3
 
 	/* Validate address */
-	pa, error = cpu.transAddr(addr)
-	if error != 0 {
-		return 0, error
+	pa, e = cpu.transAddr(addr)
+	if e != 0 {
+		return 0, e
 	}
 
 	// Check storage key
@@ -768,9 +773,9 @@ func (cpu *CPU) readHalf(addr uint32) (data uint32, error uint16) {
 		// Check if past a word
 		if (addr & SPMASK) != ((addr + 1) & SPMASK) {
 			/* Check if possible next page */
-			pa2, error = cpu.transAddr(addr + 1)
-			if error != 0 {
-				return 0, error
+			pa2, e = cpu.transAddr(addr + 1)
+			if e != 0 {
+				return 0, e
 			}
 
 			// Check storage key
@@ -801,17 +806,18 @@ func (cpu *CPU) readHalf(addr uint32) (data uint32, error uint16) {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *CPU) readByte(addr uint32) (data uint32, error uint16) {
+func (cpu *CPU) readByte(addr uint32) (uint32, uint16) {
 	var pa uint32
 	var v uint32
 	var err bool
+	var e uint16
 
 	offset := addr & 3
 
 	// Validate address
-	pa, error = cpu.transAddr(addr)
-	if error != 0 {
-		return 0, error
+	pa, e = cpu.transAddr(addr)
+	if e != 0 {
+		return 0, e
 	}
 
 	if cpu.checkProtect(pa, false) {
@@ -831,7 +837,7 @@ func (cpu *CPU) readByte(addr uint32) (data uint32, error uint16) {
 }
 
 // Check if address is in the range of PER modify range
-func (cpu *CPU) percheck(addr uint32) {
+func (cpu *CPU) perCheck(addr uint32) {
 	if cpu.per_en && (cpu.cregs[9]&0x20000000) != 0 {
 		if cpu.cregs[10] <= cpu.cregs[11] {
 			if addr >= cpu.cregs[10] && addr <= cpu.cregs[11] {
@@ -851,16 +857,16 @@ func (cpu *CPU) percheck(addr uint32) {
  * success.
  */
 func (cpu *CPU) writeFull(addr, data uint32) uint16 {
-	var error uint16
+	var e uint16
 	var pa uint32
 	var err1, err2 bool
 
 	offset := addr & 3
 
 	// Validate address
-	pa, error = cpu.transAddr(addr)
-	if error != 0 {
-		return error
+	pa, e = cpu.transAddr(addr)
+	if e != 0 {
+		return e
 	}
 
 	// Check storage key
@@ -869,7 +875,7 @@ func (cpu *CPU) writeFull(addr, data uint32) uint16 {
 	}
 
 	// Check if in storage area
-	cpu.percheck(addr)
+	cpu.perCheck(addr)
 
 	pa2 := pa + 4
 	addr2 := (addr & 0x00fffffc) + 4
@@ -878,9 +884,9 @@ func (cpu *CPU) writeFull(addr, data uint32) uint16 {
 		// Check if we handle unaligned access
 		if (addr & SPMASK) != (addr2 & SPMASK) {
 			// Validate address
-			pa2, error = cpu.transAddr(addr2)
-			if error != 0 {
-				return error
+			pa2, e = cpu.transAddr(addr2)
+			if e != 0 {
+				return e
 			}
 
 			// Check against storage key
@@ -890,7 +896,7 @@ func (cpu *CPU) writeFull(addr, data uint32) uint16 {
 		}
 
 		// Check if in storage area
-		cpu.percheck(addr2)
+		cpu.perCheck(addr2)
 	}
 
 	switch offset {
@@ -916,12 +922,12 @@ func (cpu *CPU) writeFull(addr, data uint32) uint16 {
 	}
 
 	if err1 || err2 {
-		error = IRC_ADDR
+		e = IRC_ADDR
 	} else {
-		error = 0
+		e = 0
 	}
 	//	sim_debug(DEBUG_DATA, &cpu_dev, "WR A=%08x %08x\n", addr, data)
-	return error
+	return e
 }
 
 /*
@@ -930,23 +936,23 @@ func (cpu *CPU) writeFull(addr, data uint32) uint16 {
  * success.
  */
 func (cpu *CPU) writeHalf(addr, data uint32) uint16 {
-	var error uint16
+	var e uint16
 	var pa uint32
 	var err bool
 
 	offset := addr & 3
 
 	// Validate address			cy = dec_divstep(l int, s1 int, s2 int, v1 *[32]uint8, v2 *[32]uint8) uint8
-	pa, error = cpu.transAddr(addr)
-	if error != 0 {
-		return error
+	pa, e = cpu.transAddr(addr)
+	if e != 0 {
+		return e
 	}
 
 	if cpu.checkProtect(pa, true) {
 		return IRC_PROT
 	}
 
-	cpu.percheck(addr)
+	cpu.perCheck(addr)
 
 	switch offset {
 	case 0:
@@ -962,13 +968,13 @@ func (cpu *CPU) writeHalf(addr, data uint32) uint16 {
 		addr2 := addr + 1
 		pa2 := pa + 1
 
-		cpu.percheck(addr)
+		cpu.perCheck(addr)
 
 		if (addr & SPMASK) != (addr2 & SPMASK) {
 			// Validate address
-			pa2, error = cpu.transAddr(addr2)
-			if error != 0 {
-				return error
+			pa2, e = cpu.transAddr(addr2)
+			if e != 0 {
+				return e
 			}
 
 			// Check against storage key
@@ -997,21 +1003,21 @@ func (cpu *CPU) writeHalf(addr, data uint32) uint16 {
  * success.
  */
 func (cpu *CPU) writeByte(addr, data uint32) uint16 {
-	var error uint16
+	var e uint16
 	var pa uint32
 	var err bool
 
 	// Validate address
-	pa, error = cpu.transAddr(addr)
-	if error != 0 {
-		return error
+	pa, e = cpu.transAddr(addr)
+	if e != 0 {
+		return e
 	}
 
 	if cpu.checkProtect(pa, true) {
 		return IRC_PROT
 	}
 
-	cpu.percheck(addr)
+	cpu.perCheck(addr)
 
 	var mask uint32 = 0x000000ff
 
@@ -1044,49 +1050,49 @@ func (cpu *CPU) suppress(code uint32, irc uint16) {
 
 // Load new processor status double word
 func (cpu *CPU) lpsw(src1, src2 uint32) {
-	cpu.ec_mode = (src1 & 0x00080000) != 0
+	cpu.ecMode = (src1 & 0x00080000) != 0
 	cpu.ext_en = (src1 & 0x01000000) != 0
 
-	if cpu.ec_mode {
+	if cpu.ecMode {
 		cpu.irq_en = (src1 & 0x02000000) != 0
-		cpu.page_en = (src1 & 0x04000000) != 0
+		cpu.pageEnb = (src1 & 0x04000000) != 0
 		cpu.cc = uint8((src1 >> 12) & 0x3)
 		cpu.pmask = uint8((src1 >> 8) & 0xf)
 		cpu.per_en = (src1 & 0x40000000) != 0
 		if cpu.irq_en {
-			cpu.sysmask = uint16(cpu.cregs[2] >> 16)
+			cpu.sysMask = uint16(cpu.cregs[2] >> 16)
 		} else {
-			cpu.sysmask = 0
+			cpu.sysMask = 0
 		}
 	} else {
-		cpu.sysmask = uint16((src1 >> 16) & 0xfc00)
+		cpu.sysMask = uint16((src1 >> 16) & 0xfc00)
 		if (src1 & 0x2000000) != 0 {
-			cpu.sysmask |= uint16((cpu.cregs[2] >> 16) & 0x3ff)
+			cpu.sysMask |= uint16((cpu.cregs[2] >> 16) & 0x3ff)
 		}
-		cpu.irq_en = cpu.sysmask != 0
+		cpu.irq_en = cpu.sysMask != 0
 		cpu.per_en = false
 		cpu.cc = uint8((src2 >> 28) & 0x3)
 		cpu.pmask = uint8((src2 >> 24) & 0xf)
-		cpu.page_en = false
+		cpu.pageEnb = false
 	}
 	sys_channel.Irq_pending = true
-	cpu.st_key = uint8((src1 >> 16) & 0xf0)
+	cpu.stKey = uint8((src1 >> 16) & 0xf0)
 	cpu.flags = uint8((src1 >> 16) & 0x7)
 	cpu.PC = src2 & AMASK
 	//	sim_debug(DEBUG_INST, &cpu_dev, "PSW=%08x %08x  ", src1, src2)
-	if cpu.ec_mode && ((src1&0xb800c0ff) != 0 || (src2&0xff000000) != 0) {
+	if cpu.ecMode && ((src1&0xb800c0ff) != 0 || (src2&0xff000000) != 0) {
 		cpu.suppress(OPPSW, IRC_SPEC)
 	}
 }
 
 // Load register pair into 64 bit integer
-func (cpu *CPU) ld_dbl(r uint8) uint64 {
+func (cpu *CPU) loadDouble(r uint8) uint64 {
 	t := (uint64(cpu.regs[r]) << 32) | uint64(cpu.regs[r|1])
 	return t
 }
 
 // Store a 64 bit integer in register pair
-func (cpu *CPU) st_dbl(r uint8, v uint64) {
+func (cpu *CPU) storeDouble(r uint8, v uint64) {
 	cpu.regs[r|1] = uint32(v & LMASKL)
 	cpu.regs[r] = uint32((v >> 32) & LMASKL)
 	cpu.per_mod |= 3 << r

@@ -42,14 +42,14 @@ type CPU struct {
 	regs    [16]uint32  // Internal registers
 	fpregs  [8]uint64   // Floating point registers
 	cregs   [16]uint32  // Control registers /67 or 370 only
-	sysmask uint16      // Channel interrupt enable
-	st_key  uint8       // Current storage key
-	ec_mode bool        // Current PSW is EC Mode
+	sysMask uint16      // Channel interrupt enable
+	stKey   uint8       // Current storage key
+	ecMode  bool        // Current PSW is EC Mode
 	cc      uint8       // Current CC code
 	ilc     uint8       // Current instruction length
 	pmask   uint8       // Program mask
 	flags   uint8       // System flags
-	page_en bool        // Paging enabled
+	pageEnb bool        // Paging enabled
 	tlb     [256]uint32 // Translation Lookaside Buffer
 
 	//  uint8        ext_en;                    // Enable external and timer IRQ's
@@ -88,7 +88,8 @@ type CPU struct {
 	tod_en     bool // TOD enable
 	tod_irq    bool // TOD compare IRQ
 	clk_state  bool // Clock set/unset.
-	vmassist   bool // VM Assist functions enabled.
+	vmAssist   bool // VM Assist functions enabled.
+	vmEnb      bool // VM Assist enabled.
 	timer_tics int  // Interval Timer is ever 3 tics
 	table      [256]func(*stepInfo) uint16
 }
@@ -360,9 +361,3 @@ const (
 	OP_MP    = 0xFC
 	OP_DP    = 0xFD
 )
-
-/*
-
-         QVMA ((cpu_unit[0].flags & (FEAT_370|FEAT_VMA)) == (FEAT_370|FEAT_VMA) && \
-   ((cregs[6] & 0xc0000000) == 0x80000000))
-*/

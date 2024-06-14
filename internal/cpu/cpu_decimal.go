@@ -25,8 +25,8 @@ package cpu
 
 // Load decimal number into temp storage
 // return error or zero
-func (cpu *CPU) dec_load(data *[32]uint8, addr uint32, len uint8, sign *bool) uint16 {
-	var error uint16 = 0
+func (cpu *CPU) decLoad(data *[32]uint8, addr uint32, len uint8, sign *bool) uint16 {
+	var err uint16 = 0
 	var t uint32
 
 	a := addr + uint32(len)
@@ -38,19 +38,19 @@ func (cpu *CPU) dec_load(data *[32]uint8, addr uint32, len uint8, sign *bool) ui
 	j := 0
 	// Read into data backwards
 	for range len {
-		t, error = cpu.readByte(a)
-		if error != 0 {
-			return error
+		t, err = cpu.readByte(a)
+		if err != 0 {
+			return err
 		}
 		t2 := uint8(t & 0xf)
 		if j != 0 && t2 > 0x9 {
-			error = IRC_DATA
+			err = IRC_DATA
 		}
 		data[j] = t2
 		j++
 		t2 = uint8((t >> 4) & 0xf)
 		if t2 > 0x9 {
-			error = IRC_DATA
+			err = IRC_DATA
 		}
 		data[j] = t2
 		j++
@@ -64,14 +64,14 @@ func (cpu *CPU) dec_load(data *[32]uint8, addr uint32, len uint8, sign *bool) ui
 		*sign = false
 	}
 	if data[0] < 0xa {
-		error = IRC_DATA
+		err = IRC_DATA
 	}
-	return error
+	return err
 }
 
 // Store decimal number into memory
 // return error code
-func (cpu *CPU) dec_store(data [32]uint8, addr uint32, len uint8) uint16 {
+func (cpu *CPU) decStore(data [32]uint8, addr uint32, len uint8) uint16 {
 	a := addr + uint32(len)
 	j := 0
 	for range len {
@@ -79,8 +79,8 @@ func (cpu *CPU) dec_store(data [32]uint8, addr uint32, len uint8) uint16 {
 		j++
 		t |= (data[j] & 0xf) << 4
 		j++
-		if error := cpu.writeByte(a, uint32(t)); error != 0 {
-			return error
+		if err := cpu.writeByte(a, uint32(t)); err != 0 {
+			return err
 		}
 		a--
 	}
@@ -134,12 +134,12 @@ func dec_recomp(l uint8, v1 *[32]uint8) bool {
 }
 
 // Handle AP, SP, CP and ZAP instructions.
-func (cpu *CPU) op_dadd(step *stepInfo) uint16 {
+func (cpu *CPU) opDecAdd(step *stepInfo) uint16 {
 	// ZAP = F8    00
 	// CP  = F9    01
 	// AP  = FA    10
 	// SP  = FB    11
-	var error uint16 = 0
+	var err uint16 = 0
 	var v1 [32]uint8
 	var v2 [32]uint8
 	var s1, s2 bool
@@ -159,8 +159,8 @@ func (cpu *CPU) op_dadd(step *stepInfo) uint16 {
 		l = l2
 	}
 	// Always load second operand
-	if error = cpu.dec_load(&v2, a2, l2, &s2); error != 0 {
-		return error
+	if err = cpu.decLoad(&v2, a2, l2, &s2); err != 0 {
+		return err
 	}
 
 	if (step.opcode & 1) != 0 {
@@ -171,8 +171,8 @@ func (cpu *CPU) op_dadd(step *stepInfo) uint16 {
 	l = 2*(l+1) - 1
 	// On all but ZAP load first operand
 	if (step.opcode & 3) != 0 {
-		if error = cpu.dec_load(&v1, a1, l1, &s1); error != 0 {
-			return error
+		if err = cpu.decLoad(&v1, a1, l1, &s1); err != 0 {
+			return err
 		} else {
 			for i := range 32 {
 				v1[i] = 0
@@ -230,22 +230,22 @@ func (cpu *CPU) op_dadd(step *stepInfo) uint16 {
 		} else {
 			v1[0] = 0xc
 		}
-		if error = cpu.dec_store(v1, a1, l1); error != 0 {
-			return error
+		if err = cpu.decStore(v1, a1, l1); err != 0 {
+			return err
 		}
 		if ov {
 			cpu.cc = 3
 			if (cpu.pmask & DECOVER) != 0 {
-				error = IRC_DECOVR
+				err = IRC_DECOVR
 			}
 		}
 	}
-	return error
+	return err
 }
 
 // Handle SRP instruction
-func (cpu *CPU) op_srp(step *stepInfo) uint16 {
-	var error uint16 = 0
+func (cpu *CPU) opSRP(step *stepInfo) uint16 {
+	var err uint16 = 0
 	var v1 [32]uint8
 	var s1 bool
 	var cy uint8 = 0
@@ -258,8 +258,8 @@ func (cpu *CPU) op_srp(step *stepInfo) uint16 {
 	shift := int(step.address2 & 0x3f)
 
 	// Load operand
-	if error = cpu.dec_load(&v1, a1, l1, &s1); error != 0 {
-		return error
+	if err = cpu.decLoad(&v1, a1, l1, &s1); err != 0 {
+		return err
 	}
 
 	if (shift & 0x20) != 0 { // shift to right
@@ -331,16 +331,16 @@ func (cpu *CPU) op_srp(step *stepInfo) uint16 {
 	} else {
 		v1[0] = 0xc
 	}
-	if error = cpu.dec_store(v1, a1, l1); error != 0 {
-		return error
+	if err = cpu.decStore(v1, a1, l1); err != 0 {
+		return err
 	}
 	if ov {
 		cpu.cc = 3
 		if (cpu.pmask & DECOVER) != 0 {
-			error = IRC_DECOVR
+			err = IRC_DECOVR
 		}
 	}
-	return error
+	return err
 }
 
 func dec_mulstep(l int, s1 int, v1 *[32]uint8, v2 *[32]uint8) {
@@ -360,8 +360,8 @@ func dec_mulstep(l int, s1 int, v1 *[32]uint8, v2 *[32]uint8) {
 }
 
 // Decimal multiply
-func (cpu *CPU) op_mul(step *stepInfo) uint16 {
-	var error uint16 = 0
+func (cpu *CPU) opMP(step *stepInfo) uint16 {
+	var err uint16 = 0
 	var v1 [32]uint8
 	var v2 [32]uint8
 	var s1, s2 bool
@@ -373,11 +373,11 @@ func (cpu *CPU) op_mul(step *stepInfo) uint16 {
 	if step.R2 > 7 || step.R2 >= step.R1 {
 		return IRC_DATA
 	}
-	if error = cpu.dec_load(&v2, step.address2, step.R2, &s2); error != 0 {
-		return error
+	if err = cpu.decLoad(&v2, step.address2, step.R2, &s2); err != 0 {
+		return err
 	}
-	if error = cpu.dec_load(&v1, step.address1, step.R1, &s1); error != 0 {
-		return error
+	if err = cpu.decLoad(&v1, step.address1, step.R1, &s1); err != 0 {
+		return err
 	}
 
 	l1 := int(step.R1)
@@ -412,11 +412,11 @@ func (cpu *CPU) op_mul(step *stepInfo) uint16 {
 	} else {
 		v1[0] = 0xc
 	}
-	return cpu.dec_store(v1, step.address1, uint8(l1))
+	return cpu.decStore(v1, step.address1, uint8(l1))
 }
 
-func (cpu *CPU) op_div(step *stepInfo) uint16 {
-	var error uint16 = 0
+func (cpu *CPU) opDP(step *stepInfo) uint16 {
+	var err uint16 = 0
 	var v1 [32]uint8
 	var v2 [32]uint8
 	var r [32]uint8
@@ -426,11 +426,11 @@ func (cpu *CPU) op_div(step *stepInfo) uint16 {
 	if step.R2 > 7 || step.R2 >= step.R1 {
 		return IRC_DATA
 	}
-	if error = cpu.dec_load(&v2, step.address2, step.R2, &s2); error != 0 {
-		return error
+	if err = cpu.decLoad(&v2, step.address2, step.R2, &s2); err != 0 {
+		return err
 	}
-	if error = cpu.dec_load(&v1, step.address1, step.R1, &s1); error != 0 {
-		return error
+	if err = cpu.decLoad(&v1, step.address1, step.R1, &s1); err != 0 {
+		return err
 	}
 
 	// Clear result
@@ -505,5 +505,5 @@ func (cpu *CPU) op_div(step *stepInfo) uint16 {
 	} else {
 		v1[0] = 0xc
 	}
-	return cpu.dec_store(v1, step.address1, uint8(l1))
+	return cpu.decStore(v1, step.address1, uint8(l1))
 }
