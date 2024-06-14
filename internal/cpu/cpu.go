@@ -1,5 +1,28 @@
 package cpu
 
+/* CPU definitions for IBM 370 simulator definitions
+
+   Copyright (c) 2024, Richard Cornwell
+
+   Permission is hereby granted, free of charge, to any person obtaining a
+   copy of this software and associated documentation files (the "Software"),
+   to deal in the Software without restriction, including without limitation
+   the rights to use, copy, modify, merge, publish, distribute, sublicense,
+   and/or sell copies of the Software, and to permit persons to whom the
+   Software is furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+   ROBERT M SUPNIK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+   IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+*/
+
 import (
 	"time"
 
@@ -166,7 +189,8 @@ func Cycle() int {
 	var step stepInfo
 
 	// Fetch the next instruction
-	if t, error = cpu.readFull(cpu.PC & ^uint32(0x2)); error != 0 {
+	t, error = cpu.readFull(cpu.PC & ^uint32(0x2))
+	if error != 0 {
 		cpu.suppress(OPPSW, error)
 		return mem_cycle
 	}
@@ -189,7 +213,8 @@ func Cycle() int {
 		// Check if we need new word
 		cpu.ilc++
 		if (cpu.PC & 2) == 0 {
-			if t, error = cpu.readFull(cpu.PC & ^uint32(0x2)); error != 0 {
+			t, error = cpu.readFull(cpu.PC & ^uint32(0x2))
+			if error != 0 {
 				cpu.suppress(OPPSW, error)
 				return mem_cycle
 			}
@@ -203,7 +228,8 @@ func Cycle() int {
 		if (step.opcode & 0xc0) == 0xc0 {
 			cpu.ilc++
 			if (cpu.PC & 2) != 0 {
-				if t, error = cpu.readFull(cpu.PC & ^uint32(0x2)); error != 0 {
+				t, error = cpu.readFull(cpu.PC & ^uint32(0x2))
+				if error != 0 {
 					cpu.suppress(OPPSW, error)
 					return mem_cycle
 				}
@@ -216,7 +242,8 @@ func Cycle() int {
 		}
 	}
 
-	if error = cpu.execute(&step); error != 0 {
+	error = cpu.execute(&step)
+	if error != 0 {
 		cpu.suppress(OPPSW, error)
 	}
 
@@ -273,13 +300,15 @@ func (cpu *CPU) execute(step *stepInfo) uint16 {
 		// RX instruction
 		if (step.opcode & 0x40) != 0 {
 			var src1, src2 uint32
-			if src1, error = cpu.readFull(step.address1); error != 0 {
+			src1, error = cpu.readFull(step.address1)
+			if error != 0 {
 				return error
 			}
 
 			// Check for long
 			if (step.opcode & 0x10) == 0 {
-				if src2, error = cpu.readFull(step.address2); error != 0 {
+				src2, error = cpu.readFull(step.address2)
+				if error != 0 {
 					return error
 				}
 			} else {
@@ -305,12 +334,14 @@ func (cpu *CPU) execute(step *stepInfo) uint16 {
 		step.src1 = cpu.regs[step.R1]
 		// Read half word if 010010xx or 01001100
 		if (step.opcode&0xfc) == 0x48 || step.opcode == OP_MH {
-			if step.src2, error = cpu.readHalf(step.address1); error != 0 {
+			step.src2, error = cpu.readHalf(step.address1)
+			if error != 0 {
 				return error
 			}
 			// Read full word if 0101xxx and not xxxx00xx (ST)
 		} else if (step.opcode&0x10) != 0 && (step.opcode&0x0c) != 0 {
-			if step.src2, error = cpu.readFull(step.address1); error != 0 {
+			step.src2, error = cpu.readFull(step.address1)
+			if error != 0 {
 				return error
 			}
 		} else {
@@ -452,7 +483,8 @@ func (cpu *CPU) transAddr(va uint32) (pa uint32, error uint16) {
 
 	// Get entry on error throw trap.
 	mem_cycle++
-	if entry, err = memory.GetWord(addr); err {
+	entry, err = memory.GetWord(addr)
+	if err {
 		return 0, IRC_ADDR
 	}
 
@@ -473,7 +505,8 @@ func (cpu *CPU) transAddr(va uint32) (pa uint32, error uint16) {
 	// Now we need to fetch the actual entry
 	addr = ((entry & PTE_ADR) + (page << 1)) & AMASK
 	mem_cycle++
-	if entry, err = memory.GetWord(addr); err {
+	entry, err = memory.GetWord(addr)
+	if err {
 		return 0, IRC_ADDR
 	}
 
@@ -590,47 +623,46 @@ func (cpu *CPU) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 /*
  * Check for protection violation.
  */
-func (cpu *CPU) checkProtect(addr uint32, write bool) uint16 {
+func (cpu *CPU) checkProtect(addr uint32, write bool) bool {
 	/* Check storage key */
-	if cpu.st_key != 0 {
-		k := memory.GetKey(addr)
-
-		if write {
-			if (k & 0xf0) != cpu.st_key {
-				return IRC_PROT
-			}
-		} else {
-			if (k&0x8) != 0 && (k&0xf0) != cpu.st_key {
-				return IRC_PROT
-			}
+	if cpu.st_key == 0 {
+		return false
+	}
+	k := memory.GetKey(addr)
+	if write {
+		if (k & 0xf0) != cpu.st_key {
+			return true
+		}
+	} else {
+		if (k&0x8) != 0 && (k&0xf0) != cpu.st_key {
+			return true
 		}
 	}
-	return 0
+	return false
 }
 
 /*
  * Check if we can access a range of memory.
  */
 func (cpu *CPU) testAccess(va uint32, size uint32, write bool) uint16 {
-	var error uint16
-	var pa uint32
 
 	// Translate address
-	if pa, error = cpu.transAddr(va); error != 0 {
+	if pa, error := cpu.transAddr(va); error != 0 {
 		return error
-	}
-
-	if error = cpu.checkProtect(pa, write); error != 0 {
-		return error
+	} else {
+		if cpu.checkProtect(pa, write) {
+			return IRC_PROT
+		}
 	}
 
 	if size != 0 && (va&SPMASK) != ((va+size)&SPMASK) {
 		// Translate end address
-		if pa, error = cpu.transAddr(va + size); error != 0 {
+		if pa, error := cpu.transAddr(va + size); error != 0 {
 			return error
-		}
-		if error = cpu.checkProtect(pa, write); error != 0 {
-			return error
+		} else {
+			if cpu.checkProtect(pa, write) {
+				return IRC_PROT
+			}
 		}
 	}
 	return 0
@@ -649,17 +681,19 @@ func (cpu *CPU) readFull(addr uint32) (value uint32, error uint16) {
 	offset := addr & 3
 
 	// Validate address
-	if pa, error = cpu.transAddr(addr); error != 0 {
+	pa, error = cpu.transAddr(addr)
+	if error != 0 {
 		return 0, error
 	}
 
-	if error = cpu.checkProtect(pa, false); error != 0 {
-		return 0, error
+	if cpu.checkProtect(pa, false) {
+		return 0, IRC_PROT
 	}
 
 	// Read actual data
 	mem_cycle++
-	if v, err = memory.GetWord(addr); err {
+	v, err = memory.GetWord(addr)
+	if err {
 		return 0, IRC_ADDR
 	}
 
@@ -670,23 +704,23 @@ func (cpu *CPU) readFull(addr uint32) (value uint32, error uint16) {
 
 		if (addr & SPMASK) != (addr2 & SPMASK) {
 			// Check if possible next page
-			if pa2, error = cpu.transAddr(addr2); error != 0 {
+			pa2, error = cpu.transAddr(addr2)
+			if error != 0 {
 				return 0, error
 			}
 			// Check access protection
-			if error = cpu.checkProtect(pa2, false); error != 0 {
-				return 0, error
+			if cpu.checkProtect(pa2, false) {
+				return 0, IRC_PROT
 			}
 		}
 
-		var t uint32
 		mem_cycle++
-		if t, err = memory.GetWord(pa2); err {
+		if t, err := memory.GetWord(pa2); err {
 			return 0, IRC_ADDR
+		} else {
+			v <<= (8 * offset)
+			v |= (t >> (8 * (4 - offset)))
 		}
-
-		v <<= (8 * offset)
-		v |= (t >> (8 * (4 - offset)))
 	}
 
 	//	sim_debug(DEBUG_DATA, &cpu_dev, "RD A=%08x %08x\n", addr, *v)
@@ -706,18 +740,20 @@ func (cpu *CPU) readHalf(addr uint32) (data uint32, error uint16) {
 	offset := addr & 3
 
 	/* Validate address */
-	if pa, error = cpu.transAddr(addr); error != 0 {
+	pa, error = cpu.transAddr(addr)
+	if error != 0 {
 		return 0, error
 	}
 
 	// Check storage key
-	if error = cpu.checkProtect(pa, false); error != 0 {
-		return 0, error
+	if cpu.checkProtect(pa, false) {
+		return 0, IRC_PROT
 	}
 
 	// Get data
 	mem_cycle++
-	if v, err = memory.GetWord(pa); err {
+	v, err = memory.GetWord(pa)
+	if err {
 		return 0, IRC_ADDR
 	}
 
@@ -732,23 +768,24 @@ func (cpu *CPU) readHalf(addr uint32) (data uint32, error uint16) {
 		// Check if past a word
 		if (addr & SPMASK) != ((addr + 1) & SPMASK) {
 			/* Check if possible next page */
-			if pa2, error = cpu.transAddr(addr + 1); error != 0 {
+			pa2, error = cpu.transAddr(addr + 1)
+			if error != 0 {
 				return 0, error
 			}
 
 			// Check storage key
-			if error = cpu.checkProtect(pa2, false); error != 0 {
-				return 0, error
+			if cpu.checkProtect(pa2, false) {
+				return 0, IRC_PROT
 			}
 		}
 
-		var v2 uint32
 		mem_cycle++
-		if v2, err = memory.GetWord(pa2); err {
+		if v2, err := memory.GetWord(pa2); err {
 			return 0, IRC_ADDR
+		} else {
+			v = (v & 0xff) << 8
+			v |= v2 & 0xff
 		}
-		v = (v & 0xff) << 8
-		v |= v2 & 0xff
 	}
 
 	// Sign extend the result
@@ -772,17 +809,19 @@ func (cpu *CPU) readByte(addr uint32) (data uint32, error uint16) {
 	offset := addr & 3
 
 	// Validate address
-	if pa, error = cpu.transAddr(addr); error != 0 {
+	pa, error = cpu.transAddr(addr)
+	if error != 0 {
 		return 0, error
 	}
 
-	if error = cpu.checkProtect(pa, false); error != 0 {
-		return 0, error
+	if cpu.checkProtect(pa, false) {
+		return 0, IRC_PROT
 	}
 
 	// Read actual data
 	mem_cycle++
-	if v, err = memory.GetWord(addr); err {
+	v, err = memory.GetWord(addr)
+	if err {
 		return 0, IRC_ADDR
 	}
 
@@ -819,13 +858,14 @@ func (cpu *CPU) writeFull(addr, data uint32) uint16 {
 	offset := addr & 3
 
 	// Validate address
-	if pa, error = cpu.transAddr(addr); error != 0 {
+	pa, error = cpu.transAddr(addr)
+	if error != 0 {
 		return error
 	}
 
 	// Check storage key
-	if error = cpu.checkProtect(pa, true); error != 0 {
-		return error
+	if cpu.checkProtect(pa, true) {
+		return IRC_PROT
 	}
 
 	// Check if in storage area
@@ -838,13 +878,14 @@ func (cpu *CPU) writeFull(addr, data uint32) uint16 {
 		// Check if we handle unaligned access
 		if (addr & SPMASK) != (addr2 & SPMASK) {
 			// Validate address
-			if pa2, error = cpu.transAddr(addr2); error != 0 {
+			pa2, error = cpu.transAddr(addr2)
+			if error != 0 {
 				return error
 			}
 
 			// Check against storage key
-			if error = cpu.checkProtect(pa2, true); error != 0 {
-				return error
+			if cpu.checkProtect(pa2, true) {
+				return IRC_PROT
 			}
 		}
 
@@ -896,12 +937,13 @@ func (cpu *CPU) writeHalf(addr, data uint32) uint16 {
 	offset := addr & 3
 
 	// Validate address			cy = dec_divstep(l int, s1 int, s2 int, v1 *[32]uint8, v2 *[32]uint8) uint8
-	if pa, error = cpu.transAddr(addr); error != 0 {
+	pa, error = cpu.transAddr(addr)
+	if error != 0 {
 		return error
 	}
 
-	if error = cpu.checkProtect(pa, true); error != 0 {
-		return error
+	if cpu.checkProtect(pa, true) {
+		return IRC_PROT
 	}
 
 	cpu.percheck(addr)
@@ -924,13 +966,14 @@ func (cpu *CPU) writeHalf(addr, data uint32) uint16 {
 
 		if (addr & SPMASK) != (addr2 & SPMASK) {
 			// Validate address
-			if pa2, error = cpu.transAddr(addr2); error != 0 {
+			pa2, error = cpu.transAddr(addr2)
+			if error != 0 {
 				return error
 			}
 
 			// Check against storage key
-			if error = cpu.checkProtect(pa2, true); error != 0 {
-				return error
+			if cpu.checkProtect(pa2, true) {
+				return IRC_PROT
 			}
 		}
 
@@ -959,12 +1002,13 @@ func (cpu *CPU) writeByte(addr, data uint32) uint16 {
 	var err bool
 
 	// Validate address
-	if pa, error = cpu.transAddr(addr); error != 0 {
+	pa, error = cpu.transAddr(addr)
+	if error != 0 {
 		return error
 	}
 
-	if error = cpu.checkProtect(pa, true); error != 0 {
-		return error
+	if cpu.checkProtect(pa, true) {
+		return IRC_PROT
 	}
 
 	cpu.percheck(addr)

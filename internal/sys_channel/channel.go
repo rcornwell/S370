@@ -491,26 +491,25 @@ func Chan_write_byte(dev_num uint16, data uint8) bool {
 // Compute address of next byte to read/write
 func next_byte_address(cu *chan_unit, sc *chan_ctl) bool {
 	if (sc.ccw_flags & FLAG_IDA) != 0 {
-		var err bool
-		var t uint32
 		if (sc.ccw_cmd & 0xf) == CMD_RDBWD {
 			sc.ccw_iaddr--
 			if (sc.ccw_iaddr & 0x7ff) == 0x7ff {
 				sc.ccw_addr += 4
-				if t, err = readfull(cu, sc, sc.ccw_addr); err {
+				if t, err := readfull(cu, sc, sc.ccw_addr); err {
 					return true
+				} else {
+					sc.ccw_iaddr = t & M.AMASK
 				}
-				sc.ccw_iaddr = t & M.AMASK
 			}
 		} else {
 			sc.ccw_iaddr++
 			if (sc.ccw_iaddr & 0x7ff) == 0x000 {
-
 				sc.ccw_addr += 4
-				if t, err = readfull(cu, sc, sc.ccw_addr); err {
+				if t, err := readfull(cu, sc, sc.ccw_addr); err {
 					return true
+				} else {
+					sc.ccw_iaddr = t & M.AMASK
 				}
-				sc.ccw_iaddr = t & M.AMASK
 			}
 		}
 		sc.chan_byte = uint8(sc.ccw_iaddr & 3)
@@ -920,7 +919,8 @@ loop:
 	}
 
 	// Read in next CCW
-	if word, error = readfull(cu, sc, sc.caw); error {
+	word, error = readfull(cu, sc, sc.caw)
+	if error {
 		return true
 	}
 
@@ -948,7 +948,8 @@ loop:
 
 	// Set up for this command
 	sc.ccw_addr = word & M.AMASK
-	if word, error = readfull(cu, sc, sc.caw); error {
+	word, error = readfull(cu, sc, sc.caw)
+	if error {
 		return true
 	}
 	sc.caw += 4
@@ -973,7 +974,8 @@ loop:
 
 	// Handle IDA
 	if (sc.ccw_flags & FLAG_IDA) != 0 {
-		if word, error = readfull(cu, sc, sc.ccw_addr); error {
+		word, error = readfull(cu, sc, sc.ccw_addr)
+		if error {
 			return true
 		}
 		sc.ccw_iaddr = word & M.AMASK
@@ -1065,18 +1067,19 @@ func readfull(cu *chan_unit, sc *chan_ctl, addr uint32) (uint32, bool) {
 // Return true if fail, false if success
 func readbuff(cu *chan_unit, sc *chan_ctl) bool {
 	var addr uint32
-	var error bool
 
 	if (sc.ccw_flags & FLAG_IDA) != 0 {
 		addr = sc.ccw_iaddr
 	} else {
 		addr = sc.ccw_addr
 	}
-	if sc.chan_buf, error = readfull(cu, sc, addr); error {
+	if word, error := readfull(cu, sc, addr); error {
 		sc.chan_byte = BUFF_CHNEND
 		return error
+	} else {
+		sc.chan_buf = word
+		sc.chan_byte = uint8(addr & 3)
 	}
-	sc.chan_byte = uint8(addr & 3)
 	return false
 }
 

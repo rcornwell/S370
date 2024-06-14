@@ -94,7 +94,8 @@ func (cpu *CPU) op_ssm(step *stepInfo) uint16 {
 	} else {
 		var t uint32
 		var error uint16
-		if t, error = cpu.readByte(step.address1); error != 0 {
+		t, error = cpu.readByte(step.address1)
+		if error != 0 {
 			return error
 		}
 
@@ -127,8 +128,6 @@ func (cpu *CPU) op_ssm(step *stepInfo) uint16 {
 
 // Load processor status word
 func (cpu *CPU) op_lpsw(step *stepInfo) uint16 {
-	var src1, src2 uint32
-	var error uint16
 
 	if (cpu.flags & PROBLEM) != 0 {
 		//       if (QVMA && vma_lpsw(addr1))
@@ -137,10 +136,15 @@ func (cpu *CPU) op_lpsw(step *stepInfo) uint16 {
 	} else if (step.address1 & 0x7) != 0 {
 		return IRC_SPEC
 	} else {
-		if src1, error = cpu.readFull(step.address1); error != 0 {
+		var src1, src2 uint32
+		var error uint16
+
+		src1, error = cpu.readFull(step.address1)
+		if error != 0 {
 			return error
 		}
-		if src2, error = cpu.readFull(step.address1 + 4); error != 0 {
+		src2, error = cpu.readFull(step.address1 + 4)
+		if error != 0 {
 			return error
 		}
 		cpu.lpsw(src1, src2)
@@ -157,12 +161,14 @@ func (cpu *CPU) op_cs(step *stepInfo) uint16 {
 	if (step.address1 & 0x3) != 0 {
 		return IRC_SPEC
 	}
-	if orig, error = cpu.readFull(step.address1); error != 0 {
+	orig, error = cpu.readFull(step.address1)
+	if error != 0 {
 		return error
 	}
 	src = cpu.regs[step.R2]
 	if cpu.regs[step.R1] == orig {
-		if error = cpu.writeFull(step.address1, src); error != 0 {
+		error = cpu.writeFull(step.address1, src)
+		if error != 0 {
 			return error
 		}
 		cpu.cc = 0
@@ -183,19 +189,23 @@ func (cpu *CPU) op_cds(step *stepInfo) uint16 {
 	if (step.address1&0x7) != 0 || (step.R1&1) != 0 || (step.R2&1) != 0 {
 		return IRC_SPEC
 	}
-	if origl, error = cpu.readFull(step.address1); error != 0 {
+	origl, error = cpu.readFull(step.address1)
+	if error != 0 {
 		return error
 	}
-	if origh, error = cpu.readFull(step.address1 + 4); error != 0 {
+	origh, error = cpu.readFull(step.address1 + 4)
+	if error != 0 {
 		return error
 	}
 	srcl = cpu.regs[step.R2]
 	srch = cpu.regs[step.R2|1]
 	if origl == srcl && origh == srch {
-		if error = cpu.writeFull(step.address1, srcl); error != 0 {
+		error = cpu.writeFull(step.address1, srcl)
+		if error != 0 {
 			return error
 		}
-		if error = cpu.writeFull(step.address1+4, srch); error != 0 {
+		error = cpu.writeFull(step.address1+4, srch)
+		if error != 0 {
 			return error
 		}
 		cpu.cc = 0
@@ -245,7 +255,8 @@ func (cpu *CPU) op_lra(step *stepInfo) uint16 {
 
 	// If over size of memory, trap
 	mem_cycle++
-	if entry, error = memory.GetWord(addr); error {
+	entry, error = memory.GetWord(addr)
+	if error {
 		return IRC_ADDR
 	}
 
@@ -271,7 +282,8 @@ func (cpu *CPU) op_lra(step *stepInfo) uint16 {
 	// Now we need to fetch the actual entry
 	addr = ((entry & PTE_ADR) + (page << 1)) & AMASK
 	mem_cycle++
-	if entry, error = memory.GetWord(addr); error {
+	entry, error = memory.GetWord(addr)
+	if error {
 		return IRC_ADDR
 	}
 
@@ -300,21 +312,18 @@ func (cpu *CPU) op_lra(step *stepInfo) uint16 {
 // Execute instruction
 func (cpu *CPU) op_ex(step *stepInfo) uint16 {
 	var s stepInfo
-	var opr uint32
-	var error uint16
-
 	// Fetch the next instruction
-	if opr, error = cpu.readHalf(step.address1); error != 0 {
+	if opr, error := cpu.readHalf(step.address1); error != 0 {
 		return error
+	} else {
+		s.opcode = uint8((opr >> 8) & 0xff)
 	}
-
-	s.opcode = uint8((opr >> 8) & 0xff)
 
 	// Can't execute execute instruction
 	if s.opcode == OP_EX {
 		return IRC_EXEC
 	}
-	s.reg = uint8(opr & 0xff)
+	s.reg = uint8(s.opcode & 0xff)
 	s.R1 = (step.reg >> 4) & 0xf
 	s.R2 = step.reg & 0xf
 	step.address1 += 2
@@ -322,17 +331,19 @@ func (cpu *CPU) op_ex(step *stepInfo) uint16 {
 	// Check type of instruction
 	if (s.opcode & 0xc0) != 0 {
 		// Check if we need new word
-		if s.address1, error = cpu.readHalf(step.address1); error != 0 {
+		if a1, error := cpu.readHalf(step.address1); error != 0 {
 			return error
+		} else {
+			s.address1 = a1 & 0xffff
 		}
-		s.address1 &= 0xffff
 		step.address1 += 2
 		// SI instruction
 		if (s.opcode & 0xc0) == 0xc0 {
-			if s.address2, error = cpu.readHalf(step.address1); error != 0 {
+			if a2, error := cpu.readHalf(step.address1); error != 0 {
 				return error
+			} else {
+				s.address2 = a2 & 0xfff
 			}
-			s.address2 &= 0xfff
 		}
 	}
 
@@ -437,91 +448,88 @@ func (cpu *CPU) op_stxsm(step *stepInfo) uint16 {
 
 // Load control registers
 func (cpu *CPU) op_lctl(step *stepInfo) uint16 {
-	var error uint16
-	var t uint32
-	var purge bool
-
-	t = 0
-	purge = false
 	if (cpu.flags & PROBLEM) != 0 {
 		return IRC_PRIV
 	}
 
 	for {
-		if t, error = cpu.readFull(step.address1); error != 0 {
+		if t, error := cpu.readFull(step.address1); error != 0 {
 			return error
-		}
-		cpu.cregs[step.R1] = t
-		switch step.R1 {
-		case 0: // General control register
-			/* CR0 values
-				|    |     |     |   |   |   |   |
-			0 0 0 00000 00 1 11 111 1111222222222231|
-			0 1 2 34567 89 0 12 345 6789012345678901|
-			b s t xxxxx ps 0 ss xxx iiiiiixxiiixxxxx|
-			m s d                   mmmmct  iIE     |
-			*/
-			if (t & 0x80000000) != 0 {
-				sys_channel.SetBMUXenable(true)
-			} else {
-				sys_channel.SetBMUXenable(false)
-			}
-			cpu.page_shift = 0
-			cpu.seg_shift = 0
-			switch (t >> 22) & 3 {
-			default: // Generate translation exception
-			case 1: // 2K page
-				cpu.page_shift = 11
-				cpu.page_mask = 0x7ff
-				cpu.pte_avail = 4
-				cpu.pte_mbz = 2
-				cpu.pte_shift = 3
-				cpu.pte_len_shift = 1
-			case 2: // 4K page
-				cpu.page_shift = 12
-				cpu.page_mask = 0xfff
-				cpu.pte_avail = 8
-				cpu.pte_mbz = 6
-				cpu.pte_shift = 4
-				cpu.pte_len_shift = 0
-			}
-
-			switch (t >> 19) & 0x7 {
-			default: // Generate translation exception
-			case 0: // 64K segments
-				cpu.seg_shift = 16
-				cpu.seg_mask = AMASK >> 16
-			case 2: // 1M segments
-				cpu.seg_shift = 20
-				cpu.seg_mask = AMASK >> 20
-				cpu.pte_len_shift += 4
-			}
-			// Generate PTE index mask
-			cpu.page_index = ((^(cpu.seg_mask << cpu.seg_shift) &
-				^cpu.page_mask) & AMASK) >> cpu.page_shift
-			cpu.interval_en = (t & 0x400) != 0
-			cpu.tod_en = (t & 0x800) != 0
-		case 1: // Segment table address and length
-			purge = true
-			cpu.seg_addr = t & AMASK
-			cpu.seg_len = (((t >> 24) & 0xff) + 1) << 4
-		case 2: // Masks
-			if cpu.ec_mode {
-				if cpu.irq_en {
-					cpu.sysmask = uint16(t >> 16)
+		} else {
+			cpu.cregs[step.R1] = t
+			switch step.R1 {
+			case 0: // General control register
+				/* CR0 values
+					|    |     |     |   |   |   |   |
+				0 0 0 00000 00 1 11 111 1111222222222231|
+				0 1 2 34567 89 0 12 345 6789012345678901|
+				b s t xxxxx ps 0 ss xxx iiiiiixxiiixxxxx|
+				m s d                   mmmmct  iIE     |
+				*/
+				if (t & 0x80000000) != 0 {
+					sys_channel.SetBMUXenable(true)
 				} else {
-					cpu.sysmask = 0
+					sys_channel.SetBMUXenable(false)
 				}
-				sys_channel.Irq_pending = true
+				cpu.page_shift = 0
+				cpu.seg_shift = 0
+				switch (t >> 22) & 3 {
+				default: // Generate translation exception
+				case 1: // 2K page
+					cpu.page_shift = 11
+					cpu.page_mask = 0x7ff
+					cpu.pte_avail = 4
+					cpu.pte_mbz = 2
+					cpu.pte_shift = 3
+					cpu.pte_len_shift = 1
+				case 2: // 4K page
+					cpu.page_shift = 12
+					cpu.page_mask = 0xfff
+					cpu.pte_avail = 8
+					cpu.pte_mbz = 6
+					cpu.pte_shift = 4
+					cpu.pte_len_shift = 0
+				}
+
+				switch (t >> 19) & 0x7 {
+				default: // Generate translation exception
+				case 0: // 64K segments
+					cpu.seg_shift = 16
+					cpu.seg_mask = AMASK >> 16
+				case 2: // 1M segments
+					cpu.seg_shift = 20
+					cpu.seg_mask = AMASK >> 20
+					cpu.pte_len_shift += 4
+				}
+				// Generate PTE index mask
+				cpu.page_index = ((^(cpu.seg_mask << cpu.seg_shift) &
+					^cpu.page_mask) & AMASK) >> cpu.page_shift
+				cpu.interval_en = (t & 0x400) != 0
+				cpu.tod_en = (t & 0x800) != 0
+			case 1: // Segment table address and length
+				for i := 0; i < 256; i++ {
+					cpu.tlb[i] = 0
+				}
+				cpu.seg_addr = t & AMASK
+				cpu.seg_len = (((t >> 24) & 0xff) + 1) << 4
+			case 2: // Masks
+				if cpu.ec_mode {
+					if cpu.irq_en {
+						cpu.sysmask = uint16(t >> 16)
+					} else {
+						cpu.sysmask = 0
+					}
+					sys_channel.Irq_pending = true
+				}
+			case 6: // Assist function control
+			case 8: // Monitor masks
+			case 9: // PER general register masks
+			case 10: // PER staring address
+			case 11: // PER ending address
+			case 14: // Machine Check handleing
+			case 15: // Machine check address
+			default:
 			}
-		case 6: // Assist function control
-		case 8: // Monitor masks
-		case 9: // PER general register masks
-		case 10: // PER staring address
-		case 11: // PER ending address
-		case 14: // Machine Check handleing
-		case 15: // Machine check address
-		default:
 		}
 		if step.R1 == step.R2 {
 			break
@@ -531,12 +539,6 @@ func (cpu *CPU) op_lctl(step *stepInfo) uint16 {
 		step.address1 += 4
 	}
 
-	// Purge TLB if segment pointer is updated
-	if purge {
-		for i := 0; i < 256; i++ {
-			cpu.tlb[i] = 0
-		}
-	}
 	return 0
 }
 
@@ -571,7 +573,6 @@ func (cpu *CPU) op_diag(step *stepInfo) uint16 {
 }
 
 func (cpu *CPU) op_370(step *stepInfo) uint16 {
-	var error uint16
 	var t1, t2 uint32
 
 	if step.reg > 0x13 {
@@ -596,7 +597,7 @@ func (cpu *CPU) op_370(step *stepInfo) uint16 {
 	case 0x02: // STIDP
 		// Store CPUID in double word
 		t1 = uint32(100)
-		if error = cpu.writeFull(step.address1, t1); error != 0 {
+		if error := cpu.writeFull(step.address1, t1); error != 0 {
 			return error
 		}
 		t2 = uint32(0x145) << 16
@@ -621,10 +622,14 @@ func (cpu *CPU) op_370(step *stepInfo) uint16 {
 		return 0
 	case 0x04: // SCK
 		// Load check with double word
-		if t1, error = cpu.readFull(step.address1); error != 0 {
+		var t1, t2 uint32
+		var error uint16
+		t1, error = cpu.readFull(step.address1)
+		if error != 0 {
 			return error
 		}
-		if t2, error = cpu.readFull(step.address1 + 4); error != 0 {
+		t2, error = cpu.readFull(step.address1 + 4)
+		if error != 0 {
 			return error
 		}
 		cpu.tod_clock[0] = t1
@@ -638,10 +643,10 @@ func (cpu *CPU) op_370(step *stepInfo) uint16 {
 		t2 = cpu.tod_clock[1]
 		// Update clock based on time before next irq
 		t2 &= 0xffff000
-		if error = cpu.writeFull(step.address1, t1); error != 0 {
+		if error := cpu.writeFull(step.address1, t1); error != 0 {
 			return error
 		}
-		if error = cpu.writeFull(step.address1+4, t2); error != 0 {
+		if error := cpu.writeFull(step.address1+4, t2); error != 0 {
 			return error
 		}
 		if cpu.tod_set {
@@ -651,6 +656,8 @@ func (cpu *CPU) op_370(step *stepInfo) uint16 {
 		}
 	case 0x06: // SCKC
 		// Load Clock compare with double word
+		var t1, t2 uint32
+		var error uint16
 		if t1, error = cpu.readFull(step.address1); error != 0 {
 			return error
 		}
@@ -664,14 +671,16 @@ func (cpu *CPU) op_370(step *stepInfo) uint16 {
 		// Store TOD clock in location
 		t1 = cpu.clk_cmp[0]
 		t2 = cpu.clk_cmp[1]
-		if error = cpu.writeFull(step.address1, t1); error != 0 {
+		if error := cpu.writeFull(step.address1, t1); error != 0 {
 			return error
 		}
-		if error = cpu.writeFull(step.address1+4, t2); error != 0 {
+		if error := cpu.writeFull(step.address1+4, t2); error != 0 {
 			return error
 		}
 	case 0x08: // SPT
 		// Set the CPU timer with double word
+		var t1, t2 uint32
+		var error uint16
 		if t1, error = cpu.readFull(step.address1); error != 0 {
 			return error
 		}
@@ -692,10 +701,10 @@ func (cpu *CPU) op_370(step *stepInfo) uint16 {
 		t2 = cpu.cpu_timer[1]
 		// Update clock based on time before next irq
 		t2 &= 0xffff000
-		if error = cpu.writeFull(step.address1, t1); error != 0 {
+		if error := cpu.writeFull(step.address1, t1); error != 0 {
 			return error
 		}
-		if error = cpu.writeFull(step.address1+4, t2); error != 0 {
+		if error := cpu.writeFull(step.address1+4, t2); error != 0 {
 			return error
 		}
 	case 0x0a: // SPKA

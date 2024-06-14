@@ -110,10 +110,8 @@ func (cpu *CPU) op_lcs(step *stepInfo) uint16 {
 
 // Floating point store register double
 func (cpu *CPU) op_std(step *stepInfo) uint16 {
-	var error uint16
-
 	t := uint32(step.fsrc1 & LMASKL)
-	if error = cpu.writeFull(step.address1+4, t); error != 0 {
+	if error := cpu.writeFull(step.address1+4, t); error != 0 {
 		return error
 	}
 	t = uint32((step.fsrc1 >> 32) & LMASKL)
@@ -128,15 +126,12 @@ func (cpu *CPU) op_ste(step *stepInfo) uint16 {
 
 // Floating point compare short
 func (cpu *CPU) op_ce(step *stepInfo) uint16 {
-	var e1, e2 int
-	var s1, s2 bool
-	var d uint32
 
 	// Extract number and adjust
-	e1 = int((step.fsrc1 & EMASKL) >> 56)
-	e2 = int((step.fsrc2 & EMASKL) >> 56)
-	s1 = (step.fsrc1 & MSIGNL) != 0
-	s2 = (step.fsrc2 & MSIGNL) != 0
+	e1 := int((step.fsrc1 & EMASKL) >> 56)
+	e2 := int((step.fsrc2 & EMASKL) >> 56)
+	s1 := (step.fsrc1 & MSIGNL) != 0
+	s2 := (step.fsrc2 & MSIGNL) != 0
 
 	// Make 32 bit and create guard digit
 	v1 := uint32(step.fsrc1>>28) & XMASK
@@ -162,6 +157,8 @@ func (cpu *CPU) op_ce(step *stepInfo) uint16 {
 	// Exponents should be equal now.
 
 	// Subtract results
+	var d uint32
+
 	if s1 == s2 {
 		// Same signs do subtract
 		v2 ^= XMASK
@@ -204,10 +201,6 @@ func (cpu *CPU) op_sh_as(step *stepInfo) uint16 {
 	// AUR 3E
 	// AE  7A
 	// AU  7E
-	var e1, e2 int
-	var s1, s2 bool
-	var d uint32
-	var error uint16 = 0
 
 	// If subrtact change sign
 	if (step.opcode & 1) != 0 {
@@ -215,10 +208,10 @@ func (cpu *CPU) op_sh_as(step *stepInfo) uint16 {
 	}
 
 	// Extract number and adjust
-	e1 = int((step.fsrc1 & EMASKL) >> 56)
-	e2 = int((step.fsrc2 & EMASKL) >> 56)
-	s1 = (step.fsrc1 & MSIGNL) != 0
-	s2 = (step.fsrc2 & MSIGNL) != 0
+	e1 := int((step.fsrc1 & EMASKL) >> 56)
+	e2 := int((step.fsrc2 & EMASKL) >> 56)
+	s1 := (step.fsrc1 & MSIGNL) != 0
+	s2 := (step.fsrc2 & MSIGNL) != 0
 
 	// Make 32 bit and create guard digit
 	v1 := uint32(step.fsrc1>>28) & XMASK
@@ -241,6 +234,8 @@ func (cpu *CPU) op_sh_as(step *stepInfo) uint16 {
 		}
 		e1 = e2
 	}
+
+	var d uint32
 
 	// Exponents should be equal now.
 	// Add results
@@ -300,6 +295,7 @@ func (cpu *CPU) op_sh_as(step *stepInfo) uint16 {
 		}
 	}
 
+	var error uint16 = 0
 	// Check signifigance exceptions
 	if cpu.cc == 0 && (cpu.pmask&SIGMASK) != 0 {
 		error = IRC_SIGNIF
@@ -340,15 +336,12 @@ func (cpu *CPU) op_sh_as(step *stepInfo) uint16 {
 func (cpu *CPU) op_cd(step *stepInfo) uint16 {
 	// OP_CD	0x69
 	// OP_CDR	0x29
-	var e1, e2 int
-	var s1, s2 bool
-	var d uint64
 
 	// Extract number and adjust
-	e1 = int((step.fsrc1 & EMASKL) >> 56)
-	e2 = int((step.fsrc2 & EMASKL) >> 56)
-	s1 = (step.fsrc1 & MSIGNL) != 0
-	s2 = (step.fsrc2 & MSIGNL) != 0
+	e1 := int((step.fsrc1 & EMASKL) >> 56)
+	e2 := int((step.fsrc2 & EMASKL) >> 56)
+	s1 := (step.fsrc1 & MSIGNL) != 0
+	s2 := (step.fsrc2 & MSIGNL) != 0
 
 	// Make 32 bit and create guard digit
 	v1 := step.fsrc1 & MMASKL
@@ -374,6 +367,7 @@ func (cpu *CPU) op_cd(step *stepInfo) uint16 {
 	// Exponents should be equal now.
 
 	// Subtract results
+	var d uint64
 	if s1 != s2 {
 		// Same signs do subtract
 		v2 ^= XMASKL
@@ -416,10 +410,6 @@ func (cpu *CPU) op_db_as(step *stepInfo) uint16 {
 	// AWR 3E
 	// AD  6A
 	// AW  6E
-	var e1, e2 int
-	var s1, s2 bool
-	var d uint64
-	var error uint16 = 0
 
 	// If subrtact change sign
 	if (step.opcode & 1) != 0 {
@@ -427,10 +417,10 @@ func (cpu *CPU) op_db_as(step *stepInfo) uint16 {
 	}
 
 	// Extract number and adjust
-	e1 = int((step.fsrc1 & EMASKL) >> 56)
-	e2 = int((step.fsrc2 & EMASKL) >> 56)
-	s1 = (step.fsrc1 & MSIGNL) != 0
-	s2 = (step.fsrc2 & MSIGNL) != 0
+	e1 := int((step.fsrc1 & EMASKL) >> 56)
+	e2 := int((step.fsrc2 & EMASKL) >> 56)
+	s1 := (step.fsrc1 & MSIGNL) != 0
+	s2 := (step.fsrc2 & MSIGNL) != 0
 
 	// Make 32 bit and create guard digit
 	v1 := step.fsrc1 & MMASKL
@@ -456,6 +446,8 @@ func (cpu *CPU) op_db_as(step *stepInfo) uint16 {
 
 	// Exponents should be equal now.
 	// Add results
+	var d uint64
+
 	if s1 != s2 {
 		// Different signs do subtract
 		v2 ^= XMASKL
@@ -512,6 +504,7 @@ func (cpu *CPU) op_db_as(step *stepInfo) uint16 {
 		}
 	}
 
+	var error uint16 = 0
 	// Check signifigance exceptions
 	if cpu.cc == 0 && (cpu.pmask&SIGMASK) != 0 {
 		error = IRC_SIGNIF
@@ -554,15 +547,11 @@ func (cpu *CPU) op_fp_mpy(step *stepInfo) uint16 {
 	// MER  3c
 	// ME   7c
 	// MD   6c
-	var e1, e2 int
-	var s1 bool
-	var d uint64
-	var error uint16 = 0
 
 	// Extract number and adjust
-	e1 = int((step.fsrc1 & EMASKL) >> 56)
-	e2 = int((step.fsrc2 & EMASKL) >> 56)
-	s1 = (step.fsrc1 & MSIGNL) != (step.fsrc2 & MSIGNL)
+	e1 := int((step.fsrc1 & EMASKL) >> 56)
+	e2 := int((step.fsrc2 & EMASKL) >> 56)
+	s1 := (step.fsrc1 & MSIGNL) != (step.fsrc2 & MSIGNL)
 
 	// Make 32 bit and create guard digit
 	v1 := step.fsrc1 & MMASKL
@@ -587,7 +576,7 @@ func (cpu *CPU) op_fp_mpy(step *stepInfo) uint16 {
 	// Add in guard digits
 	v1 <<= 4
 	v2 <<= 4
-	d = 0
+	var d uint64 = 0
 
 	// Do actual multiply
 	for i := 0; i < 60; i++ {
@@ -606,6 +595,7 @@ func (cpu *CPU) op_fp_mpy(step *stepInfo) uint16 {
 		e1++
 	}
 
+	var error uint16 = 0
 	// Check for overflow
 	if e1 >= 128 {
 		error = IRC_EXPOVR
@@ -651,15 +641,11 @@ func (cpu *CPU) op_fp_div(step *stepInfo) uint16 {
 	// MER  3c
 	// ME   7c
 	// MD   6c
-	var e1, e2 int
-	var s1 bool
-	var d uint64
-	var error uint16 = 0
 
 	// Extract number and adjust
-	e1 = int((step.fsrc1 & EMASKL) >> 56)
-	e2 = int((step.fsrc2 & EMASKL) >> 56)
-	s1 = (step.fsrc1 & MSIGNL) != (step.fsrc2 & MSIGNL)
+	e1 := int((step.fsrc1 & EMASKL) >> 56)
+	e2 := int((step.fsrc2 & EMASKL) >> 56)
+	s1 := (step.fsrc1 & MSIGNL) != (step.fsrc2 & MSIGNL)
 
 	v1 := step.fsrc1 & MMASKL
 	v2 := step.fsrc2 & MMASKL
@@ -697,7 +683,7 @@ func (cpu *CPU) op_fp_div(step *stepInfo) uint16 {
 	// Change sign of v2 so we can add
 	v2 ^= XMASKL
 	v2++
-	d = 0
+	var d uint64 = 0
 
 	// Do divide
 	for i := 57; i > 0; i-- {
@@ -726,6 +712,7 @@ func (cpu *CPU) op_fp_div(step *stepInfo) uint16 {
 		e1++
 	}
 
+	var error uint16 = 0
 	// Check for overflow
 	if e1 >= 128 {
 		error = IRC_EXPOVR

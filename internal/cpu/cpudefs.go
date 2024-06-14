@@ -87,8 +87,9 @@ type CPU struct {
 	//	clk_en        bool      // Clock interrupt enable
 	tod_en     bool // TOD enable
 	tod_irq    bool // TOD compare IRQ
-	clk_state  bool
-	timer_tics int // Interval Timer is ever 3 tics
+	clk_state  bool // Clock set/unset.
+	vmassist   bool // VM Assist functions enabled.
+	timer_tics int  // Interval Timer is ever 3 tics
 	table      [256]func(*stepInfo) uint16
 }
 

@@ -38,7 +38,8 @@ func (cpu *CPU) dec_load(data *[32]uint8, addr uint32, len uint8, sign *bool) ui
 	j := 0
 	// Read into data backwards
 	for range len {
-		if t, error = cpu.readByte(a); error != 0 {
+		t, error = cpu.readByte(a)
+		if error != 0 {
 			return error
 		}
 		t2 := uint8(t & 0xf)
@@ -71,8 +72,6 @@ func (cpu *CPU) dec_load(data *[32]uint8, addr uint32, len uint8, sign *bool) ui
 // Store decimal number into memory
 // return error code
 func (cpu *CPU) dec_store(data [32]uint8, addr uint32, len uint8) uint16 {
-	var error uint16 = 0
-
 	a := addr + uint32(len)
 	j := 0
 	for range len {
@@ -80,7 +79,7 @@ func (cpu *CPU) dec_store(data [32]uint8, addr uint32, len uint8) uint16 {
 		j++
 		t |= (data[j] & 0xf) << 4
 		j++
-		if error = cpu.writeByte(a, uint32(t)); error != 0 {
+		if error := cpu.writeByte(a, uint32(t)); error != 0 {
 			return error
 		}
 		a--

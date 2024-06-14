@@ -29,8 +29,6 @@ import (
 	D "github.com/rcornwell/S370/internal/device"
 )
 
-//	struct _chanctl {
-//	    struct _dev *dev                  // Pointer to dev structure for current dev
 type chan_ctl struct { // Channel control structure
 	dev         D.Device // Pointer to device interface
 	caw         uint32   // Channel command address word
@@ -62,7 +60,7 @@ var Irq_pending bool
 var Loading uint16 = NO_DEV
 
 const (
-	MAX_CHAN  uint16 = 16 // Max number of channels
+	MAX_CHAN  uint16 = 12 // Max number of channels
 	TYPE_DIS  int    = 0  // Channel disabled
 	TYPE_SEL  int    = 1  // Selector channel
 	TYPE_MUX  int    = 2  // Mulitplexer channel
