@@ -53,12 +53,12 @@ type Test_dev struct {
 //   */
 
 // Handle start of CCW chain
-func (d *Test_dev) Start_IO() uint8 {
+func (d *Test_dev) StartIO() uint8 {
 	return 0
 }
 
 // Handle start of new command
-func (d *Test_dev) Start_cmd(cmd uint8) uint8 {
+func (d *Test_dev) StartCmd(cmd uint8) uint8 {
 	var r uint8 = 0
 	if d.cmd != 0 {
 		return SNS_BSY
@@ -84,7 +84,7 @@ func (d *Test_dev) Start_cmd(cmd uint8) uint8 {
 		case 0x1b: // Grab a data byte {
 		case 0x13: // Issue channel end
 			r = SNS_CHNEND
-			Ev.Add_event(d, d.callback, 10, 1)
+			Ev.AddEvent(d, d.callback, 10, 1)
 		default:
 			d.sense = SNS_CMDREJ
 		}
@@ -94,7 +94,7 @@ func (d *Test_dev) Start_cmd(cmd uint8) uint8 {
 			d.sense = 0
 			d.count = 0
 		} else if cmd == 0x4 { // Sense
-			Ev.Add_event(d, d.callback, 10, 1)
+			Ev.AddEvent(d, d.callback, 10, 1)
 			return 0
 		} else {
 			d.cmd = 0
@@ -107,13 +107,13 @@ func (d *Test_dev) Start_cmd(cmd uint8) uint8 {
 	if d.sense != 0 {
 		r = SNS_CHNEND | SNS_DEVEND | SNS_UNITCHK
 	} else if cmd != 0 && (r&SNS_CHNEND) == 0 {
-		Ev.Add_event(d, d.callback, 10, 1)
+		Ev.AddEvent(d, d.callback, 10, 1)
 	}
 	return r
 }
 
 // Handle HIO instruction
-func (d *Test_dev) Halt_IO() uint8 {
+func (d *Test_dev) HaltIO() uint8 {
 	switch d.cmd {
 	case 0x13: // Return channel end
 	case 0x4:
@@ -125,7 +125,7 @@ func (d *Test_dev) Halt_IO() uint8 {
 }
 
 // Initialize a device.
-func (d *Test_dev) Init_Dev() uint8 {
+func (d *Test_dev) InitDev() uint8 {
 	d.cmd = 0
 	d.count = 0
 	d.max = 0
@@ -142,40 +142,40 @@ func (d *Test_dev) callback(iarg int) {
 	case 0x1: // Write
 		if d.count >= d.max {
 			d.cmd = 0
-			Chan_end(d.addr, SNS_DEVEND)
+			ChanEnd(d.addr, SNS_DEVEND)
 			return
 		}
-		if v, e = Chan_read_byte(d.addr); e {
+		if v, e = ChanReadByte(d.addr); e {
 			d.cmd = 0
-			Chan_end(d.addr, SNS_DEVEND)
+			ChanEnd(d.addr, SNS_DEVEND)
 			return
 		}
 		d.data[d.count] = v
 		d.count++
-		Ev.Add_event(d, d.callback, 10, 1)
+		Ev.AddEvent(d, d.callback, 10, 1)
 	case 0x02, 0xc: // Read and Read backwards
 		if d.count >= d.max {
 			d.cmd = 0
-			Chan_end(d.addr, SNS_DEVEND)
+			ChanEnd(d.addr, SNS_DEVEND)
 			return
 		}
-		if Chan_write_byte(d.addr, d.data[d.count]) {
+		if ChanWriteByte(d.addr, d.data[d.count]) {
 			d.cmd = 0
-			Chan_end(d.addr, SNS_DEVEND|SNS_UNITEXP)
+			ChanEnd(d.addr, SNS_DEVEND|SNS_UNITEXP)
 		} else {
 			d.count++
-			Ev.Add_event(d, d.callback, 10, 1)
+			Ev.AddEvent(d, d.callback, 10, 1)
 		}
 	case 0x4:
-		if Chan_write_byte(d.addr, d.sense) {
+		if ChanWriteByte(d.addr, d.sense) {
 			d.cmd = 0
-			Chan_end(d.addr, SNS_DEVEND|SNS_UNITEXP)
+			ChanEnd(d.addr, SNS_DEVEND|SNS_UNITEXP)
 		} else {
 			d.cmd = 0
-			Chan_end(d.addr, SNS_DEVEND)
+			ChanEnd(d.addr, SNS_DEVEND)
 		}
 	case 0x13: // Return channel end
 		d.cmd = 0
-		Chan_end(d.addr, SNS_DEVEND)
+		ChanEnd(d.addr, SNS_DEVEND)
 	}
 }

@@ -30,7 +30,7 @@ func (cpu *CPU) opUnk(step *stepInfo) uint16 {
 
 // Set program mask
 func (cpu *CPU) opSPM(step *stepInfo) uint16 {
-	cpu.pmask = uint8(step.src1>>24) & 0xf
+	cpu.progMask = uint8(step.src1>>24) & 0xf
 	cpu.cc = uint8(step.src1>>28) & 0x3
 	return 0
 }
@@ -39,13 +39,14 @@ func (cpu *CPU) opSPM(step *stepInfo) uint16 {
 func (cpu *CPU) opBAS(step *stepInfo) uint16 {
 	dest := cpu.PC
 	if step.opcode != OP_BASR || step.R2 != 0 {
-		if cpu.per_en && (cpu.cregs[9]&0x80000000) != 0 {
-			cpu.per_code |= 0x8000 /* Set PER branch */
+		// Check if triggered PER event.
+		if cpu.perEnb && cpu.perBranch {
+			cpu.perCode |= 0x8000 /* Set PER branch */
 		}
 		cpu.PC = step.address1 & AMASK
 	}
 	cpu.regs[step.R1] = dest
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
@@ -53,16 +54,17 @@ func (cpu *CPU) opBAS(step *stepInfo) uint16 {
 func (cpu *CPU) opBAL(step *stepInfo) uint16 {
 	dest := (uint32(cpu.ilc) << 30) |
 		(uint32(cpu.cc) << 28) |
-		(uint32(cpu.pmask) << 24) |
+		(uint32(cpu.progMask) << 24) |
 		cpu.PC
 	if step.opcode != OP_BALR || step.R2 != 0 {
-		if cpu.per_en && (cpu.cregs[9]&0x80000000) != 0 {
-			cpu.per_code |= 0x8000 /* Set PER branch */
+		// Check if triggered PER event.
+		if cpu.perEnb && cpu.perBranch {
+			cpu.perCode |= 0x8000 /* Set PER branch */
 		}
 		cpu.PC = step.address1 & AMASK
 	}
 	cpu.regs[step.R1] = dest
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
@@ -71,21 +73,23 @@ func (cpu *CPU) opBCT(step *stepInfo) uint16 {
 	dest := step.src1 - 1
 
 	if dest != 0 && (step.opcode != OP_BCTR || step.R2 != 0) {
-		if cpu.per_en && (cpu.cregs[9]&0x80000000) != 0 {
-			cpu.per_code |= 0x8000 /* Set PER branch */
+		// Check if triggered PER event.
+		if cpu.perEnb && cpu.perBranch {
+			cpu.perCode |= 0x8000 /* Set PER branch */
 		}
 		cpu.PC = step.address1 & AMASK
 	}
 	cpu.regs[step.R1] = dest
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
 // Branch conditional
 func (cpu *CPU) opBC(step *stepInfo) uint16 {
 	if ((0x8>>cpu.cc)&step.R1) != 0 && (step.opcode != OP_BCR || step.R2 != 0) {
-		if cpu.per_en && (cpu.cregs[9]&0x80000000) != 0 {
-			cpu.per_code |= 0x8000 /* Set PER branch */
+		// Check if triggered PER event.
+		if cpu.perEnb && cpu.perBranch {
+			cpu.perCode |= 0x8000 /* Set PER branch */
 		}
 		cpu.PC = step.address1 & AMASK
 	}
@@ -97,10 +101,11 @@ func (cpu *CPU) opBXH(step *stepInfo) uint16 {
 	src1 := cpu.regs[step.R2|1]
 	dest := cpu.regs[step.R1] + cpu.regs[step.R2]
 	cpu.regs[step.R1] = dest
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	if int32(dest) > int32(src1) {
-		if cpu.per_en && (cpu.cregs[9]&0x80000000) != 0 {
-			cpu.per_code |= 0x8000 /* Set PER branch */
+		// Check if triggered PER event.
+		if cpu.perEnb && cpu.perBranch {
+			cpu.perCode |= 0x8000 /* Set PER branch */
 		}
 		cpu.PC = step.address1 & AMASK
 	}
@@ -112,10 +117,11 @@ func (cpu *CPU) op_BXLE(step *stepInfo) uint16 {
 	src1 := cpu.regs[step.R2|1]
 	dest := cpu.regs[step.R1] + cpu.regs[step.R2]
 	cpu.regs[step.R1] = dest
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	if int32(dest) <= int32(src1) {
-		if cpu.per_en && (cpu.cregs[9]&0x80000000) != 0 {
-			cpu.per_code |= 0x8000 /* Set PER branch */
+		// Check if triggered PER event.
+		if cpu.perEnb && cpu.perBranch {
+			cpu.perCode |= 0x8000 /* Set PER branch */
 		}
 		cpu.PC = step.address1 & AMASK
 	}
@@ -146,7 +152,7 @@ func (cpu *CPU) opLPR(step *stepInfo) uint16 {
 		cpu.setCC(step.src2)
 	}
 	cpu.regs[step.R1] = step.src2
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
@@ -159,14 +165,14 @@ func (cpu *CPU) opLCR(step *stepInfo) uint16 {
 		cpu.cc = 3
 	}
 	cpu.regs[step.R1] = step.src2
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
 // Load and test register
 func (cpu *CPU) opLTR(step *stepInfo) uint16 {
 	cpu.regs[step.R1] = step.src2
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	cpu.setCC(step.src2)
 	return 0
 }
@@ -177,7 +183,7 @@ func (cpu *CPU) opLNR(step *stepInfo) uint16 {
 		step.src2 = (FMASK ^ step.src2) + 1
 	}
 	cpu.regs[step.R1] = step.src2
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	cpu.setCC(step.src2)
 	return 0
 }
@@ -186,7 +192,7 @@ func (cpu *CPU) opLNR(step *stepInfo) uint16 {
 // Also handle LH and LA
 func (cpu *CPU) opL(step *stepInfo) uint16 {
 	cpu.regs[step.R1] = step.src2
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
@@ -196,7 +202,7 @@ func (cpu *CPU) opIC(step *stepInfo) uint16 {
 		return error
 	} else {
 		cpu.regs[step.R1] = (step.src1 & 0xffffff00) | (t & 0xff)
-		cpu.per_mod |= 1 << step.R1
+		cpu.perRegMod |= 1 << step.R1
 	}
 	return 0
 }
@@ -246,7 +252,7 @@ func (cpu *CPU) opICM(step *stepInfo) uint16 {
 		m >>= 8
 	}
 	cpu.regs[step.R1] = d
-	cpu.per_mod |= 1 << step.reg
+	cpu.perRegMod |= 1 << step.reg
 	return 0
 }
 
@@ -255,10 +261,10 @@ func (cpu *CPU) opAdd(step *stepInfo) uint16 {
 	sum := step.src1 + step.src2
 	carry := (step.src1 & step.src2) | ((step.src1 ^ step.src2) & ^sum)
 	cpu.regs[step.R1] = sum
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	if (((carry << 1) ^ carry) & MSIGN) != 0 {
 		cpu.cc = 3
-		if (cpu.pmask & FIXOVER) != 0 {
+		if (cpu.progMask & FIXOVER) != 0 {
 			return IRC_FIXOVR
 		}
 		return 0
@@ -273,10 +279,10 @@ func (cpu *CPU) opSub(step *stepInfo) uint16 {
 	diff := step.src1 + s2 + 1
 	carry := (step.src1 & s2) | ((step.src1 ^ s2) & ^diff)
 	cpu.regs[step.R1] = diff
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	if (((carry << 1) ^ carry) & MSIGN) != 0 {
 		cpu.cc = 3
-		if (cpu.pmask & FIXOVER) != 0 {
+		if (cpu.progMask & FIXOVER) != 0 {
 			return IRC_FIXOVR
 		}
 		return 0
@@ -303,7 +309,7 @@ func (cpu *CPU) opAddL(step *stepInfo) uint16 {
 	cpu.regs[step.R1] = sum
 	isum := FMASK ^ sum
 	carry := (step.src1 & step.src2) | ((step.src1 ^ step.src2) & isum)
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	if sum != 0 {
 		cpu.cc = 1
 	} else {
@@ -322,7 +328,7 @@ func (cpu *CPU) opSubL(step *stepInfo) uint16 {
 	cpu.regs[step.R1] = sum
 	isum := FMASK ^ sum
 	carry := (step.src1 & step.src2) | ((step.src1 ^ step.src2) & isum)
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	if sum != 0 {
 		cpu.cc = 1
 	} else {
@@ -403,7 +409,7 @@ func (cpu *CPU) opMulH(step *stepInfo) uint16 {
 	src1 := int64(int32(cpu.regs[step.R1]))
 	src1 = src1 * int64(int32(step.src2))
 	cpu.regs[step.R1] = uint32(uint64(src1) & LMASKL)
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
@@ -458,14 +464,14 @@ func (cpu *CPU) opDiv(step *stepInfo) uint16 {
 	}
 	cpu.regs[step.R1] = srcl
 	cpu.regs[step.R1|1] = result
-	cpu.per_mod |= 3 << step.R1
+	cpu.perRegMod |= 3 << step.R1
 	return 0
 }
 
 // Logical And register with value, handle RR and RX
 func (cpu *CPU) opAnd(step *stepInfo) uint16 {
 	cpu.regs[step.R1] = step.src1 & step.src2
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	if cpu.regs[step.R1] != 0 {
 		cpu.cc = 1
 	} else {
@@ -477,7 +483,7 @@ func (cpu *CPU) opAnd(step *stepInfo) uint16 {
 // Logical Or register with value, handle RR and RX
 func (cpu *CPU) opOr(step *stepInfo) uint16 {
 	cpu.regs[step.R1] = step.src1 | step.src2
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	if cpu.regs[step.R1] != 0 {
 		cpu.cc = 1
 	} else {
@@ -489,7 +495,7 @@ func (cpu *CPU) opOr(step *stepInfo) uint16 {
 // Logical Exclusive Or register with value, handle RR and RX
 func (cpu *CPU) opXor(step *stepInfo) uint16 {
 	cpu.regs[step.R1] = step.src1 ^ step.src2
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	if cpu.regs[step.R1] != 0 {
 		cpu.cc = 1
 	} else {
@@ -662,7 +668,7 @@ func (cpu *CPU) opSRL(step *stepInfo) uint16 {
 		t = t >> s
 	}
 	cpu.regs[step.R1] = t
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
@@ -676,7 +682,7 @@ func (cpu *CPU) opSLL(step *stepInfo) uint16 {
 		t = t << s
 	}
 	cpu.regs[step.R1] = t
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
@@ -694,7 +700,7 @@ func (cpu *CPU) opSRA(step *stepInfo) uint16 {
 		t = uint32(int32(t) >> s)
 	}
 	cpu.regs[step.R1] = t
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	cpu.setCC(t)
 	return 0
 }
@@ -713,7 +719,7 @@ func (cpu *CPU) opSLA(step *stepInfo) uint16 {
 	t &= MSIGN
 	t |= si
 	cpu.regs[step.R1] = t
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	if cpu.cc != 3 {
 		cpu.setCC(t)
 	}
@@ -770,7 +776,7 @@ func (cpu *CPU) opSLDA(step *stepInfo) uint16 {
 			}
 		}
 	} else {
-		if (cpu.pmask & FIXOVER) != 0 {
+		if (cpu.progMask & FIXOVER) != 0 {
 			return IRC_FIXOVR
 		}
 	}
@@ -832,7 +838,7 @@ func (cpu *CPU) opLM(step *stepInfo) uint16 {
 		} else {
 			cpu.regs[step.R1] = t
 		}
-		cpu.per_code |= 1 << step.R1
+		cpu.perCode |= 1 << step.R1
 		if step.R1 == r {
 			return 0
 		}
@@ -988,7 +994,7 @@ func (cpu *CPU) opTR(step *stepInfo) uint16 {
 				cpu.regs[1] |= step.address1 & AMASK
 				cpu.regs[2] &= 0xffffff00
 				cpu.regs[2] |= t2 & 0xff
-				cpu.per_mod |= 6
+				cpu.perRegMod |= 6
 				if step.reg == 0 {
 					cpu.cc = 2
 				} else {
@@ -1166,11 +1172,11 @@ func (cpu *CPU) opMVCL(step *stepInfo) uint16 {
 	cpu.regs[step.R1] = addr1
 	cpu.regs[step.R1|1] &= ^AMASK
 	cpu.regs[step.R1|1] |= len1 & AMASK
-	cpu.per_mod |= 3 << step.R1
+	cpu.perRegMod |= 3 << step.R1
 	cpu.regs[step.R2] = addr2
 	cpu.regs[step.R2|1] &= ^AMASK
 	cpu.regs[step.R2|1] |= len1 & AMASK
-	cpu.per_mod |= 3 << step.R2
+	cpu.perRegMod |= 3 << step.R2
 	return err
 }
 
@@ -1239,11 +1245,11 @@ func (cpu *CPU) opCLCL(step *stepInfo) uint16 {
 	cpu.regs[step.R1] = addr1
 	cpu.regs[step.R1|1] &= ^AMASK
 	cpu.regs[step.R1|1] |= len1 & AMASK
-	cpu.per_mod |= 3 << step.R1
+	cpu.perRegMod |= 3 << step.R1
 	cpu.regs[step.R2] = addr2
 	cpu.regs[step.R2|1] &= ^AMASK
 	cpu.regs[step.R2|1] |= len2 & AMASK
-	cpu.per_mod |= 3 << step.R2
+	cpu.perRegMod |= 3 << step.R2
 	return err
 }
 
@@ -1431,6 +1437,7 @@ func (cpu *CPU) opCVB(step *stepInfo) uint16 {
 	}
 
 	cpu.regs[step.R1] = uint32(v & LMASKL)
+	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
@@ -1535,7 +1542,7 @@ func (cpu *CPU) opED(step *stepInfo) uint16 {
 			if step.opcode == OP_EDMK && !sig && t != 0 {
 				cpu.regs[1] &= 0xff000000
 				cpu.regs[1] |= step.address1 & AMASK
-				cpu.per_mod |= 2
+				cpu.perRegMod |= 2
 			}
 
 			// Found non-zero

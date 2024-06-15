@@ -48,7 +48,7 @@ type EventList struct {
 var el EventList
 
 // Add an event
-func Add_event(dev D.Device, cb Callback, time int, iarg int) bool {
+func AddEvent(dev D.Device, cb Callback, time int, iarg int) bool {
 
 	// If time is 0 process event immediately
 	if time == 0 {
@@ -95,7 +95,7 @@ func Add_event(dev D.Device, cb Callback, time int, iarg int) bool {
 	return false
 }
 
-func Cancel_event(dev D.Device, cb Callback, iarg int) {
+func CancelEvent(dev D.Device, cb Callback, iarg int) {
 	evptr := el.head
 
 	// Nothing in list, return

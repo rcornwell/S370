@@ -57,7 +57,7 @@ func (d *device) b_callback(iarg int) {
 func (d *device) c_callback(iarg int) {
 	d.iarg = iarg
 	d.time = step_count
-	Add_event(device_a, device_a.a_callback, iarg, iarg)
+	AddEvent(device_a, device_a.a_callback, iarg, iarg)
 }
 
 // Callbacks, save step count in routine time and set argument to iarg
@@ -66,22 +66,22 @@ func (d *device) d_callback(iarg int) {
 	d.time = step_count
 }
 
-func (d device) Start_IO() uint8 {
+func (d device) StartIO() uint8 {
 	return 0
 }
 
-func (d device) Start_cmd(cmd uint8) uint8 {
+func (d device) StartCmd(cmd uint8) uint8 {
 	return 0
 }
 
-func (d device) Halt_IO() uint8 {
+func (d device) HaltIO() uint8 {
 	return 0
 }
 
-func (d device) Init_Dev() uint8 {
+func (d device) InitDev() uint8 {
 	return 0
 }
-func init_test() {
+func initTest() {
 	step_count = 0
 	device_a.time = 0
 	device_b.time = 0
@@ -93,9 +93,9 @@ func init_test() {
 	device_d.iarg = 0
 }
 
-func TestAdd_event_1(t *testing.T) {
-	init_test()
-	Add_event(device_a, device_a.a_callback, 10, 1)
+func TestAddEvent1(t *testing.T) {
+	initTest()
+	AddEvent(device_a, device_a.a_callback, 10, 1)
 	for range 20 {
 		step_count++
 		Advance(1)
@@ -109,10 +109,10 @@ func TestAdd_event_1(t *testing.T) {
 }
 
 // Add two events.
-func TestAdd_event_2(t *testing.T) {
-	init_test()
-	Add_event(device_a, device_a.a_callback, 10, 1)
-	Add_event(device_b, device_b.b_callback, 5, 2)
+func TestAddEvent2(t *testing.T) {
+	initTest()
+	AddEvent(device_a, device_a.a_callback, 10, 1)
+	AddEvent(device_b, device_b.b_callback, 5, 2)
 	for range 20 {
 		step_count++
 		Advance(1)
@@ -132,10 +132,10 @@ func TestAdd_event_2(t *testing.T) {
 }
 
 // Add two events.
-func TestAdd_event_2a(t *testing.T) {
-	init_test()
-	Add_event(device_a, device_a.a_callback, 10, 1)
-	Add_event(device_b, device_b.a_callback, 5, 2)
+func TestAddEvent2a(t *testing.T) {
+	initTest()
+	AddEvent(device_a, device_a.a_callback, 10, 1)
+	AddEvent(device_b, device_b.a_callback, 5, 2)
 	for range 20 {
 		step_count++
 		Advance(1)
@@ -155,10 +155,10 @@ func TestAdd_event_2a(t *testing.T) {
 }
 
 // Add event With same time
-func TestAdd_event_3(t *testing.T) {
-	init_test()
-	Add_event(device_a, device_a.a_callback, 10, 1)
-	Add_event(device_b, device_b.b_callback, 10, 2)
+func TestAddEvent3(t *testing.T) {
+	initTest()
+	AddEvent(device_a, device_a.a_callback, 10, 1)
+	AddEvent(device_b, device_b.b_callback, 10, 2)
 	for range 20 {
 		step_count++
 		Advance(1)
@@ -178,10 +178,10 @@ func TestAdd_event_3(t *testing.T) {
 }
 
 // Add event during event.
-func TestAdd_event_4(t *testing.T) {
-	init_test()
-	Add_event(device_a, device_a.a_callback, 20, 5)
-	Add_event(device_c, device_c.c_callback, 10, 2)
+func TestAddEvent4(t *testing.T) {
+	initTest()
+	AddEvent(device_a, device_a.a_callback, 20, 5)
+	AddEvent(device_c, device_c.c_callback, 10, 2)
 	for range 30 {
 		step_count++
 		Advance(1)
@@ -201,11 +201,11 @@ func TestAdd_event_4(t *testing.T) {
 }
 
 // Schedule 3 events, last one before first, make sure all are correct
-func TestAdd_event_5(t *testing.T) {
-	init_test()
-	Add_event(device_a, device_a.a_callback, 20, 1)
-	Add_event(device_b, device_b.b_callback, 20, 2)
-	Add_event(device_d, device_d.d_callback, 25, 3)
+func TestAddEvent5(t *testing.T) {
+	initTest()
+	AddEvent(device_a, device_a.a_callback, 20, 1)
+	AddEvent(device_b, device_b.b_callback, 20, 2)
+	AddEvent(device_d, device_d.d_callback, 25, 3)
 	for range 30 {
 		step_count++
 		Advance(1)
@@ -231,15 +231,15 @@ func TestAdd_event_5(t *testing.T) {
 }
 
 // Cancel an event.
-func TestAdd_event_6(t *testing.T) {
-	init_test()
-	Add_event(device_a, device_a.a_callback, 10, 5)
-	Add_event(device_b, device_b.b_callback, 20, 2)
+func TestAddEvent6(t *testing.T) {
+	initTest()
+	AddEvent(device_a, device_a.a_callback, 10, 5)
+	AddEvent(device_b, device_b.b_callback, 20, 2)
 	for range 30 {
 		step_count++
 		Advance(1)
 		if device_a.iarg == 5 {
-			Cancel_event(device_b, device_b.b_callback, 2)
+			CancelEvent(device_b, device_b.b_callback, 2)
 		}
 	}
 	if device_a.time != 10 {
@@ -257,16 +257,16 @@ func TestAdd_event_6(t *testing.T) {
 }
 
 // Schedule 3 events, cancel one while events in queue
-func TestAdd_event_7(t *testing.T) {
-	init_test()
-	Add_event(device_a, device_a.a_callback, 10, 5)
-	Add_event(device_b, device_b.b_callback, 20, 2)
-	Add_event(device_d, device_d.d_callback, 30, 3)
+func TestAddEvent7(t *testing.T) {
+	initTest()
+	AddEvent(device_a, device_a.a_callback, 10, 5)
+	AddEvent(device_b, device_b.b_callback, 20, 2)
+	AddEvent(device_d, device_d.d_callback, 30, 3)
 	for range 30 {
 		step_count++
 		Advance(1)
 		if device_a.iarg == 5 {
-			Cancel_event(device_b, device_b.b_callback, 2)
+			CancelEvent(device_b, device_b.b_callback, 2)
 		}
 	}
 	if device_a.time != 10 {
@@ -290,18 +290,18 @@ func TestAdd_event_7(t *testing.T) {
 }
 
 // Schedule 4 events, cancel two while events in queue
-func TestAdd_event_8(t *testing.T) {
-	init_test()
-	Add_event(device_a, device_a.a_callback, 10, 5)
-	Add_event(device_b, device_b.b_callback, 40, 2)
-	Add_event(device_d, device_d.d_callback, 30, 3)
-	Add_event(device_d, device_d.d_callback, 50, 4)
+func TestAddEvent8(t *testing.T) {
+	initTest()
+	AddEvent(device_a, device_a.a_callback, 10, 5)
+	AddEvent(device_b, device_b.b_callback, 40, 2)
+	AddEvent(device_d, device_d.d_callback, 30, 3)
+	AddEvent(device_d, device_d.d_callback, 50, 4)
 	for range 60 {
 		step_count++
 		Advance(1)
 		if device_a.iarg == 5 {
-			Cancel_event(device_b, device_b.b_callback, 2)
-			Cancel_event(device_d, device_a.d_callback, 4)
+			CancelEvent(device_b, device_b.b_callback, 2)
+			CancelEvent(device_d, device_a.d_callback, 4)
 		}
 	}
 	if device_a.time != 10 {
@@ -325,14 +325,13 @@ func TestAdd_event_8(t *testing.T) {
 }
 
 // Test event at zero units
-func TestAdd_event_9(t *testing.T) {
-	init_test()
-	Add_event(device_a, device_a.a_callback, 0, 5)
+func TestAddEvent9(t *testing.T) {
+	initTest()
+	AddEvent(device_a, device_a.a_callback, 0, 5)
 	if device_a.time != 0 {
 		t.Errorf("Event A did not fire at correct time %d got %d", 10, device_a.time)
 	}
 	if device_a.iarg != 5 {
 		t.Errorf("Event A did not set data correct %d got %d", 5, device_a.iarg)
 	}
-
 }

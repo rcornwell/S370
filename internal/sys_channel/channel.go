@@ -28,67 +28,67 @@ import (
 	M "github.com/rcornwell/S370/internal/memory"
 )
 
-var ch_unit [MAX_CHAN]chan_unit // Hold infomation about channels
+var chanUnit [MAX_CHAN]chanDev // Hold infomation about channels
 
-var bmux_enable bool
+var bmuxEnable bool
 
-var null_dev D.Device
+var nullDev D.Device
 
 // Set whether Block multiplexer is enabled or not
 func SetBMUXenable(enable bool) {
-	bmux_enable = enable
+	bmuxEnable = enable
 }
 
 // Return type of channel
-func GetType(dev_num uint16) int {
-	ch := (dev_num >> 8)
+func GetType(devNum uint16) int {
+	ch := (devNum >> 8)
 	// Check if over max supported channels
 	if ch > MAX_CHAN {
 		return TYPE_UNA
 	}
-	cu := &ch_unit[ch&0xf]
+	cu := &chanUnit[ch&0xf]
 	if !cu.enabled {
 		return TYPE_UNA
 	}
-	return cu.ch_type
+	return cu.chanType
 }
 
 // Process SIO instruction
-func StartIO(dev_num uint16) uint8 {
-	ch := (dev_num >> 8)
+func StartIO(devNum uint16) uint8 {
+	ch := (devNum >> 8)
 	if ch > MAX_CHAN {
 		return 3
 	}
 	ch &= 0xf
-	d := dev_num & 0xff
+	d := devNum & 0xff
 
-	sc := find_subchannel(dev_num)
+	sc := findSubChannel(devNum)
 
-	cu := &ch_unit[ch]
+	cu := &chanUnit[ch]
 	// Check if channel disabled
 	if !cu.enabled {
 		return 3
 	}
 
 	// If no device or channel, return CC = 3
-	if cu.dev_tab[d] == null_dev || sc == nil {
+	if cu.devTab[d] == nullDev || sc == nil {
 		return 3
 	}
 
 	// If pending status is for us, return it with status code
-	if sc.daddr == dev_num && sc.chan_status != 0 {
-		store_csw(sc)
+	if sc.devAddr == devNum && sc.chanStatus != 0 {
+		storeCSW(sc)
 		return 1
 	}
 
 	// If channel is active return cc = 2
-	if sc.ccw_cmd != 0 || (sc.ccw_flags&(FLAG_CC|FLAG_CD)) != 0 || sc.chan_status != 0 {
+	if sc.ccwCmd != 0 || (sc.ccwFlags&(FLAG_CC|FLAG_CD)) != 0 || sc.chanStatus != 0 {
 		return 2
 	}
 
-	ds := cu.dev_status[d]
+	ds := cu.devStatus[d]
 	if ds == SNS_DEVEND || ds == (SNS_DEVEND|SNS_CHNEND) {
-		cu.dev_status[d] = 0
+		cu.devStatus[d] = 0
 		ds = 0
 	}
 
@@ -96,11 +96,11 @@ func StartIO(dev_num uint16) uint8 {
 	if ds != 0 {
 		M.SetMemory(0x44, uint32(ds)<<24)
 		M.SetMemory(0x40, 0)
-		cu.dev_status[d] = 0
+		cu.devStatus[d] = 0
 		return 1
 	}
 
-	status := uint16(cu.dev_tab[d].Start_IO()) << 8
+	status := uint16(cu.devTab[d].StartIO()) << 8
 	if (status & STATUS_BUSY) != 0 {
 		return 2
 	}
@@ -110,33 +110,33 @@ func StartIO(dev_num uint16) uint8 {
 	}
 
 	// All ok, get caw address
-	sc.chan_status = 0
+	sc.chanStatus = 0
 	sc.caw = M.GetMemory(0x48)
-	sc.ccw_key = uint8(((sc.caw & M.PMASK) >> 24) & 0xff)
+	sc.ccwKey = uint8(((sc.caw & M.PMASK) >> 24) & 0xff)
 	sc.caw &= M.AMASK
-	sc.daddr = dev_num
-	sc.dev = cu.dev_tab[d]
-	cu.dev_status[d] = 0
+	sc.devAddr = devNum
+	sc.dev = cu.devTab[d]
+	cu.devStatus[d] = 0
 
-	if load_ccw(cu, sc, false) {
-		M.SetMemoryMask(0x44, uint32(sc.chan_status)<<16, M.UMASK)
-		sc.chan_status = 0
-		sc.ccw_cmd = 0
-		sc.daddr = NO_DEV
+	if loadCCW(cu, sc, false) {
+		M.SetMemoryMask(0x44, uint32(sc.chanStatus)<<16, M.UMASK)
+		sc.chanStatus = 0
+		sc.ccwCmd = 0
+		sc.devAddr = NO_DEV
 		sc.dev = nil
-		cu.dev_status[d] = 0
+		cu.devStatus[d] = 0
 		return 1
 	}
 
 	// If channel returned busy save CSW and return CC = 1
-	if (sc.chan_status & STATUS_BUSY) != 0 {
+	if (sc.chanStatus & STATUS_BUSY) != 0 {
 		M.SetMemory(0x40, 0)
-		M.SetMemory(0x44, uint32(sc.chan_status)<<16)
-		sc.chan_status = 0
-		sc.ccw_cmd = 0
-		sc.daddr = NO_DEV
+		M.SetMemory(0x44, uint32(sc.chanStatus)<<16)
+		sc.chanStatus = 0
+		sc.ccwCmd = 0
+		sc.devAddr = NO_DEV
 		sc.dev = nil
-		cu.dev_status[d] = 0
+		cu.devStatus[d] = 0
 		return 1
 	}
 
@@ -144,61 +144,61 @@ func StartIO(dev_num uint16) uint8 {
 }
 
 // Handle TIO instruction
-func TestIO(dev_num uint16) uint8 {
-	ch := (dev_num >> 8)
+func TestIO(devNum uint16) uint8 {
+	ch := (devNum >> 8)
 	if ch > MAX_CHAN {
 		return 3
 	}
 	ch &= 0xf
-	d := dev_num & 0xff
-	sch := find_subchannel(dev_num)
+	d := devNum & 0xff
+	sch := findSubChannel(devNum)
 
-	cu := &ch_unit[ch]
+	cu := &chanUnit[ch]
 	// Check if channel disabled
 	if !cu.enabled {
 		return 3
 	}
 
 	// If no device or channel, return CC = 3
-	if cu.dev_tab[d] == null_dev || sch == nil {
+	if cu.devTab[d] == nullDev || sch == nil {
 		return 3
 	}
 
 	// If any error pending save csw and return cc=1
-	if (sch.chan_status & ERROR_STATUS) != 0 {
-		store_csw(sch)
+	if (sch.chanStatus & ERROR_STATUS) != 0 {
+		storeCSW(sch)
 		return 1
 	}
 
 	// If channel active, return cc=2
-	if sch.ccw_cmd != 0 || (sch.ccw_flags&(FLAG_CC|FLAG_CD)) != 0 {
+	if sch.ccwCmd != 0 || (sch.ccwFlags&(FLAG_CC|FLAG_CD)) != 0 {
 		return 2
 	}
 
 	// Device finished and channel status pending return it and cc=1
-	if sch.ccw_cmd == 0 && sch.chan_status != 0 {
-		store_csw(sch)
-		sch.daddr = NO_DEV
+	if sch.ccwCmd == 0 && sch.chanStatus != 0 {
+		storeCSW(sch)
+		sch.devAddr = NO_DEV
 		return 1
 	}
 
 	// Device has returned a status, store the csw and return cc=1
-	if cu.dev_status[d] != 0 {
+	if cu.devStatus[d] != 0 {
 		M.SetMemory(0x40, 0)
-		M.SetMemory(0x44, (uint32(cu.dev_status[d]) << 24))
-		cu.dev_status[d] = 0
+		M.SetMemory(0x44, (uint32(cu.devStatus[d]) << 24))
+		cu.devStatus[d] = 0
 		return 1
 	}
 
 	// If error pending for another device on subchannel, return cc = 2
-	if cu.irq_pend {
+	if cu.irqPending {
 		// Check if might be false
 		for d := range uint16(256) {
-			if cu.dev_status[d] != 0 {
+			if cu.devStatus[d] != 0 {
 				// Check if same subchannel
-				if find_subchannel(d) == sch {
-					cu.irq_pend = true
-					Irq_pending = true
+				if findSubChannel(d) == sch {
+					cu.irqPending = true
+					IrqPending = true
 					return 2
 				}
 			}
@@ -206,7 +206,7 @@ func TestIO(dev_num uint16) uint8 {
 	}
 
 	// Nothing pending, send a 0 command to device to get status
-	status := uint16(cu.dev_tab[d].Start_cmd(0)) << 8
+	status := uint16(cu.devTab[d].StartCmd(0)) << 8
 
 	// If we get a error, save csw and return cc = 1
 	if (status & ERROR_STATUS) != 0 {
@@ -224,50 +224,50 @@ func TestIO(dev_num uint16) uint8 {
 }
 
 // Handle HIO instruction
-func HaltioIO(dev_num uint16) uint8 {
-	ch := (dev_num >> 8)
+func HaltioIO(devNum uint16) uint8 {
+	ch := (devNum >> 8)
 	if ch > MAX_CHAN {
 		return 3
 	}
 	ch &= 0xf
-	d := dev_num & 0xff
-	sch := find_subchannel(dev_num)
+	d := devNum & 0xff
+	sch := findSubChannel(devNum)
 
-	cu := &ch_unit[ch]
+	cu := &chanUnit[ch]
 	// Check if channel disabled
 	if !cu.enabled {
 		return 3
 	}
 
 	// If no device or channel, return CC = 3
-	if cu.dev_tab[d] == null_dev || sch == nil {
+	if cu.devTab[d] == nullDev || sch == nil {
 		return 3
 	}
 
 	// Generic halt I/O, tell device to stop end
 	// If any error pending save csw and return cc = 1
-	if (sch.chan_status & ERROR_STATUS) != 0 {
+	if (sch.chanStatus & ERROR_STATUS) != 0 {
 		return 1
 	}
 
 	// If channel active, tell it to terminate
-	if sch.ccw_cmd != 0 {
-		sch.chan_byte = BUFF_CHNEND
-		sch.ccw_flags &= ^(FLAG_CC | FLAG_CD)
+	if sch.ccwCmd != 0 {
+		sch.chanByte = BUFF_CHNEND
+		sch.ccwFlags &= ^(FLAG_CC | FLAG_CD)
 	}
 
 	// Executing a command, issue halt if available
 	// Let device try to halt
-	cc := cu.dev_tab[d].Halt_IO()
+	cc := cu.devTab[d].HaltIO()
 	if cc == 1 {
-		M.SetMemoryMask(0x44, (uint32(sch.chan_status) << 16), M.UMASK)
+		M.SetMemoryMask(0x44, (uint32(sch.chanStatus) << 16), M.UMASK)
 
 	}
 	return cc
 }
 
 // Handle TCH instruction
-func TestChan(dev_num uint16) uint8 {
+func TestChan(devNum uint16) uint8 {
 	/* 360 Principles of Operation says, "Bit positions 21-23 of the
 	   sum formed by the addition of the content of register B1 and the
 	   content of the D1 field identify the channel to which the
@@ -289,35 +289,35 @@ func TestChan(dev_num uint16) uint8 {
 	   For the nonce, TCH only indicates that channels connected to CC 0 & 1 are
 	   attached.  Channels 0, 4, 8 (0 on CC 1) & 12 (4 on CC 1) are multiplexer
 	   channels. */
-	c := (dev_num >> 8) & 0xf
+	c := (devNum >> 8) & 0xf
 	if c > MAX_CHAN {
 		return 3
 	}
 
-	cu := ch_unit[c]
+	cu := chanUnit[c]
 	// Check if channel disabled
 	if !cu.enabled {
 		return 3
 	}
 
 	// Multiplexer channel always returns available
-	if cu.ch_type == TYPE_MUX {
+	if cu.chanType == TYPE_MUX {
 		return 0
 	}
 
 	// If Block Multiplexer channel operating in select mode
-	if cu.ch_type == TYPE_BMUX && bmux_enable {
+	if cu.chanType == TYPE_BMUX && bmuxEnable {
 		return 0
 	}
 
-	ch := &cu.subchan[0]
+	ch := &cu.subChans[0]
 	// If channel is executing a command, return cc = 2
-	if ch.ccw_cmd != 0 || (ch.ccw_flags&(FLAG_CC|FLAG_CD)) != 0 {
+	if ch.ccwCmd != 0 || (ch.ccwFlags&(FLAG_CC|FLAG_CD)) != 0 {
 		return 2
 	}
 
 	// If pending status, return 1
-	if ch.chan_status != 0 {
+	if ch.chanStatus != 0 {
 		return 1
 	}
 
@@ -325,61 +325,61 @@ func TestChan(dev_num uint16) uint8 {
 }
 
 // Read a byte from memory
-func Chan_read_byte(dev_num uint16) (uint8, bool) {
-	var sc *chan_ctl
+func ChanReadByte(devNum uint16) (uint8, bool) {
+	var sc *chanCtl
 
 	// Return abort if no channel
-	if sc = find_subchannel(dev_num); sc == nil {
+	if sc = findSubChannel(devNum); sc == nil {
 		return 0, true
 	}
 	// Channel has pending system status
-	if (sc.chan_status & 0x7f) != 0 {
+	if (sc.chanStatus & 0x7f) != 0 {
 		return 0, true
 	}
 	// Not read command
-	if (sc.ccw_cmd & 1) == 0 {
+	if (sc.ccwCmd & 1) == 0 {
 		return 0, true
 	}
 	// Check if transfer is finished
-	if sc.chan_byte == BUFF_CHNEND {
+	if sc.chanByte == BUFF_CHNEND {
 		return 0, true
 	}
 
-	cu := &ch_unit[(dev_num>>8)&0xf]
+	cu := &chanUnit[(devNum>>8)&0xf]
 	// Check if count zero
-	if sc.ccw_count == 0 {
+	if sc.ccwCount == 0 {
 		// If not data chaining, let device know there will be no
 		// more data to come
-		if (sc.ccw_flags & FLAG_CD) == 0 {
-			sc.chan_status |= STATUS_CEND
-			sc.chan_byte = BUFF_CHNEND
+		if (sc.ccwFlags & FLAG_CD) == 0 {
+			sc.chanStatus |= STATUS_CEND
+			sc.chanByte = BUFF_CHNEND
 			return 0, true
 		} else {
 			// If chaining try and start next CCW
-			if load_ccw(cu, sc, true) {
+			if loadCCW(cu, sc, true) {
 				return 0, true
 			}
 		}
 	}
 
 	// Read in next word if buffer is in empty status
-	if sc.chan_byte == BUFF_EMPTY {
-		if readbuff(cu, sc) {
+	if sc.chanByte == BUFF_EMPTY {
+		if readBuffer(cu, sc) {
 			return 0, true
 		}
-		if next_byte_address(cu, sc) {
+		if nextAddress(cu, sc) {
 			return 0, true
 		}
 	}
 
 	// Return current byte
-	sc.ccw_count--
-	byte := uint8(sc.chan_buf >> (8 * (3 - (sc.chan_byte & 3))) & 0xff)
-	sc.chan_byte++
+	sc.ccwCount--
+	byte := uint8(sc.chanBuffer >> (8 * (3 - (sc.chanByte & 3))) & 0xff)
+	sc.chanByte++
 	// If count is zero and chaining load in new CCW
-	if sc.ccw_count == 0 && (sc.ccw_flags&FLAG_CD) != 0 {
+	if sc.ccwCount == 0 && (sc.ccwFlags&FLAG_CD) != 0 {
 		// If chaining try and start next CCW
-		if load_ccw(cu, sc, true) {
+		if loadCCW(cu, sc, true) {
 			// Return that this is last byte device will get
 			return byte, true
 		}
@@ -388,99 +388,99 @@ func Chan_read_byte(dev_num uint16) (uint8, bool) {
 }
 
 // Write a byte to memory
-func Chan_write_byte(dev_num uint16, data uint8) bool {
-	var sc *chan_ctl
+func ChanWriteByte(devNum uint16, data uint8) bool {
+	var sc *chanCtl
 
 	// Return abort if no channel
-	if sc = find_subchannel(dev_num); sc == nil {
+	if sc = findSubChannel(devNum); sc == nil {
 		return true
 	}
 	// Channel has pending system status
-	if (sc.chan_status & 0x7f) != 0 {
+	if (sc.chanStatus & 0x7f) != 0 {
 		return true
 	}
 	// Not read command
-	if (sc.ccw_cmd & 1) != 0 {
+	if (sc.ccwCmd & 1) != 0 {
 		return true
 	}
 	// Check if transfer is finished
-	if sc.chan_byte == BUFF_CHNEND {
-		if (sc.ccw_flags & FLAG_SLI) == 0 {
-			sc.chan_status |= STATUS_LENGTH
+	if sc.chanByte == BUFF_CHNEND {
+		if (sc.ccwFlags & FLAG_SLI) == 0 {
+			sc.chanStatus |= STATUS_LENGTH
 		}
 		return true
 	}
-	cu := &ch_unit[(dev_num>>8)&0xf]
+	cu := &chanUnit[(devNum>>8)&0xf]
 	// Check if count zero
-	if sc.ccw_count == 0 {
-		if sc.chan_dirty {
-			if writebuff(cu, sc) {
+	if sc.ccwCount == 0 {
+		if sc.chanDirty {
+			if writeBuffer(cu, sc) {
 				return true
 			}
 		}
 		// If not data chaining, let device know there will be no
 		// more data to come
-		if (sc.ccw_flags & FLAG_CD) == 0 {
-			sc.chan_byte = BUFF_CHNEND
-			if (sc.ccw_flags & FLAG_SLI) == 0 {
-				sc.chan_status |= STATUS_LENGTH
+		if (sc.ccwFlags & FLAG_CD) == 0 {
+			sc.chanByte = BUFF_CHNEND
+			if (sc.ccwFlags & FLAG_SLI) == 0 {
+				sc.chanStatus |= STATUS_LENGTH
 			}
 			return true
 		}
 		// Otherwise try and grab next CCW
-		if load_ccw(cu, sc, true) {
+		if loadCCW(cu, sc, true) {
 			return true
 		}
 	}
 
 	// If we are skipping, just adjust count
-	if (sc.ccw_flags & FLAG_SKIP) != 0 {
-		sc.ccw_count--
-		sc.chan_byte = BUFF_EMPTY
-		return next_byte_address(cu, sc)
+	if (sc.ccwFlags & FLAG_SKIP) != 0 {
+		sc.ccwCount--
+		sc.chanByte = BUFF_EMPTY
+		return nextAddress(cu, sc)
 	}
 
 	// Check if we need to save what we have
-	if sc.chan_byte == BUFF_EMPTY && sc.chan_dirty {
-		if writebuff(cu, sc) {
+	if sc.chanByte == BUFF_EMPTY && sc.chanDirty {
+		if writeBuffer(cu, sc) {
 			return true
 		}
-		if next_byte_address(cu, sc) {
+		if nextAddress(cu, sc) {
 			return true
 		}
-		sc.chan_byte = BUFF_EMPTY
+		sc.chanByte = BUFF_EMPTY
 	}
-	if sc.chan_byte == BUFF_EMPTY {
-		if readbuff(cu, sc) {
+	if sc.chanByte == BUFF_EMPTY {
+		if readBuffer(cu, sc) {
 			return true
 		}
 
 	}
 
 	// Store it in buffer and adjust pointer
-	sc.ccw_count--
-	offset := 8 * (sc.chan_byte & 3)
+	sc.ccwCount--
+	offset := 8 * (sc.chanByte & 3)
 	mask := uint32(0xff000000 >> offset)
-	sc.chan_buf &= ^mask
-	sc.chan_buf |= uint32(data) << (24 - offset)
-	if (sc.ccw_cmd & 0xf) == CMD_RDBWD {
-		if (sc.chan_byte & 3) != 0 {
-			sc.chan_byte--
+	sc.chanBuffer &= ^mask
+	sc.chanBuffer |= uint32(data) << (24 - offset)
+	if (sc.ccwCmd & 0xf) == CMD_RDBWD {
+		if (sc.chanByte & 3) != 0 {
+			sc.chanByte--
 		} else {
-			sc.chan_byte = BUFF_EMPTY
+			sc.chanByte = BUFF_EMPTY
 		}
 	} else {
-		sc.chan_byte++
+		sc.chanByte++
 	}
-	sc.chan_dirty = true
+	sc.chanDirty = true
 	// If count is zero and chaining load in new CCW
-	if sc.ccw_count == 0 && (sc.ccw_flags&FLAG_CD) != 0 {
+	if sc.ccwCount == 0 && (sc.ccwFlags&FLAG_CD) != 0 {
 		// Flush buffer
-		if sc.chan_dirty && writebuff(cu, sc) {
+		if sc.chanDirty && writeBuffer(cu, sc) {
 			return true
 		}
 		// If chaining try and start next CCW
-		if load_ccw(cu, sc, true) {
+		if loadCCW(cu, sc, true) {
 			// Return that this is last byte device will get
 			return true
 		}
@@ -489,225 +489,225 @@ func Chan_write_byte(dev_num uint16, data uint8) bool {
 }
 
 // Compute address of next byte to read/write
-func next_byte_address(cu *chan_unit, sc *chan_ctl) bool {
-	if (sc.ccw_flags & FLAG_IDA) != 0 {
-		if (sc.ccw_cmd & 0xf) == CMD_RDBWD {
-			sc.ccw_iaddr--
-			if (sc.ccw_iaddr & 0x7ff) == 0x7ff {
-				sc.ccw_addr += 4
-				if t, err := readfull(cu, sc, sc.ccw_addr); err {
+func nextAddress(cu *chanDev, sc *chanCtl) bool {
+	if (sc.ccwFlags & FLAG_IDA) != 0 {
+		if (sc.ccwCmd & 0xf) == CMD_RDBWD {
+			sc.ccwIAddr--
+			if (sc.ccwIAddr & 0x7ff) == 0x7ff {
+				sc.ccwAddr += 4
+				if t, err := readFullWord(cu, sc, sc.ccwAddr); err {
 					return true
 				} else {
-					sc.ccw_iaddr = t & M.AMASK
+					sc.ccwIAddr = t & M.AMASK
 				}
 			}
 		} else {
-			sc.ccw_iaddr++
-			if (sc.ccw_iaddr & 0x7ff) == 0x000 {
-				sc.ccw_addr += 4
-				if t, err := readfull(cu, sc, sc.ccw_addr); err {
+			sc.ccwIAddr++
+			if (sc.ccwIAddr & 0x7ff) == 0x000 {
+				sc.ccwAddr += 4
+				if t, err := readFullWord(cu, sc, sc.ccwAddr); err {
 					return true
 				} else {
-					sc.ccw_iaddr = t & M.AMASK
+					sc.ccwIAddr = t & M.AMASK
 				}
 			}
 		}
-		sc.chan_byte = uint8(sc.ccw_iaddr & 3)
+		sc.chanByte = uint8(sc.ccwIAddr & 3)
 	} else {
-		if (sc.ccw_cmd & 0xf) == CMD_RDBWD {
-			sc.ccw_addr -= 1 + (sc.ccw_addr & 0x3)
+		if (sc.ccwCmd & 0xf) == CMD_RDBWD {
+			sc.ccwAddr -= 1 + (sc.ccwAddr & 0x3)
 		} else {
-			sc.ccw_addr += 4 - (sc.ccw_addr & 0x3)
+			sc.ccwAddr += 4 - (sc.ccwAddr & 0x3)
 		}
-		sc.chan_byte = uint8(sc.ccw_addr & 3)
+		sc.chanByte = uint8(sc.ccwAddr & 3)
 	}
 	return false
 }
 
 // Signal end of transfer by device
-func Chan_end(dev_num uint16, flags uint8) {
-	var sc *chan_ctl
+func ChanEnd(devNum uint16, flags uint8) {
+	var sc *chanCtl
 
 	// Return abort if no channel
-	if sc = find_subchannel(dev_num); sc == nil {
+	if sc = findSubChannel(devNum); sc == nil {
 		return
 	}
 
-	cu := &ch_unit[(dev_num>>8)&0xf]
-	if sc.chan_dirty {
-		_ = writebuff(cu, sc)
+	cu := &chanUnit[(devNum>>8)&0xf]
+	if sc.chanDirty {
+		_ = writeBuffer(cu, sc)
 	}
-	sc.chan_status |= STATUS_CEND
-	sc.chan_status |= uint16(flags) << 8
-	sc.ccw_cmd = 0
+	sc.chanStatus |= STATUS_CEND
+	sc.chanStatus |= uint16(flags) << 8
+	sc.ccwCmd = 0
 
 	// If count not zero and not suppressing length, report error
-	if sc.ccw_count != 0 && (sc.ccw_flags&FLAG_SLI) == 0 {
-		sc.chan_status |= STATUS_LENGTH
-		sc.ccw_flags = 0
+	if sc.ccwCount != 0 && (sc.ccwFlags&FLAG_SLI) == 0 {
+		sc.chanStatus |= STATUS_LENGTH
+		sc.ccwFlags = 0
 	}
 
 	// If count not zero and not suppressing length, report error
-	if sc.ccw_count != 0 && (sc.ccw_flags&(FLAG_CD|FLAG_SLI)) == (FLAG_CD|FLAG_SLI) {
-		sc.chan_status |= STATUS_LENGTH
+	if sc.ccwCount != 0 && (sc.ccwFlags&(FLAG_CD|FLAG_SLI)) == (FLAG_CD|FLAG_SLI) {
+		sc.chanStatus |= STATUS_LENGTH
 	}
 
 	if (flags & (SNS_ATTN | SNS_UNITCHK | SNS_UNITEXP)) != 0 {
-		sc.ccw_flags = 0
+		sc.ccwFlags = 0
 	}
 
 	if (flags & SNS_DEVEND) != 0 {
-		sc.ccw_flags &= ^(FLAG_CD | FLAG_SLI)
+		sc.ccwFlags &= ^(FLAG_CD | FLAG_SLI)
 	}
 
-	cu.irq_pend = true
-	Irq_pending = true
+	cu.irqPending = true
+	IrqPending = true
 
 }
 
 // A device wishes to inform the CPU it needs some service.
-func Set_devattn(dev_num uint16, flags uint8) {
-	var ch *chan_ctl
+func SetDevAttn(devNum uint16, flags uint8) {
+	var ch *chanCtl
 
-	if ch = find_subchannel(dev_num); ch == nil {
+	if ch = findSubChannel(devNum); ch == nil {
 		return
 	}
 
-	c := (dev_num >> 8) & 0xf
-	cu := &ch_unit[c]
+	c := (devNum >> 8) & 0xf
+	cu := &chanUnit[c]
 	// Check if chain being held
-	if ch.daddr == dev_num && ch.chain_flg && (flags&SNS_DEVEND) != 0 {
-		ch.chan_status |= uint16(flags) << 8
+	if ch.devAddr == devNum && ch.chainFlg && (flags&SNS_DEVEND) != 0 {
+		ch.chanStatus |= uint16(flags) << 8
 	} else {
 		// Check if Device is currently on channel
-		if ch.daddr == dev_num && (ch.chan_status&STATUS_CEND) != 0 && (flags&SNS_DEVEND) != 0 {
-			ch.chan_status |= uint16(flags) << 8
+		if ch.devAddr == devNum && (ch.chanStatus&STATUS_CEND) != 0 && (flags&SNS_DEVEND) != 0 {
+			ch.chanStatus |= uint16(flags) << 8
 		} else { // Device reporting status change
-			cu.dev_status[dev_num&0xff] = flags
+			cu.devStatus[devNum&0xff] = flags
 		}
 	}
 
-	cu.irq_pend = true
-	Irq_pending = true
+	cu.irqPending = true
+	IrqPending = true
 }
 
 // Scan all channels and see if one is ready to start or has interrupt pending
-func Chan_scan(mask uint16, irq_en bool) uint16 {
-	var sc *chan_ctl
-	var c *chan_unit
+func ChanScan(mask uint16, irqEnb bool) uint16 {
+	var sc *chanCtl
+	var c *chanDev
 	var imask uint16
 
 	sc = nil
 	// Quick exit if no pending IRQ's
-	if !Irq_pending {
+	if !IrqPending {
 		return NO_DEV
 	}
 
 	// Clear pending flag
-	Irq_pending = false
-	pend := NO_DEV
+	IrqPending = false
+	pendDev := NO_DEV // Device with Pending interrupt
 	// Start with channel 0 and work through all channels
 	for i := range MAX_CHAN {
-		c = &ch_unit[i]
+		c = &chanUnit[i]
 
-		if !c.enabled || !c.irq_pend {
+		if !c.enabled || !c.irqPending {
 			continue
 		}
 		// Mask for this channel
 		imask = 0x8000 >> i
 		nchan := 1
-		if c.ch_type == TYPE_BMUX && bmux_enable {
+		if c.chanType == TYPE_BMUX && bmuxEnable {
 			nchan = 32
 		}
-		if c.ch_type == TYPE_MUX {
-			nchan = c.nsubchan
+		if c.chanType == TYPE_MUX {
+			nchan = c.numSubChan
 		}
 		// Scan all subchannels on this channel
 		for j := range nchan {
-			sc = &c.subchan[j]
-			if sc.daddr == NO_DEV {
+			sc = &c.subChans[j]
+			if sc.devAddr == NO_DEV {
 				continue
 			}
 
 			// Check if PCI pending
-			if irq_en && (sc.chan_status&STATUS_PCI) != 0 {
+			if irqEnb && (sc.chanStatus&STATUS_PCI) != 0 {
 				if (imask & mask) != 0 {
-					pend = sc.daddr
+					pendDev = sc.devAddr
 					break
 				}
 			}
 
 			// If chaining and device end continue
-			if sc.chain_flg && (sc.chan_status&STATUS_DEND) != 0 {
+			if sc.chainFlg && (sc.chanStatus&STATUS_DEND) != 0 {
 				// Restart command that was flagged as an issue
-				_ = load_ccw(c, sc, true)
+				_ = loadCCW(c, sc, true)
 			}
 
 			// If channel end, check if we should continue
-			if (sc.chan_status & STATUS_DEND) != 0 {
+			if (sc.chanStatus & STATUS_DEND) != 0 {
 				// Grab another command if command chaining in effect
-				if (sc.ccw_flags & FLAG_CC) != 0 {
-					_ = load_ccw(c, sc, true)
-					if (sc.ccw_flags&FLAG_CC) != 0 || (sc.chan_status&STATUS_DEND) == 0 {
+				if (sc.ccwFlags & FLAG_CC) != 0 {
+					_ = loadCCW(c, sc, true)
+					if (sc.ccwFlags&FLAG_CC) != 0 || (sc.chanStatus&STATUS_DEND) == 0 {
 						continue
 					}
 				}
-				if irq_en || Loading != NO_DEV {
+				if irqEnb || Loading != NO_DEV {
 					// Disconnect from device
 					if (imask&mask) != 0 || Loading != NO_DEV {
-						pend = sc.daddr
+						pendDev = sc.devAddr
 						break
 					}
 				}
 			}
 		}
-		if pend != NO_DEV {
+		if pendDev != NO_DEV {
 			break
 		}
 	}
 
 	// Only return loading unit on loading
-	if Loading != NO_DEV && Loading != pend {
+	if Loading != NO_DEV && Loading != pendDev {
 		return NO_DEV
 	}
 
 	// See if we can post an IRQ
-	if pend != NO_DEV {
+	if pendDev != NO_DEV {
 		// Set to scan next time
-		Irq_pending = true
+		IrqPending = true
 		//		sc = find_subchannel(pend)
-		if Loading == pend {
-			sc.chan_status = 0
-			c.dev_status[pend&0xff] = 0
-			return pend
+		if Loading == pendDev {
+			sc.chanStatus = 0
+			c.devStatus[pendDev&0xff] = 0
+			return pendDev
 		}
 		if Loading == NO_DEV {
-			store_csw(sc)
-			c.dev_status[pend&0xff] = 0
-			return pend
+			storeCSW(sc)
+			c.devStatus[pendDev&0xff] = 0
+			return pendDev
 		}
 	} else {
-		if irq_en {
+		if irqEnb {
 			// If interrupts are wanted, check for pending device status
 			for i := range MAX_CHAN {
-				c = &ch_unit[i]
+				c = &chanUnit[i]
 				// Mask for this channel
 				imask := uint16(0x8000 >> i)
-				if !c.irq_pend || (imask&mask) == 0 {
+				if !c.irqPending || (imask&mask) == 0 {
 					continue
 				}
 				for j := range 256 {
 					// Look for device with pending status
-					if c.dev_status[j] != 0 {
-						c.irq_pend = true
-						Irq_pending = true
-						M.SetMemory(0x44, uint32(c.dev_status[j])<<16)
+					if c.devStatus[j] != 0 {
+						c.irqPending = true
+						IrqPending = true
+						M.SetMemory(0x44, uint32(c.devStatus[j])<<16)
 						M.SetMemory(0x40, 0)
-						c.dev_status[j] = 0
+						c.devStatus[j] = 0
 						return uint16((i << 8)) | uint16(j)
 					}
 				}
-				c.irq_pend = false
+				c.irqPending = false
 			}
 		}
 	}
@@ -716,7 +716,7 @@ func Chan_scan(mask uint16, irq_en bool) uint16 {
 }
 
 // IPL a device.
-func Boot_device(dev_num uint16) bool {
+func BootDevice(dev_num uint16) bool {
 	ch := (dev_num >> 8)
 	if ch > MAX_CHAN {
 		return true
@@ -724,40 +724,40 @@ func Boot_device(dev_num uint16) bool {
 	ch &= 0xf
 	d := dev_num & 0xff
 
-	sc := find_subchannel(dev_num)
+	sc := findSubChannel(dev_num)
 
-	cu := &ch_unit[ch]
+	cu := &chanUnit[ch]
 	// Check if channel disabled
 	if !cu.enabled {
 		return true
 	}
 
 	// If no device or channel, return CC = 3
-	if cu.dev_tab[d] == nil || sc == nil {
+	if cu.devTab[d] == nil || sc == nil {
 		return true
 	}
-	status := uint16(cu.dev_tab[d].Start_IO()) << 8
+	status := uint16(cu.devTab[d].StartIO()) << 8
 	if status != 0 {
 		return true
 	}
 
-	sc.chan_status = 0
-	sc.dev = cu.dev_tab[d]
+	sc.chanStatus = 0
+	sc.dev = cu.devTab[d]
 	sc.caw = 0x8
-	sc.daddr = dev_num
-	sc.ccw_count = 24
-	sc.ccw_flags = FLAG_CC | FLAG_SLI
-	sc.ccw_addr = 0
-	sc.ccw_key = 0
-	sc.chan_byte = BUFF_EMPTY
-	sc.chan_dirty = false
+	sc.devAddr = dev_num
+	sc.ccwCount = 24
+	sc.ccwFlags = FLAG_CC | FLAG_SLI
+	sc.ccwAddr = 0
+	sc.ccwKey = 0
+	sc.chanByte = BUFF_EMPTY
+	sc.chanDirty = false
 
-	sc.chan_status |= uint16(sc.dev.Start_cmd(sc.ccw_cmd)) << 8
+	sc.chanStatus |= uint16(sc.dev.StartCmd(sc.ccwCmd)) << 8
 
 	// Check if any errors from initial command
-	if (sc.chan_status & (STATUS_ATTN | STATUS_CHECK | STATUS_EXPT)) != 0 {
-		sc.ccw_cmd = 0
-		sc.ccw_flags = 0
+	if (sc.chanStatus & (STATUS_ATTN | STATUS_CHECK | STATUS_EXPT)) != 0 {
+		sc.ccwCmd = 0
+		sc.ccwFlags = 0
 		return true
 	}
 	Loading = dev_num
@@ -765,7 +765,7 @@ func Boot_device(dev_num uint16) bool {
 }
 
 // Add a device at given address
-func Add_device(dev D.Device, dev_num uint16) bool {
+func AddDevice(dev D.Device, dev_num uint16) bool {
 	ch := (dev_num >> 8)
 	if ch > MAX_CHAN {
 		return true
@@ -773,43 +773,43 @@ func Add_device(dev D.Device, dev_num uint16) bool {
 	ch &= 0xf
 	d := dev_num & 0xff
 
-	cu := &ch_unit[ch]
+	cu := &chanUnit[ch]
 	// Check if channel disabled
-	if !cu.enabled || cu.dev_tab[d] != nil {
+	if !cu.enabled || cu.devTab[d] != nil {
 		return true
 	}
 
-	cu.dev_tab[d] = dev
+	cu.devTab[d] = dev
 	return false
 }
 
 // Delete a device at a given address
-func Del_device(dev_num uint16) {
+func DelDevice(dev_num uint16) {
 	ch := (dev_num >> 8)
 	if ch > MAX_CHAN {
 		return
 	}
 	ch &= 0xf
 	d := dev_num & 0xff
-	cu := &ch_unit[ch]
-	cu.dev_tab[d] = nil
+	cu := &chanUnit[ch]
+	cu.devTab[d] = nil
 }
 
 // Enable a channel of a given type
-func Add_channel(chan_num uint16, ty int, subchan int) {
+func AddChannel(chan_num uint16, ty int, subchan int) {
 	if chan_num <= MAX_CHAN {
-		cu := &ch_unit[chan_num]
+		cu := &chanUnit[chan_num]
 		cu.enabled = true
-		cu.ch_type = ty
+		cu.chanType = ty
 		switch ty {
 		case TYPE_DIS:
 			cu.enabled = false
 		case TYPE_SEL:
-			cu.nsubchan = 1
+			cu.numSubChan = 1
 		case TYPE_MUX:
-			cu.nsubchan = subchan
+			cu.numSubChan = subchan
 		case TYPE_BMUX:
-			cu.nsubchan = 32
+			cu.numSubChan = 32
 		}
 	}
 }
@@ -818,15 +818,15 @@ func Add_channel(chan_num uint16, ty int, subchan int) {
 func InitializeChannels() {
 	//var d *D.Device = nil
 	for i := range MAX_CHAN {
-		cu := &ch_unit[i]
+		cu := &chanUnit[i]
 		cu.enabled = false
-		cu.irq_pend = false
-		cu.ch_type = 0
-		cu.nsubchan = 0
+		cu.irqPending = false
+		cu.chanType = 0
+		cu.numSubChan = 0
 		for j := range 256 {
-			cu.dev_tab[j] = null_dev
-			cu.dev_status[j] = 0
-			cu.subchan[j].daddr = NO_DEV
+			cu.devTab[j] = nullDev
+			cu.devStatus[j] = 0
+			cu.subChans[j].devAddr = NO_DEV
 		}
 	}
 }
@@ -839,47 +839,47 @@ func InitializeChannels() {
 */
 
 // Look up device to find subchannel device is on
-func find_subchannel(dev_num uint16) *chan_ctl {
-	ch := (dev_num >> 8) & 0xf
+func findSubChannel(devNum uint16) *chanCtl {
+	ch := (devNum >> 8) & 0xf
 	if ch > MAX_CHAN {
 		return nil
 	}
-	device := int(dev_num & 0xff)
-	switch ch_unit[ch].ch_type {
+	device := int(devNum & 0xff)
+	switch chanUnit[ch].chanType {
 	case TYPE_SEL:
-		return &ch_unit[ch].subchan[0]
+		return &chanUnit[ch].subChans[0]
 	case TYPE_BMUX:
-		if bmux_enable {
-			d := (dev_num >> 3) & 0x1f
-			return &ch_unit[ch].subchan[d]
+		if bmuxEnable {
+			d := (devNum >> 3) & 0x1f
+			return &chanUnit[ch].subChans[d]
 		}
-		return &ch_unit[ch].subchan[0]
+		return &chanUnit[ch].subChans[0]
 	case TYPE_MUX:
-		if device >= ch_unit[ch].nsubchan {
+		if device >= chanUnit[ch].numSubChan {
 			if device < 128 { // All shared devices over subchannels
 				return nil
 			}
 			device = (device >> 4) & 0x7
 		}
-		return &ch_unit[ch].subchan[device]
+		return &chanUnit[ch].subChans[device]
 	}
 	return nil
 }
 
 // Save full csw.
-func store_csw(ch *chan_ctl) {
-	M.SetMemory(0x40, (uint32(ch.ccw_key)<<24)|ch.caw)
-	M.SetMemory(0x44, uint32(ch.ccw_count)|(uint32(ch.chan_status)<<16))
-	if (ch.chan_status & STATUS_PCI) != 0 {
-		ch.chan_status &= ^STATUS_PCI
+func storeCSW(ch *chanCtl) {
+	M.SetMemory(0x40, (uint32(ch.ccwKey)<<24)|ch.caw)
+	M.SetMemory(0x44, uint32(ch.ccwCount)|(uint32(ch.chanStatus)<<16))
+	if (ch.chanStatus & STATUS_PCI) != 0 {
+		ch.chanStatus &= ^STATUS_PCI
 	} else {
-		ch.chan_status = 0
+		ch.chanStatus = 0
 	}
-	ch.ccw_flags &= ^FLAG_PCI
+	ch.ccwFlags &= ^FLAG_PCI
 }
 
 // Load in the next CCW, return true if failure, false if success.
-func load_ccw(cu *chan_unit, sc *chan_ctl, tic_ok bool) bool {
+func loadCCW(cu *chanDev, sc *chanCtl, ticOk bool) bool {
 	var word uint32
 	var error bool
 	var cmd bool = false
@@ -888,38 +888,38 @@ func load_ccw(cu *chan_unit, sc *chan_ctl, tic_ok bool) bool {
 
 loop:
 	// If last chain, start command
-	if sc.chain_flg && (sc.ccw_flags&FLAG_CD) == 0 {
+	if sc.chainFlg && (sc.ccwFlags&FLAG_CD) == 0 {
 		chain = true
-		sc.chain_flg = false
+		sc.chainFlg = false
 		cmd = true
-		goto start_cmd
+		goto startCmd
 	}
 
 	// Abort if ccw not on double word boundry
 	if (sc.caw & 0x7) != 0 {
-		sc.chan_status |= STATUS_PCHK
+		sc.chanStatus |= STATUS_PCHK
 		return true
 	}
 
 	// Abort if we have pending errors
-	if (sc.chan_status & 0x7F) != 0 {
+	if (sc.chanStatus & 0x7F) != 0 {
 		return true
 	}
 
 	// Remember if we were chainging
-	if (sc.ccw_flags & FLAG_CC) != 0 {
+	if (sc.ccwFlags & FLAG_CC) != 0 {
 		chain = true
 	}
 
 	// Check if we have status modifier set
-	if (sc.chan_status & STATUS_MOD) != 0 {
+	if (sc.chanStatus & STATUS_MOD) != 0 {
 		sc.caw += 8
 		sc.caw &= M.AMASK
-		sc.chan_status &= ^STATUS_MOD
+		sc.chanStatus &= ^STATUS_MOD
 	}
 
 	// Read in next CCW
-	word, error = readfull(cu, sc, sc.caw)
+	word, error = readFullWord(cu, sc, sc.caw)
 	if error {
 		return true
 	}
@@ -927,68 +927,68 @@ loop:
 	// TIC can't follow TIC nor bt first in chain
 	c = uint8((word >> 24) & 0xf)
 	if c == CMD_TIC {
-		if tic_ok {
+		if ticOk {
 			sc.caw = word & M.AMASK
-			tic_ok = false
+			ticOk = false
 			goto loop
 		}
-		sc.chan_status |= STATUS_PCHK
-		cu.irq_pend = true
-		Irq_pending = true
+		sc.chanStatus |= STATUS_PCHK
+		cu.irqPending = true
+		IrqPending = true
 		return true
 	}
 	sc.caw += 4
 	sc.caw &= M.AMASK
 
 	// Check if not chaining data
-	if (sc.ccw_flags & FLAG_CD) == 0 {
-		sc.ccw_cmd = uint8((word >> 24) & 0xff)
+	if (sc.ccwFlags & FLAG_CD) == 0 {
+		sc.ccwCmd = uint8((word >> 24) & 0xff)
 		cmd = true
 	}
 
 	// Set up for this command
-	sc.ccw_addr = word & M.AMASK
-	word, error = readfull(cu, sc, sc.caw)
+	sc.ccwAddr = word & M.AMASK
+	word, error = readFullWord(cu, sc, sc.caw)
 	if error {
 		return true
 	}
 	sc.caw += 4
 	sc.caw &= M.AMASK
-	sc.ccw_count = uint16(word & M.HMASK)
+	sc.ccwCount = uint16(word & M.HMASK)
 
 	// Copy SLI indicator in CD command
-	if (sc.ccw_flags & (FLAG_CD | FLAG_SLI)) == (FLAG_CD | FLAG_SLI) {
+	if (sc.ccwFlags & (FLAG_CD | FLAG_SLI)) == (FLAG_CD | FLAG_SLI) {
 		word |= uint32(FLAG_SLI) << 16
 	}
-	sc.ccw_flags = uint16(word>>16) & 0xff00
-	sc.chan_byte = BUFF_EMPTY
+	sc.ccwFlags = uint16(word>>16) & 0xff00
+	sc.chanByte = BUFF_EMPTY
 
 	// Check if invalid count
-	if sc.ccw_count == 0 {
-		sc.chan_status |= STATUS_PCHK
-		sc.ccw_cmd = 0
-		cu.irq_pend = true
-		Irq_pending = true
+	if sc.ccwCount == 0 {
+		sc.chanStatus |= STATUS_PCHK
+		sc.ccwCmd = 0
+		cu.irqPending = true
+		IrqPending = true
 		return true
 	}
 
 	// Handle IDA
-	if (sc.ccw_flags & FLAG_IDA) != 0 {
-		word, error = readfull(cu, sc, sc.ccw_addr)
+	if (sc.ccwFlags & FLAG_IDA) != 0 {
+		word, error = readFullWord(cu, sc, sc.ccwAddr)
 		if error {
 			return true
 		}
-		sc.ccw_iaddr = word & M.AMASK
+		sc.ccwIAddr = word & M.AMASK
 	}
 
-start_cmd:
+startCmd:
 	if cmd {
 		// Check if invalid command
-		if (sc.ccw_cmd & 0xf) == 0 {
-			sc.chan_status |= STATUS_PCHK
-			sc.ccw_cmd = 0
-			cu.irq_pend = true
-			Irq_pending = true
+		if (sc.ccwCmd & 0xf) == 0 {
+			sc.chanStatus |= STATUS_PCHK
+			sc.ccwCmd = 0
+			cu.irqPending = true
+			IrqPending = true
 			return true
 		}
 
@@ -996,66 +996,66 @@ start_cmd:
 			return true
 		}
 
-		sc.chan_byte = BUFF_EMPTY
-		sc.chan_status &= 0xff
-		sc.chan_status |= uint16(sc.dev.Start_cmd(sc.ccw_cmd)) << 8
+		sc.chanByte = BUFF_EMPTY
+		sc.chanStatus &= 0xff
+		sc.chanStatus |= uint16(sc.dev.StartCmd(sc.ccwCmd)) << 8
 
 		// If device is busy, check if last was CC, then mark pending
-		if (sc.chan_status & STATUS_BUSY) != 0 {
+		if (sc.chanStatus & STATUS_BUSY) != 0 {
 			if chain {
-				sc.chain_flg = true
+				sc.chainFlg = true
 			}
 			return false
 		}
 
 		// Check if any errors from initial command
-		if (sc.chan_status & (STATUS_ATTN | STATUS_CHECK | STATUS_EXPT)) != 0 {
-			sc.ccw_cmd = 0
-			sc.ccw_flags = 0
-			cu.dev_status[sc.daddr&0xff] = uint8((sc.chan_status >> 8) & 0xff)
-			cu.irq_pend = true
-			Irq_pending = true
+		if (sc.chanStatus & (STATUS_ATTN | STATUS_CHECK | STATUS_EXPT)) != 0 {
+			sc.ccwCmd = 0
+			sc.ccwFlags = 0
+			cu.devStatus[sc.devAddr&0xff] = uint8((sc.chanStatus >> 8) & 0xff)
+			cu.irqPending = true
+			IrqPending = true
 			return true
 		}
 
 		// Check if meediate channel end
-		if (sc.chan_status & STATUS_CEND) != 0 {
-			sc.ccw_flags |= FLAG_SLI // Force SLI for immediate command
-			if (sc.chan_status & STATUS_DEND) != 0 {
+		if (sc.chanStatus & STATUS_CEND) != 0 {
+			sc.ccwFlags |= FLAG_SLI // Force SLI for immediate command
+			if (sc.chanStatus & STATUS_DEND) != 0 {
 				// If we are not chaining, save status.
 				//			if (sc.ccw_flags & FLAG_CC) != 0 {
 				//				cu.dev_status[sc.daddr&0xff] = uint8((sc.chan_status >> 8) & 0xff)
 				//			}
-				sc.ccw_cmd = 0
-				cu.irq_pend = true
-				Irq_pending = true
+				sc.ccwCmd = 0
+				cu.irqPending = true
+				IrqPending = true
 			}
 		}
 	}
 
-	if (sc.ccw_flags & FLAG_PCI) != 0 {
-		sc.chan_status |= STATUS_PCI
-		cu.irq_pend = true
-		Irq_pending = true
+	if (sc.ccwFlags & FLAG_PCI) != 0 {
+		sc.chanStatus |= STATUS_PCI
+		cu.irqPending = true
+		IrqPending = true
 	}
 	return false
 }
 
 // Read a fill word from memory
 // Return true if fail and false if success
-func readfull(cu *chan_unit, sc *chan_ctl, addr uint32) (uint32, bool) {
+func readFullWord(cu *chanDev, sc *chanCtl, addr uint32) (uint32, bool) {
 	if !M.CheckAddr(addr) {
-		sc.chan_status |= STATUS_PCHK
-		cu.irq_pend = true
-		Irq_pending = true
+		sc.chanStatus |= STATUS_PCHK
+		cu.irqPending = true
+		IrqPending = true
 		return 0, true
 	}
-	if sc.ccw_key != 0 {
+	if sc.ccwKey != 0 {
 		k := M.GetKey(addr)
-		if (k&0x8) != 0 && (k&0xf0) != sc.ccw_key {
-			sc.chan_status |= STATUS_PCHK
-			cu.irq_pend = true
-			Irq_pending = true
+		if (k&0x8) != 0 && (k&0xf0) != sc.ccwKey {
+			sc.chanStatus |= STATUS_PCHK
+			cu.irqPending = true
+			IrqPending = true
 			return 0, true
 		}
 	}
@@ -1065,61 +1065,61 @@ func readfull(cu *chan_unit, sc *chan_ctl, addr uint32) (uint32, bool) {
 
 // Read a word into channel buffer
 // Return true if fail, false if success
-func readbuff(cu *chan_unit, sc *chan_ctl) bool {
+func readBuffer(cu *chanDev, sc *chanCtl) bool {
 	var addr uint32
 
-	if (sc.ccw_flags & FLAG_IDA) != 0 {
-		addr = sc.ccw_iaddr
+	if (sc.ccwFlags & FLAG_IDA) != 0 {
+		addr = sc.ccwIAddr
 	} else {
-		addr = sc.ccw_addr
+		addr = sc.ccwAddr
 	}
-	if word, error := readfull(cu, sc, addr); error {
-		sc.chan_byte = BUFF_CHNEND
+	if word, error := readFullWord(cu, sc, addr); error {
+		sc.chanByte = BUFF_CHNEND
 		return error
 	} else {
-		sc.chan_buf = word
-		sc.chan_byte = uint8(addr & 3)
+		sc.chanBuffer = word
+		sc.chanByte = uint8(addr & 3)
 	}
 	return false
 }
 
 // Write channel buffer to memory
 // Return true if fail, false if success
-func writebuff(cu *chan_unit, sc *chan_ctl) bool {
+func writeBuffer(cu *chanDev, sc *chanCtl) bool {
 	var addr uint32
 	var error bool
 
-	if (sc.ccw_flags & FLAG_IDA) != 0 {
-		addr = sc.ccw_iaddr
+	if (sc.ccwFlags & FLAG_IDA) != 0 {
+		addr = sc.ccwIAddr
 	} else {
-		addr = sc.ccw_addr
+		addr = sc.ccwAddr
 	}
 
 	// Check if address valid
 	addr &= M.AMASK
 	if !M.CheckAddr(addr) {
-		sc.chan_status |= STATUS_PCHK
-		sc.chan_byte = BUFF_CHNEND
-		cu.irq_pend = true
-		Irq_pending = true
+		sc.chanStatus |= STATUS_PCHK
+		sc.chanByte = BUFF_CHNEND
+		cu.irqPending = true
+		IrqPending = true
 		return true
 	}
 
 	// Check protection key
-	if sc.ccw_key != 0 {
+	if sc.ccwKey != 0 {
 		k := M.GetKey(addr)
-		if (k & 0xf0) != sc.ccw_key {
-			sc.chan_status |= STATUS_PCHK
-			sc.chan_byte = BUFF_CHNEND
-			cu.irq_pend = true
-			Irq_pending = true
+		if (k & 0xf0) != sc.ccwKey {
+			sc.chanStatus |= STATUS_PCHK
+			sc.chanByte = BUFF_CHNEND
+			cu.irqPending = true
+			IrqPending = true
 			return true
 		}
 	}
 
 	// Write memory
-	error = M.PutWord(addr, sc.chan_buf)
-	sc.chan_byte = BUFF_EMPTY
-	sc.chan_dirty = false
+	error = M.PutWord(addr, sc.chanBuffer)
+	sc.chanByte = BUFF_EMPTY
+	sc.chanDirty = false
 	return error
 }

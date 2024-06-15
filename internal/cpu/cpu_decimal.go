@@ -235,7 +235,7 @@ func (cpu *CPU) opDecAdd(step *stepInfo) uint16 {
 		}
 		if ov {
 			cpu.cc = 3
-			if (cpu.pmask & DECOVER) != 0 {
+			if (cpu.progMask & DECOVER) != 0 {
 				err = IRC_DECOVR
 			}
 		}
@@ -336,7 +336,7 @@ func (cpu *CPU) opSRP(step *stepInfo) uint16 {
 	}
 	if ov {
 		cpu.cc = 3
-		if (cpu.pmask & DECOVER) != 0 {
+		if (cpu.progMask & DECOVER) != 0 {
 			err = IRC_DECOVR
 		}
 	}

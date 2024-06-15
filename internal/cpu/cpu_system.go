@@ -63,7 +63,7 @@ func (cpu *CPU) opISK(step *stepInfo) uint16 {
 	} else {
 		cpu.regs[step.R1] |= uint32(t) & 0xf8
 	}
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
@@ -99,17 +99,17 @@ func (cpu *CPU) opSSM(step *stepInfo) uint16 {
 			return err
 		}
 
-		cpu.ext_en = (t & 0x01) != 0
+		cpu.extEnb = (t & 0x01) != 0
 		if cpu.ecMode {
 			if (t & 0x02) != 0 {
-				cpu.irq_en = true
+				cpu.irqEnb = true
 				cpu.sysMask = uint16(cpu.cregs[2] >> 16)
 			} else {
-				cpu.irq_en = false
+				cpu.irqEnb = false
 				cpu.sysMask = 0
 			}
 			cpu.pageEnb = (t & 0x04) != 0
-			cpu.per_en = (t & 0x08) != 0
+			cpu.perEnb = (t & 0x08) != 0
 			if (t & 0xb8) != 0 {
 				return IRC_SPEC
 			}
@@ -118,11 +118,11 @@ func (cpu *CPU) opSSM(step *stepInfo) uint16 {
 			if (t & 0x2) != 0 {
 				cpu.sysMask |= uint16((cpu.cregs[2] >> 16) & 0x3ff)
 			}
-			cpu.irq_en = cpu.sysMask != 0
+			cpu.irqEnb = cpu.sysMask != 0
 			cpu.pageEnb = false
 		}
 	}
-	sys_channel.Irq_pending = true
+	sys_channel.IrqPending = true
 	return 0
 }
 
@@ -174,7 +174,7 @@ func (cpu *CPU) opCS(step *stepInfo) uint16 {
 		cpu.cc = 0
 	} else {
 		cpu.regs[step.R1] = orig
-		cpu.per_mod |= 1 << uint32(step.R1)
+		cpu.perRegMod |= 1 << uint32(step.R1)
 		cpu.cc = 1
 	}
 	return 0
@@ -212,7 +212,7 @@ func (cpu *CPU) opCDS(step *stepInfo) uint16 {
 	} else {
 		cpu.regs[step.R1] = srcl
 		cpu.regs[step.R1|1] = srch
-		cpu.per_mod |= 3 << uint32(step.R1)
+		cpu.perRegMod |= 3 << uint32(step.R1)
 		cpu.cc = 1
 	}
 	return 0
@@ -237,21 +237,21 @@ func (cpu *CPU) opLRA(step *stepInfo) uint16 {
 
 	// TLB not correct, try loading correct entry
 	// Segment and page number to word address
-	seg = (step.address1 >> cpu.seg_shift) & cpu.seg_mask
-	page = (step.address1 >> cpu.page_shift) & cpu.page_index
+	seg = (step.address1 >> cpu.segShift) & cpu.segMask
+	page = (step.address1 >> cpu.pageShift) & cpu.pageIndex
 
 	// Check address against length of segment table
-	if seg > cpu.seg_len {
+	if seg > cpu.segLen {
 		// segment above length of table
 		cpu.cc = 3
 		cpu.regs[step.R1] = step.address1
-		cpu.per_mod |= 1 << step.R1
+		cpu.perRegMod |= 1 << step.R1
 		return 0
 	}
 
 	// Compute address of PTE table
 	// Get pointer to page table
-	addr := ((seg << 2) + cpu.seg_addr) & AMASK
+	addr := ((seg << 2) + cpu.segAddr) & AMASK
 
 	// If over size of memory, trap
 	mem_cycle++
@@ -264,7 +264,7 @@ func (cpu *CPU) opLRA(step *stepInfo) uint16 {
 	if (entry & PTE_VALID) != 0 {
 		cpu.cc = 1
 		cpu.regs[step.R1] = addr
-		cpu.per_mod |= 1 << step.R1
+		cpu.perRegMod |= 1 << step.R1
 		return 0
 	}
 
@@ -272,10 +272,10 @@ func (cpu *CPU) opLRA(step *stepInfo) uint16 {
 	addr = (entry >> 28) + 1
 
 	// Check if entry over end of table
-	if (page >> cpu.pte_len_shift) >= addr {
+	if (page >> cpu.pteLenShift) >= addr {
 		cpu.cc = 3
 		cpu.regs[step.R1] = addr
-		cpu.per_mod |= 1 << step.R1
+		cpu.perRegMod |= 1 << step.R1
 		return 0
 	}
 
@@ -293,19 +293,19 @@ func (cpu *CPU) opLRA(step *stepInfo) uint16 {
 	}
 	entry = entry & 0xffff
 
-	if (entry & (cpu.pte_avail | cpu.pte_mbz)) != 0 {
+	if (entry & (cpu.pteAvail | cpu.pteMBZ)) != 0 {
 		cpu.cc = 3
 		cpu.regs[step.R1] = addr
-		cpu.per_mod |= 1 << step.R1
+		cpu.perRegMod |= 1 << step.R1
 		return 0
 	}
 
 	// Compute correct entry
-	entry = entry >> cpu.pte_shift // Move physical to correct spot
-	addr = (step.address1 & cpu.page_mask) | (((entry & TLB_PHY) << cpu.page_shift) & AMASK)
+	entry = entry >> cpu.pteShift // Move physical to correct spot
+	addr = (step.address1 & cpu.pageMask) | (((entry & TLB_PHY) << cpu.pageShift) & AMASK)
 	cpu.cc = 0
 	cpu.regs[step.R1] = addr
-	cpu.per_mod |= 1 << step.R1
+	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
@@ -317,6 +317,11 @@ func (cpu *CPU) opEX(step *stepInfo) uint16 {
 		return err
 	} else {
 		s.opcode = uint8((opr >> 8) & 0xff)
+	}
+
+	// Check if triggered PER event.
+	if cpu.perEnb && cpu.perFetch {
+		cpu.perAddrCheck(step.address1, 0x4000)
 	}
 
 	// Can't execute execute instruction
@@ -389,18 +394,18 @@ func (cpu *CPU) opSTxSM(step *stepInfo) uint16 {
 		if cpu.pageEnb {
 			t |= 0x04
 		}
-		if cpu.irq_en {
+		if cpu.irqEnb {
 			t |= 0x02
 		}
-		if cpu.per_en {
+		if cpu.perEnb {
 			t |= 0x40
 		}
-		if cpu.ext_en {
+		if cpu.extEnb {
 			t |= 0x01
 		}
 	} else {
 		t = (uint32(cpu.sysMask) >> 8 & 0xfe)
-		if cpu.ext_en {
+		if cpu.extEnb {
 			t |= 0x01
 		}
 	}
@@ -424,9 +429,9 @@ func (cpu *CPU) opSTxSM(step *stepInfo) uint16 {
 			return IRC_SPEC
 		}
 		cpu.pageEnb = (r & 0x04) != 0
-		cpu.irq_en = (r & 0x02) != 0
-		cpu.per_en = (r & 0x40) != 0
-		if cpu.irq_en {
+		cpu.irqEnb = (r & 0x02) != 0
+		cpu.perEnb = (r & 0x40) != 0
+		if cpu.irqEnb {
 			cpu.sysMask = uint16(cpu.cregs[2] >> 16)
 		} else {
 			cpu.sysMask = 0
@@ -439,10 +444,10 @@ func (cpu *CPU) opSTxSM(step *stepInfo) uint16 {
 		if (r & 0x2) != 0 {
 			cpu.sysMask |= uint16((cpu.cregs[2] >> 16) & 0x3ff)
 		}
-		cpu.irq_en = cpu.sysMask != 0
+		cpu.irqEnb = cpu.sysMask != 0
 	}
-	sys_channel.Irq_pending = true
-	cpu.ext_en = (r & 0x01) != 0
+	sys_channel.IrqPending = true
+	cpu.extEnb = (r & 0x01) != 0
 	return 0
 }
 
@@ -471,55 +476,55 @@ func (cpu *CPU) opLCTL(step *stepInfo) uint16 {
 				} else {
 					sys_channel.SetBMUXenable(false)
 				}
-				cpu.page_shift = 0
-				cpu.seg_shift = 0
+				cpu.pageShift = 0
+				cpu.segShift = 0
 				switch (t >> 22) & 3 {
 				default: // Generate translation exception
 				case 1: // 2K page
-					cpu.page_shift = 11
-					cpu.page_mask = 0x7ff
-					cpu.pte_avail = 4
-					cpu.pte_mbz = 2
-					cpu.pte_shift = 3
-					cpu.pte_len_shift = 1
+					cpu.pageShift = 11
+					cpu.pageMask = 0x7ff
+					cpu.pteAvail = 4
+					cpu.pteMBZ = 2
+					cpu.pteShift = 3
+					cpu.pteLenShift = 1
 				case 2: // 4K page
-					cpu.page_shift = 12
-					cpu.page_mask = 0xfff
-					cpu.pte_avail = 8
-					cpu.pte_mbz = 6
-					cpu.pte_shift = 4
-					cpu.pte_len_shift = 0
+					cpu.pageShift = 12
+					cpu.pageMask = 0xfff
+					cpu.pteAvail = 8
+					cpu.pteMBZ = 6
+					cpu.pteShift = 4
+					cpu.pteLenShift = 0
 				}
 
 				switch (t >> 19) & 0x7 {
 				default: // Generate translation exception
 				case 0: // 64K segments
-					cpu.seg_shift = 16
-					cpu.seg_mask = AMASK >> 16
+					cpu.segShift = 16
+					cpu.segMask = AMASK >> 16
 				case 2: // 1M segments
-					cpu.seg_shift = 20
-					cpu.seg_mask = AMASK >> 20
-					cpu.pte_len_shift += 4
+					cpu.segShift = 20
+					cpu.segMask = AMASK >> 20
+					cpu.pteLenShift += 4
 				}
 				// Generate PTE index mask
-				cpu.page_index = ((^(cpu.seg_mask << cpu.seg_shift) &
-					^cpu.page_mask) & AMASK) >> cpu.page_shift
-				cpu.interval_en = (t & 0x400) != 0
-				cpu.tod_en = (t & 0x800) != 0
+				cpu.pageIndex = ((^(cpu.segMask << cpu.segShift) &
+					^cpu.pageMask) & AMASK) >> cpu.pageShift
+				cpu.intEnb = (t & 0x400) != 0
+				cpu.todEnb = (t & 0x800) != 0
 			case 1: // Segment table address and length
 				for i := 0; i < 256; i++ {
 					cpu.tlb[i] = 0
 				}
-				cpu.seg_addr = t & AMASK
-				cpu.seg_len = (((t >> 24) & 0xff) + 1) << 4
+				cpu.segAddr = t & AMASK
+				cpu.segLen = (((t >> 24) & 0xff) + 1) << 4
 			case 2: // Masks
 				if cpu.ecMode {
-					if cpu.irq_en {
+					if cpu.irqEnb {
 						cpu.sysMask = uint16(t >> 16)
 					} else {
 						cpu.sysMask = 0
 					}
-					sys_channel.Irq_pending = true
+					sys_channel.IrqPending = true
 				}
 			case 6: // Assist function control
 				if cpu.vmAssist && (t&0xc0000000) == 0x80000000 {
@@ -529,6 +534,10 @@ func (cpu *CPU) opLCTL(step *stepInfo) uint16 {
 				}
 			case 8: // Monitor masks
 			case 9: // PER general register masks
+				cpu.perBranch = (t & 0x80000000) != 0
+				cpu.perFetch = (t & 0x40000000) != 0
+				cpu.perStore = (t & 0x20000000) != 0
+				cpu.perReg = (t & 0x10000000) != 0
 			case 10: // PER staring address
 			case 11: // PER ending address
 			case 14: // Machine Check handleing
@@ -637,15 +646,15 @@ func (cpu *CPU) opB2(step *stepInfo) uint16 {
 		if err != 0 {
 			return err
 		}
-		cpu.tod_clock[0] = t1
-		cpu.tod_clock[1] = t2
-		cpu.tod_set = true
+		cpu.todClock[0] = t1
+		cpu.todClock[1] = t2
+		cpu.todSet = true
 		// cpu.check_tod_irq()
 		cpu.cc = 0
 	case 0x05: // STCK
 		// Store TOD clock in location
-		t1 = cpu.tod_clock[0]
-		t2 = cpu.tod_clock[1]
+		t1 = cpu.todClock[0]
+		t2 = cpu.todClock[1]
 		// Update clock based on time before next irq
 		t2 &= 0xffff000
 		if err := cpu.writeFull(step.address1, t1); err != 0 {
@@ -654,7 +663,7 @@ func (cpu *CPU) opB2(step *stepInfo) uint16 {
 		if err := cpu.writeFull(step.address1+4, t2); err != 0 {
 			return err
 		}
-		if cpu.tod_set {
+		if cpu.todSet {
 			cpu.cc = 0
 		} else {
 			cpu.cc = 1
@@ -669,13 +678,13 @@ func (cpu *CPU) opB2(step *stepInfo) uint16 {
 		if t2, err = cpu.readFull(step.address1 + 4); err != 0 {
 			return err
 		}
-		cpu.clk_cmp[0] = t1
-		cpu.clk_cmp[1] = t2
+		cpu.clkCmp[0] = t1
+		cpu.clkCmp[1] = t2
 		// cpu.check_tod_irq()
 	case 0x07: // STCKC
 		// Store TOD clock in location
-		t1 = cpu.clk_cmp[0]
-		t2 = cpu.clk_cmp[1]
+		t1 = cpu.clkCmp[0]
+		t2 = cpu.clkCmp[1]
 		if err := cpu.writeFull(step.address1, t1); err != 0 {
 			return err
 		}
@@ -692,9 +701,9 @@ func (cpu *CPU) opB2(step *stepInfo) uint16 {
 		if t2, err = cpu.readFull(step.address1 + 4); err != 0 {
 			return err
 		}
-		cpu.cpu_timer[0] = t1
-		cpu.cpu_timer[1] = t2
-		cpu.tod_set = true
+		cpu.cpuTimer[0] = t1
+		cpu.cpuTimer[1] = t2
+		cpu.todSet = true
 		//                               if (sim_is_active(&cpu_unit[0])) {
 		//                                   double nus = sim_activate_time_usecs(&cpu_unit[0]);
 		//                                   timer_tics = (int)(nus);
@@ -702,8 +711,8 @@ func (cpu *CPU) opB2(step *stepInfo) uint16 {
 		//                               clk_irq = (cpu_timer[0] & MSIGN) != 0;
 	case 0x09: // STPT
 		// Store the CPU timer in double word
-		t1 = cpu.cpu_timer[0]
-		t2 = cpu.cpu_timer[1]
+		t1 = cpu.cpuTimer[0]
+		t2 = cpu.cpuTimer[1]
 		// Update clock based on time before next irq
 		t2 &= 0xffff000
 		if err := cpu.writeFull(step.address1, t1); err != 0 {
@@ -716,7 +725,7 @@ func (cpu *CPU) opB2(step *stepInfo) uint16 {
 		cpu.stKey = uint8(0xf0 & step.address1)
 	case 0x0b: // IPK
 		cpu.regs[2] = (cpu.regs[2] & 0xffffff00) | (uint32(cpu.stKey) & 0xf0)
-		cpu.per_mod |= 1 << 2
+		cpu.perRegMod |= 1 << 2
 	case 0x0d: // PTLB
 		for i := 0; i < 256; i++ {
 			cpu.tlb[i] = 0

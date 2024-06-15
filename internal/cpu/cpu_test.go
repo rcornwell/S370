@@ -191,7 +191,7 @@ func setup() {
 
 func (cpu *CPU) test_inst(mask uint8, steps int) {
 	cpu.PC = 0x400
-	cpu.pmask = mask & 0xf
+	cpu.progMask = mask & 0xf
 	memory.SetMemory(0x68, 0)
 	memory.SetMemory(0x6c, 0x800)
 	trap_flag = false

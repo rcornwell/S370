@@ -35,10 +35,10 @@ import (
 func setup(dev_num uint16) *Test_dev {
 	M.SetSize(16)
 	InitializeChannels()
-	Add_channel(0, TYPE_MUX, 192)
+	AddChannel(0, TYPE_MUX, 192)
 	d := &Test_dev{addr: dev_num, mask: 0xff}
-	Add_device(d, dev_num)
-	_ = d.Init_Dev()
+	AddDevice(d, dev_num)
+	_ = d.InitDev()
 	for i := range 0x10 {
 		d.data[i] = uint8(0xf0 + i)
 	}
@@ -49,7 +49,7 @@ func setup(dev_num uint16) *Test_dev {
 }
 
 /* Read byte from main memory */
-func get_mem_b(addr uint32) uint8 {
+func getMemByte(addr uint32) uint8 {
 	v := M.GetMemory(addr)
 	b := uint8((v >> (8 * (3 - (addr & 3))) & 0xff))
 	return b
@@ -65,14 +65,14 @@ func get_mem_b(addr uint32) uint8 {
 // 	M.SetMemory(addr, v)
 // }
 
-func run_channel() uint16 {
+func runChannel() uint16 {
 	var d uint16 = NO_DEV
 
 	for d == NO_DEV {
 		Ev.Advance(1)
-		d = Chan_scan(0x8000, true)
+		d = ChanScan(0x8000, true)
 	}
-	Irq_pending = false
+	IrqPending = false
 	return d
 }
 
@@ -83,7 +83,7 @@ func TestTestChan_a(t *testing.T) {
 	if cc != 3 {
 		t.Errorf("Test Channel on non-existing channel failed expected %d got: %d", 3, cc)
 	}
-	Add_channel(0, TYPE_MUX, 192)
+	AddChannel(0, TYPE_MUX, 192)
 	cc = TestChan(0)
 	if cc != 0 {
 		t.Errorf("Test Channel on existing channel failed expected %d got: %d", 0, cc)
@@ -93,7 +93,7 @@ func TestTestChan_a(t *testing.T) {
 	if cc != 3 {
 		t.Errorf("Test Channel on non-existing channel failed expected %d got: %d", 3, cc)
 	}
-	Add_channel(1, TYPE_SEL, 0)
+	AddChannel(1, TYPE_SEL, 0)
 	cc = TestChan(0x100)
 	if cc != 0 {
 		t.Errorf("Test Channel on existing channel failed expected %d got: %d", 0, cc)
@@ -132,7 +132,7 @@ func TestStartIO_1(t *testing.T) {
 	if cc != 0 {
 		t.Errorf("Start I/O expected %d got: %d", 0, cc)
 	}
-	dev := run_channel()
+	dev := runChannel()
 	if dev != 0xf {
 		t.Errorf("Start I/O 1 expected %d got: %d", 0xf, dev)
 	}
@@ -146,13 +146,13 @@ func TestStartIO_1(t *testing.T) {
 	}
 
 	for i := range 0x10 {
-		b := get_mem_b(uint32(0x600 + i))
+		b := getMemByte(uint32(0x600 + i))
 		if b != uint8(0xf0+i) {
 			t.Errorf("Start I/O 1 Invalid data %02x expected: %02x got %02x", i, 0x0f+i, b)
 		}
 	}
 
-	Irq_pending = false
+	IrqPending = false
 	M.SetMemory(0x40, 0)
 	M.SetMemory(0x44, 0)
 	M.SetMemory(0x78, 0)
@@ -169,7 +169,7 @@ func TestStartIO_1(t *testing.T) {
 	if cc != 0 {
 		t.Errorf("Start I/O 2 expected %d got: %d", 0, cc)
 	}
-	dev = run_channel()
+	dev = runChannel()
 	if dev != 0xf {
 		t.Errorf("Start I/O 2 expected %d got: %d", 0xf, dev)
 	}
@@ -209,7 +209,7 @@ func TestStartIO_sense(t *testing.T) {
 	if cc != 0 {
 		t.Errorf("Start I/O sense expected %d got: %d", 0, cc)
 	}
-	dev := run_channel()
+	dev := runChannel()
 	if dev != 0xf {
 		t.Errorf("Start I/O sense expected %d got: %d", 0xf, dev)
 	}
@@ -227,7 +227,7 @@ func TestStartIO_sense(t *testing.T) {
 		t.Errorf("Start I/O 1 CSW2 expected %08x got: %08x", 0x00555555, v)
 	}
 
-	Irq_pending = false
+	IrqPending = false
 	td.sense = 0xff
 	M.SetMemory(0x40, 0)
 	M.SetMemory(0x44, 0)
@@ -245,7 +245,7 @@ func TestStartIO_sense(t *testing.T) {
 	if cc != 0 {
 		t.Errorf("Start I/O sense expected %d got: %d", 0, cc)
 	}
-	dev = run_channel()
+	dev = runChannel()
 	if dev != 0xf {
 		t.Errorf("Start I/O sense expected %d got: %d", 0xf, dev)
 	}
@@ -285,7 +285,7 @@ func TestStartIO_nop(t *testing.T) {
 		t.Errorf("Start I/O nop expected %d got: %d", 0, cc)
 	}
 
-	dev := run_channel()
+	dev := runChannel()
 	if dev != 0xf {
 		t.Errorf("Start I/O nop expected %d got: %d", 0xf, dev)
 	}
@@ -303,7 +303,7 @@ func TestStartIO_nop(t *testing.T) {
 		t.Errorf("Start I/O 1 CSW2 expected %08x got: %08x", 0x55555555, v)
 	}
 
-	Irq_pending = false
+	IrqPending = false
 	M.SetMemory(0x40, 0xffffffff)
 	M.SetMemory(0x44, 0xffffffff)
 	M.SetMemory(0x78, 0)
@@ -356,7 +356,7 @@ func TestStartIO_ce_only(t *testing.T) {
 		t.Errorf("Start I/O ce only expected %d got: %d", 0, cc)
 	}
 
-	dev := run_channel()
+	dev := runChannel()
 
 	if dev != 0xf {
 		t.Errorf("Start I/O ce only expected %d got: %d", 0xf, dev)
@@ -398,7 +398,7 @@ func TestStartIO_cc_nop(t *testing.T) {
 		t.Errorf("Start I/O ce only expected %d got: %d", 0, cc)
 	}
 
-	dev := run_channel()
+	dev := runChannel()
 	if dev != 0xf {
 		t.Errorf("Start I/O ce only expected %d got: %d", 0xf, dev)
 	}

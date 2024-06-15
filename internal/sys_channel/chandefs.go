@@ -29,34 +29,35 @@ import (
 	D "github.com/rcornwell/S370/internal/device"
 )
 
-type chan_ctl struct { // Channel control structure
-	dev         D.Device // Pointer to device interface
-	caw         uint32   // Channel command address word
-	ccw_addr    uint32   // Channel address
-	ccw_iaddr   uint32   // Channel indirect address
-	ccw_count   uint16   // Channel count
-	ccw_cmd     uint8    // Channel command and flags
-	ccw_key     uint8    // Channel key
-	chan_buf    uint32   // Channel data buffer
-	ccw_flags   uint16   // Channel flags
-	chan_status uint16   // Channel status
-	chan_dirty  bool     // Buffer has been modified
-	daddr       uint16   // Device on channel
-	chan_byte   uint8    // Current byte, dirty/full
-	chain_flg   bool     // Holding on chain
+type chanCtl struct { // Channel control structure
+	dev        D.Device // Pointer to device interface
+	caw        uint32   // Channel command address word
+	ccwAddr    uint32   // Channel address
+	ccwIAddr   uint32   // Channel indirect address
+	ccwCount   uint16   // Channel count
+	ccwCmd     uint8    // Channel command and flags
+	ccwKey     uint8    // Channel key
+	ccwFlags   uint16   // Channel control flags
+	chanBuffer uint32   // Channel data buffer
+
+	chanStatus uint16 // Channel status
+	chanDirty  bool   // Buffer has been modified
+	devAddr    uint16 // Device on channel
+	chanByte   uint8  // Current byte, dirty/full
+	chainFlg   bool   // Holding on chain
 }
 
-type chan_unit struct { // Channel information
-	dev_tab    [256]D.Device // Pointer to device interfaces
-	dev_status [256]uint8    // Status from each device
-	ch_type    int           // Type of channel
-	nsubchan   int           // Number of subchannels
-	irq_pend   bool          // Channel has pending IRQ
-	subchan    [256]chan_ctl // Subchannel control
+type chanDev struct { // Channel information
+	devTab     [256]D.Device // Pointer to device interfaces
+	devStatus  [256]uint8    // Status from each device
+	chanType   int           // Type of channel
+	numSubChan int           // Number of subchannels
+	irqPending bool          // Channel has pending IRQ
+	subChans   [256]chanCtl  // Subchannel control
 	enabled    bool          // Channel enabled
 }
 
-var Irq_pending bool
+var IrqPending bool
 var Loading uint16 = NO_DEV
 
 const (

@@ -47,27 +47,26 @@ func InitializeCPU() {
 	cpu.stKey = 0
 	cpu.cc = 0
 	cpu.ilc = 0
-	cpu.pmask = 0
+	cpu.progMask = 0
 	cpu.flags = 0
-	cpu.per_mod = 0
-	cpu.per_addr = 0
-	cpu.per_code = 0
-	cpu.clk_cmp[0] = FMASK
-	cpu.clk_cmp[1] = FMASK
-	cpu.clk_state = false
-	cpu.timer_tics = 0
-	cpu.cpu_timer[0] = 0
-	cpu.cpu_timer[1] = 0
-	cpu.per_en = false
+	cpu.perRegMod = 0
+	cpu.perAddr = 0
+	cpu.perCode = 0
+	cpu.clkCmp[0] = FMASK
+	cpu.clkCmp[1] = FMASK
+	cpu.timerTics = 0
+	cpu.cpuTimer[0] = 0
+	cpu.cpuTimer[1] = 0
+	cpu.perEnb = false
 	cpu.ecMode = false
 	cpu.pageEnb = false
-	cpu.irq_en = false
-	cpu.ext_en = false
-	cpu.ext_irq = false
-	cpu.interval_irq = false
-	cpu.interval_en = false
-	cpu.tod_en = false
-	cpu.tod_irq = false
+	cpu.irqEnb = false
+	cpu.extEnb = false
+	cpu.extIrq = false
+	cpu.intIrq = false
+	cpu.intEnb = false
+	cpu.todEnb = false
+	cpu.todIrq = false
 	cpu.vmEnb = false
 
 	// Clear registers
@@ -93,7 +92,7 @@ func InitializeCPU() {
 	}
 
 	// Set clock to current time
-	if !cpu.tod_set {
+	if !cpu.todSet {
 		// Set TOD to current time
 		now := time.Now()
 		sec := now.Unix()
@@ -104,26 +103,26 @@ func InitializeCPU() {
 		sec *= 1000000
 		sec <<= 12
 		usec := uint64(sec)
-		cpu.tod_clock[0] = uint32((usec >> 32) & LMASKL)
-		cpu.tod_clock[1] = uint32(usec & LMASKL)
-		cpu.tod_set = true
+		cpu.todClock[0] = uint32((usec >> 32) & LMASKL)
+		cpu.todClock[1] = uint32(usec & LMASKL)
+		cpu.todSet = true
 	}
 
-	cpu.page_mask = 0
+	cpu.pageMask = 0
 }
 
 // Execute one instruction or take an interrupt
 func Cycle() int {
 	var err uint16
 	mem_cycle = 0
-	cpu.per_mod = 0
-	cpu.per_code = 0
-	cpu.per_addr = cpu.PC
+	cpu.perRegMod = 0
+	cpu.perCode = 0
+	cpu.perAddr = cpu.PC
 	cpu.iPC = cpu.PC
 	cpu.ilc = 0
 
 	// Check if we should see if an IRQ is pending
-	irq := sys_channel.Chan_scan(cpu.sysMask, cpu.irq_en)
+	irq := sys_channel.ChanScan(cpu.sysMask, cpu.irqEnb)
 	if irq != sys_channel.NO_DEV {
 		cpu.ilc = 0
 		if sys_channel.Loading != sys_channel.NO_DEV {
@@ -133,28 +132,28 @@ func Cycle() int {
 	}
 
 	// Check for external interrupts
-	if cpu.ext_en {
-		if cpu.ext_irq {
+	if cpu.extEnb {
+		if cpu.extIrq {
 			if !cpu.ecMode || (cpu.cregs[0]&0x20) != 0 ||
 				(cpu.cregs[6]&0x40) != 0 {
-				cpu.ext_irq = false
+				cpu.extIrq = false
 				cpu.suppress(OEPSW, 0x40)
 				return mem_cycle
 			}
 		}
 
-		if cpu.interval_irq && (cpu.cregs[0]&0x80) != 0 {
-			cpu.interval_irq = false
+		if cpu.intIrq && (cpu.cregs[0]&0x80) != 0 {
+			cpu.intIrq = false
 			cpu.suppress(OEPSW, 0x80)
 			return mem_cycle
 		}
-		if cpu.clk_irq && cpu.interval_en {
-			cpu.clk_irq = false
+		if cpu.clkIrq && cpu.intEnb {
+			cpu.clkIrq = false
 			cpu.suppress(OEPSW, 0x1005)
 			return mem_cycle
 		}
-		if cpu.tod_irq && cpu.tod_en {
-			cpu.tod_irq = false
+		if cpu.todIrq && cpu.todEnb {
+			cpu.todIrq = false
 			cpu.suppress(OEPSW, 0x1004)
 			return mem_cycle
 		}
@@ -163,7 +162,7 @@ func Cycle() int {
 	/* If we have wait flag or loading, nothing more to do */
 	if sys_channel.Loading != sys_channel.NO_DEV || (cpu.flags&WAIT) != 0 {
 		/* CPU IDLE */
-		if !cpu.irq_en && !cpu.ext_en {
+		if !cpu.irqEnb && !cpu.extEnb {
 			return mem_cycle
 		}
 	}
@@ -174,16 +173,8 @@ func Cycle() int {
 	}
 
 	// Check if triggered PER event.
-	if cpu.per_en && (cpu.cregs[9]&0x40000000) != 0 {
-		if cpu.cregs[10] <= cpu.cregs[11] {
-			if cpu.PC >= cpu.cregs[10] && cpu.PC <= cpu.cregs[11] {
-				cpu.per_code |= 0x4000
-			}
-		} else {
-			if cpu.PC >= cpu.cregs[11] || cpu.PC <= cpu.cregs[10] {
-				cpu.per_code |= 0x4000
-			}
-		}
+	if cpu.perEnb && cpu.perFetch {
+		cpu.perAddrCheck(cpu.PC, 0x4000)
 	}
 
 	var opr, t uint32
@@ -249,7 +240,7 @@ func Cycle() int {
 	}
 
 	// See if PER event happened
-	if cpu.per_en && cpu.per_code != 0 {
+	if cpu.perEnb && cpu.perCode != 0 {
 		cpu.suppress(OPPSW, 0)
 	}
 	return mem_cycle
@@ -354,8 +345,8 @@ func (cpu *CPU) execute(step *stepInfo) uint16 {
 
 	// Execute the instruction.
 	err = cpu.table[step.opcode](step)
-	if cpu.per_en && (cpu.cregs[9]&0x10000000) != 0 && (cpu.cregs[9]&0xffff&cpu.per_mod) != 0 {
-		cpu.per_code |= 0x1000
+	if cpu.perEnb && cpu.perReg && (cpu.cregs[9]&0xffff&cpu.perRegMod) != 0 {
+		cpu.perCode |= 0x1000
 	}
 
 	return err
@@ -447,7 +438,7 @@ func (cpu *CPU) transAddr(va uint32) (pa uint32, error uint16) {
 	}
 
 	// Extract page address is on
-	page := addr >> cpu.page_shift
+	page := addr >> cpu.pageShift
 
 	// Extract segment and move it into place.
 	seg := (page & 0x1f00) << 4
@@ -458,7 +449,7 @@ func (cpu *CPU) transAddr(va uint32) (pa uint32, error uint16) {
 	//* Quick check if TLB correct
 	entry = cpu.tlb[page]
 	if (entry&TLB_VALID) != 0 && ((entry^seg)&TLB_SEG) == 0 {
-		addr = (va & cpu.page_mask) | ((entry & TLB_PHY) << cpu.page_shift)
+		addr = (va & cpu.pageMask) | ((entry & TLB_PHY) << cpu.pageShift)
 		return addr, 0
 	}
 
@@ -467,11 +458,11 @@ func (cpu *CPU) transAddr(va uint32) (pa uint32, error uint16) {
 	cpu.tlb[page] = 0
 	// TLB not correct, try loading correct entry
 	// Segment and page number to word address
-	seg = (addr >> cpu.seg_shift) & cpu.seg_mask
-	page = (addr >> cpu.page_shift) & cpu.page_index
+	seg = (addr >> cpu.segShift) & cpu.segMask
+	page = (addr >> cpu.pageShift) & cpu.pageIndex
 
 	// Check address against length of segment table
-	if seg > cpu.seg_len {
+	if seg > cpu.segLen {
 		// segment above length of table,
 		// write failed address and 90, then trigger trap.
 		_ = memory.PutWord(0x90, va)
@@ -482,7 +473,7 @@ func (cpu *CPU) transAddr(va uint32) (pa uint32, error uint16) {
 
 	// Compute address of PTE table
 	// Get pointer to page table
-	addr = ((seg << 2) + cpu.seg_addr) & AMASK
+	addr = ((seg << 2) + cpu.segAddr) & AMASK
 
 	// Get entry on error throw trap.
 	mem_cycle++
@@ -495,7 +486,7 @@ func (cpu *CPU) transAddr(va uint32) (pa uint32, error uint16) {
 	addr = (entry >> 28) + 1
 
 	/* Check if entry valid and in correct length */
-	if (entry&PTE_VALID) != 0 || (page>>cpu.pte_len_shift) >= addr {
+	if (entry&PTE_VALID) != 0 || (page>>cpu.pteLenShift) >= addr {
 		mem_cycle++
 		memory.SetMemory(0x90, va)
 		cpu.PC = cpu.iPC
@@ -519,7 +510,7 @@ func (cpu *CPU) transAddr(va uint32) (pa uint32, error uint16) {
 	}
 	entry = entry & 0xffff
 
-	if (entry & cpu.pte_mbz) != 0 {
+	if (entry & cpu.pteMBZ) != 0 {
 		mem_cycle++
 		memory.SetMemory(0x90, va)
 		cpu.PC = cpu.iPC
@@ -527,7 +518,7 @@ func (cpu *CPU) transAddr(va uint32) (pa uint32, error uint16) {
 	}
 
 	// Check if entry valid and in correct length
-	if (entry & cpu.pte_avail) != 0 {
+	if (entry & cpu.pteAvail) != 0 {
 		mem_cycle++
 		memory.SetMemory(0x90, va)
 		cpu.PC = cpu.iPC
@@ -535,13 +526,13 @@ func (cpu *CPU) transAddr(va uint32) (pa uint32, error uint16) {
 	}
 
 	// Compute correct entry
-	entry = entry >> cpu.pte_shift // Move physical to correct spot
-	page = va >> cpu.page_shift
+	entry = entry >> cpu.pteShift // Move physical to correct spot
+	page = va >> cpu.pageShift
 	entry = entry | ((page & 0x1f00) << 4) | TLB_VALID
 	// Update TLB with new entry
 	cpu.tlb[page&0xff] = entry
 	// Compute physical address
-	addr = (va & cpu.page_mask) | (((entry & TLB_PHY) << cpu.page_shift) & AMASK)
+	addr = (va & cpu.pageMask) | (((entry & TLB_PHY) << cpu.pageShift) & AMASK)
 	return addr, 0
 }
 
@@ -552,7 +543,7 @@ func (cpu *CPU) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 	var word1, word2 uint32
 	irqaddr = vector + 0x40
 
-	if vector == OPPSW && cpu.per_en && cpu.per_code != 0 {
+	if vector == OPPSW && cpu.perEnb && cpu.perCode != 0 {
 		irqcode |= IRC_PER
 	}
 	if cpu.ecMode {
@@ -561,17 +552,17 @@ func (cpu *CPU) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 			(uint32(cpu.stKey) << 16) |
 			(uint32(cpu.flags) << 16) |
 			(uint32(cpu.cc) << 12) |
-			(uint32(cpu.pmask) << 8)
+			(uint32(cpu.progMask) << 8)
 		if cpu.pageEnb {
 			word1 |= 1 << 26
 		}
-		if cpu.per_en {
+		if cpu.perEnb {
 			word1 |= 1 << 30
 		}
-		if cpu.irq_en {
+		if cpu.irqEnb {
 			word1 |= 1 << 25
 		}
-		if cpu.ext_en {
+		if cpu.extEnb {
 			word1 |= 1 << 24
 		}
 
@@ -592,10 +583,9 @@ func (cpu *CPU) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 		}
 		if (irqcode & IRC_PER) != 0 {
 			mem_cycle++
-			memory.SetMemory(150, (cpu.per_code<<16)|(cpu.per_addr>>16))
+			memory.SetMemory(150, (uint32(cpu.perCode)<<16)|(cpu.perAddr>>16))
 			mem_cycle++
-			temp := memory.GetMemory(154)
-			memory.SetMemory(154, ((cpu.per_addr&0xffff)<<16)|(temp&0xffff))
+			memory.SetMemoryMask(154, (cpu.perAddr&0xffff)<<16, memory.UMASK)
 		}
 		// Generate second word.
 		word2 = cpu.PC
@@ -605,13 +595,13 @@ func (cpu *CPU) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 			(uint32(cpu.stKey) << 16) |
 			(uint32(cpu.flags) << 16) |
 			uint32(irqcode)
-		if cpu.ext_en {
+		if cpu.extEnb {
 			word1 |= 1 << 24
 		}
 		// Generate second word. */
 		word2 = (uint32(cpu.ilc) << 30) |
 			(uint32(cpu.cc) << 28) |
-			(uint32(cpu.pmask) << 24) |
+			(uint32(cpu.progMask) << 24) |
 			(cpu.PC & AMASK)
 	}
 	mem_cycle++
@@ -836,18 +826,22 @@ func (cpu *CPU) readByte(addr uint32) (uint32, uint16) {
 	return v, 0
 }
 
+func (cpu *CPU) perAddrCheck(addr uint32, code uint16) {
+	if cpu.cregs[10] <= cpu.cregs[11] {
+		if addr >= cpu.cregs[10] && addr <= cpu.cregs[11] {
+			cpu.perCode |= code
+		}
+	} else {
+		if addr >= cpu.cregs[11] || addr <= cpu.cregs[10] {
+			cpu.perCode |= code
+		}
+	}
+}
+
 // Check if address is in the range of PER modify range
 func (cpu *CPU) perCheck(addr uint32) {
-	if cpu.per_en && (cpu.cregs[9]&0x20000000) != 0 {
-		if cpu.cregs[10] <= cpu.cregs[11] {
-			if addr >= cpu.cregs[10] && addr <= cpu.cregs[11] {
-				cpu.per_code |= 0x2000
-			}
-		} else {
-			if addr >= cpu.cregs[11] || addr <= cpu.cregs[10] {
-				cpu.per_code |= 0x2000
-			}
-		}
+	if cpu.perEnb && cpu.perStore {
+		cpu.perAddrCheck(addr, 0x2000)
 	}
 }
 
@@ -1051,15 +1045,15 @@ func (cpu *CPU) suppress(code uint32, irc uint16) {
 // Load new processor status double word
 func (cpu *CPU) lpsw(src1, src2 uint32) {
 	cpu.ecMode = (src1 & 0x00080000) != 0
-	cpu.ext_en = (src1 & 0x01000000) != 0
+	cpu.extEnb = (src1 & 0x01000000) != 0
 
 	if cpu.ecMode {
-		cpu.irq_en = (src1 & 0x02000000) != 0
+		cpu.irqEnb = (src1 & 0x02000000) != 0
 		cpu.pageEnb = (src1 & 0x04000000) != 0
 		cpu.cc = uint8((src1 >> 12) & 0x3)
-		cpu.pmask = uint8((src1 >> 8) & 0xf)
-		cpu.per_en = (src1 & 0x40000000) != 0
-		if cpu.irq_en {
+		cpu.progMask = uint8((src1 >> 8) & 0xf)
+		cpu.perEnb = (src1 & 0x40000000) != 0
+		if cpu.irqEnb {
 			cpu.sysMask = uint16(cpu.cregs[2] >> 16)
 		} else {
 			cpu.sysMask = 0
@@ -1069,13 +1063,13 @@ func (cpu *CPU) lpsw(src1, src2 uint32) {
 		if (src1 & 0x2000000) != 0 {
 			cpu.sysMask |= uint16((cpu.cregs[2] >> 16) & 0x3ff)
 		}
-		cpu.irq_en = cpu.sysMask != 0
-		cpu.per_en = false
+		cpu.irqEnb = cpu.sysMask != 0
+		cpu.perEnb = false
 		cpu.cc = uint8((src2 >> 28) & 0x3)
-		cpu.pmask = uint8((src2 >> 24) & 0xf)
+		cpu.progMask = uint8((src2 >> 24) & 0xf)
 		cpu.pageEnb = false
 	}
-	sys_channel.Irq_pending = true
+	sys_channel.IrqPending = true
 	cpu.stKey = uint8((src1 >> 16) & 0xf0)
 	cpu.flags = uint8((src1 >> 16) & 0x7)
 	cpu.PC = src2 & AMASK
@@ -1095,7 +1089,7 @@ func (cpu *CPU) loadDouble(r uint8) uint64 {
 func (cpu *CPU) storeDouble(r uint8, v uint64) {
 	cpu.regs[r|1] = uint32(v & LMASKL)
 	cpu.regs[r] = uint32((v >> 32) & LMASKL)
-	cpu.per_mod |= 3 << r
+	cpu.perRegMod |= 3 << r
 }
 
 //

@@ -46,7 +46,7 @@ func (cpu *CPU) opFPHalf(step *stepInfo) uint16 {
 		}
 		// Check if underflow
 		if e1 < 0 {
-			if (cpu.pmask & EXPUNDER) != 0 {
+			if (cpu.progMask & EXPUNDER) != 0 {
 				return IRC_EXPUND
 			} else {
 				sign = false
@@ -274,7 +274,7 @@ func (cpu *CPU) opFPAdd(step *stepInfo) uint16 {
 				cpu.cc = 2
 			}
 		} else {
-			if (cpu.pmask & SIGMASK) == 0 {
+			if (cpu.progMask & SIGMASK) == 0 {
 				e1 = 0
 			}
 			s1 = false
@@ -287,7 +287,7 @@ func (cpu *CPU) opFPAdd(step *stepInfo) uint16 {
 				cpu.cc = 2
 			}
 		} else {
-			if (cpu.pmask & SIGMASK) == 0 {
+			if (cpu.progMask & SIGMASK) == 0 {
 				e1 = 0
 			}
 			r = 0
@@ -297,7 +297,7 @@ func (cpu *CPU) opFPAdd(step *stepInfo) uint16 {
 
 	var err uint16 = 0
 	// Check signifigance exceptions
-	if cpu.cc == 0 && (cpu.pmask&SIGMASK) != 0 {
+	if cpu.cc == 0 && (cpu.progMask&SIGMASK) != 0 {
 		err = IRC_SIGNIF
 	} else {
 		// Check if we are normalized addition
@@ -309,7 +309,7 @@ func (cpu *CPU) opFPAdd(step *stepInfo) uint16 {
 				}
 				// Check if underflow
 				if e1 < 0 {
-					if (cpu.pmask & EXPUNDER) != 0 {
+					if (cpu.progMask & EXPUNDER) != 0 {
 						return IRC_EXPUND
 					} else {
 						r = 0
@@ -482,7 +482,7 @@ func (cpu *CPU) opFPAddD(step *stepInfo) uint16 {
 				cpu.cc = 2
 			}
 		} else {
-			if (cpu.pmask & SIGMASK) == 0 {
+			if (cpu.progMask & SIGMASK) == 0 {
 				e1 = 0
 			}
 			s1 = false
@@ -495,7 +495,7 @@ func (cpu *CPU) opFPAddD(step *stepInfo) uint16 {
 				cpu.cc = 2
 			}
 		} else {
-			if (cpu.pmask & SIGMASK) == 0 {
+			if (cpu.progMask & SIGMASK) == 0 {
 				e1 = 0
 			}
 			r = 0
@@ -505,7 +505,7 @@ func (cpu *CPU) opFPAddD(step *stepInfo) uint16 {
 
 	var err uint16 = 0
 	// Check signifigance exceptions
-	if cpu.cc == 0 && (cpu.pmask&SIGMASK) != 0 {
+	if cpu.cc == 0 && (cpu.progMask&SIGMASK) != 0 {
 		err = IRC_SIGNIF
 	} else {
 		// Check if we are normalized addition
@@ -517,7 +517,7 @@ func (cpu *CPU) opFPAddD(step *stepInfo) uint16 {
 				}
 				// Check if underflow
 				if e1 < 0 {
-					if (cpu.pmask & EXPUNDER) != 0 {
+					if (cpu.progMask & EXPUNDER) != 0 {
 						return IRC_EXPUND
 					} else {
 						r = 0
@@ -608,7 +608,7 @@ func (cpu *CPU) opFPMul(step *stepInfo) uint16 {
 		} // Make 32 bit and create guard digit
 		// Check if underflow
 		if e1 < 0 {
-			if (cpu.pmask & EXPUNDER) != 0 {
+			if (cpu.progMask & EXPUNDER) != 0 {
 				err = IRC_EXPUND
 			} else {
 				r = 0
@@ -725,7 +725,7 @@ func (cpu *CPU) opFPDiv(step *stepInfo) uint16 {
 		} // Make 32 bit and create guard digit
 		// Check if underflow
 		if e1 < 0 {
-			if (cpu.pmask & EXPUNDER) != 0 {
+			if (cpu.progMask & EXPUNDER) != 0 {
 				err = IRC_EXPUND
 			} else {
 				r = 0
@@ -933,7 +933,7 @@ func (cpu *CPU) opAXR(step *stepInfo) uint16 {
 	}
 
 	// Check signifigance exception
-	if cpu.cc == 0 && (cpu.pmask&SIGMASK) != 0 {
+	if cpu.cc == 0 && (cpu.progMask&SIGMASK) != 0 {
 		cpu.fpregs[step.R1] = 0
 		cpu.fpregs[step.R1|2] = 0
 		return IRC_SIGNIF
@@ -950,7 +950,7 @@ func (cpu *CPU) opAXR(step *stepInfo) uint16 {
 		}
 		// Check if underflow
 		if e1 < 0 {
-			if (cpu.pmask & EXPUNDER) != 0 {
+			if (cpu.progMask & EXPUNDER) != 0 {
 				err = IRC_EXPUND
 			} else {
 				v1l = 0
@@ -1062,7 +1062,7 @@ func (cpu *CPU) opMXD(step *stepInfo) uint16 {
 		// Make 32 bit and create guard digit
 		// Check if underflow
 		if e1 < 0 {
-			if (cpu.pmask & EXPUNDER) != 0 {
+			if (cpu.progMask & EXPUNDER) != 0 {
 				err = IRC_EXPUND
 			} else {
 				r = 0

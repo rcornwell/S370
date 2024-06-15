@@ -37,20 +37,20 @@ type stepInfo struct {
 }
 
 type CPU struct {
-	PC      uint32      // Program counter
-	iPC     uint32      // Initial PC for instruction
-	regs    [16]uint32  // Internal registers
-	fpregs  [8]uint64   // Floating point registers
-	cregs   [16]uint32  // Control registers /67 or 370 only
-	sysMask uint16      // Channel interrupt enable
-	stKey   uint8       // Current storage key
-	ecMode  bool        // Current PSW is EC Mode
-	cc      uint8       // Current CC code
-	ilc     uint8       // Current instruction length
-	pmask   uint8       // Program mask
-	flags   uint8       // System flags
-	pageEnb bool        // Paging enabled
-	tlb     [256]uint32 // Translation Lookaside Buffer
+	PC       uint32      // Program counter
+	iPC      uint32      // Initial PC for instruction
+	regs     [16]uint32  // Internal registers
+	fpregs   [8]uint64   // Floating point registers
+	cregs    [16]uint32  // Control registers /67 or 370 only
+	sysMask  uint16      // Channel interrupt enable
+	stKey    uint8       // Current storage key
+	ecMode   bool        // Current PSW is EC Mode
+	cc       uint8       // Current CC code
+	ilc      uint8       // Current instruction length
+	progMask uint8       // Program mask
+	flags    uint8       // System flags
+	pageEnb  bool        // Paging enabled
+	tlb      [256]uint32 // Translation Lookaside Buffer
 
 	//  uint8        ext_en;                    // Enable external and timer IRQ's
 	//  uint8        irq_en;                    // Enable channel IRQ's
@@ -59,39 +59,44 @@ type CPU struct {
 
 	//  uint16       irqcode;                   // Interupt code
 
-	page_shift    uint32    // Amount to shift for page
-	page_mask     uint32    // Mask of bits in page address
-	page_index    uint32    // PTE index mask
-	seg_shift     uint32    // Amount to shift for segment
-	seg_mask      uint32    // Mask bits for segment
-	seg_len       uint32    // Length of segment table
-	pte_len_shift uint32    // Shift to Check if out out page table
-	seg_addr      uint32    // Address of segment table
-	pte_avail     uint32    // Mask of available bit in PTE
-	pte_mbz       uint32    // Bits that must be zero in PTE
-	pte_shift     uint32    // Bits to shift a PTE entry
-	per_en        bool      // Enable PER tracing
-	per_mod       uint32    // Module modification mask
-	per_code      uint32    // Code for PER
-	per_addr      uint32    // Address of last reference
-	irq_en        bool      // Interrupts enabled
-	ext_en        bool      // External interrupts enabled
-	ext_irq       bool      // External interrupt pending
-	interval_irq  bool      // Interval timer interrupt
-	interval_en   bool      // Interval timer enable
-	tod_clock     [2]uint32 // Current Time of Day Clock
-	tod_set       bool      // TOD set to correct time
-	clk_cmp       [2]uint32 // Clock compare value
-	cpu_timer     [2]uint32 // CPU timer value
-	clk_irq       bool      // Clock compare IRQ
+	pageShift uint32 // Amount to shift for page
+	pageMask  uint32 // Mask of bits in page address
+	pageIndex uint32 // PTE index mask
+	segShift  uint32 // Amount to shift for segment
+	segMask   uint32 // Mask bits for segment
+	segLen    uint32 // Length of segment table
+
+	segAddr     uint32    // Address of segment table
+	pteLenShift uint32    // Shift to Check if out out page table
+	pteAvail    uint32    // Mask of available bit in PTE
+	pteMBZ      uint32    // Bits that must be zero in PTE
+	pteShift    uint32    // Bits to shift a PTE entry
+	perEnb      bool      // Enable PER tracing
+	perRegMod   uint32    // Module modification mask
+	perCode     uint16    // Code for PER
+	perAddr     uint32    // Address of last reference
+	perBranch   bool      // Trap on sucessful branch
+	perFetch    bool      // Trap Fetch of instructions
+	perStore    bool      // Trap on storage modify
+	perReg      bool      // Trap on register modify
+	irqEnb      bool      // Interrupts enabled
+	extEnb      bool      // External interrupts enabled
+	extIrq      bool      // External interrupt pending
+	intIrq      bool      // Interval timer interrupt
+	intEnb      bool      // Interval timer enable
+	todClock    [2]uint32 // Current Time of Day Clock
+	todSet      bool      // TOD set to correct time
+
 	//	clk_en        bool      // Clock interrupt enable
-	tod_en     bool // TOD enable
-	tod_irq    bool // TOD compare IRQ
-	clk_state  bool // Clock set/unset.
-	vmAssist   bool // VM Assist functions enabled.
-	vmEnb      bool // VM Assist enabled.
-	timer_tics int  // Interval Timer is ever 3 tics
-	table      [256]func(*stepInfo) uint16
+	todEnb    bool      // TOD enable
+	todIrq    bool      // TOD compare IRQ
+	clkCmp    [2]uint32 // Clock compare value
+	clkIrq    bool      // Clock compare IRQ
+	cpuTimer  [2]uint32 // CPU timer value
+	timerTics int       // Interval Timer is ever 3 tics
+	vmAssist  bool      // VM Assist functions enabled.
+	vmEnb     bool      // VM Assist enabled.
+	table     [256]func(*stepInfo) uint16
 }
 
 const (
