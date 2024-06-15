@@ -39,7 +39,7 @@ type stepInfo struct {
 type CPU struct {
 	PC      uint32      // Program counter
 	iPC     uint32      // Initial PC for instruction
-	regs    [16]uint32  // Internal registers
+	regs    [16]uint32  //  registers
 	fpregs  [8]uint64   // Floating point registers
 	cregs   [16]uint32  // Control registers /67 or 370 only
 	sysMask uint16      // Channel interrupt enable

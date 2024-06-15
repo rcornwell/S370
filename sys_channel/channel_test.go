@@ -28,8 +28,8 @@ package sys_channel
 import (
 	"testing"
 
-	Ev "github.com/rcornwell/S370/internal/event"
-	M "github.com/rcornwell/S370/internal/memory"
+	Ev "github.com/rcornwell/S370/event"
+	M "github.com/rcornwell/S370/memory"
 )
 
 func setup(dev_num uint16) *Test_dev {

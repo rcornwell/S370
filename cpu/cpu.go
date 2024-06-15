@@ -26,8 +26,8 @@ package cpu
 import (
 	"time"
 
-	"github.com/rcornwell/S370/internal/memory"
-	"github.com/rcornwell/S370/internal/sys_channel"
+	"github.com/rcornwell/S370/memory"
+	"github.com/rcornwell/S370/sys_channel"
 )
 
 var cpu CPU

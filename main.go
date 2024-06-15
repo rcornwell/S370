@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	CPU "github.com/rcornwell/S370/internal/cpu"
+	CPU "github.com/rcornwell/S370/cpu"
 )
 
 func main() {

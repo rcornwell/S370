@@ -24,8 +24,8 @@ package sys_channel
 */
 
 import (
-	D "github.com/rcornwell/S370/internal/device"
-	M "github.com/rcornwell/S370/internal/memory"
+	D "github.com/rcornwell/S370/device"
+	M "github.com/rcornwell/S370/memory"
 )
 
 var ch_unit [MAX_CHAN]chan_unit // Hold infomation about channels

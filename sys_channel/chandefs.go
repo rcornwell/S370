@@ -26,7 +26,7 @@ package sys_channel
  */
 
 import (
-	D "github.com/rcornwell/S370/internal/device"
+	D "github.com/rcornwell/S370/device"
 )
 
 type chan_ctl struct { // Channel control structure

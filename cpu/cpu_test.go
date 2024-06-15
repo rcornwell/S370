@@ -30,7 +30,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/rcornwell/S370/internal/memory"
+	"github.com/rcornwell/S370/memory"
 )
 
 const testCycles int = 100
