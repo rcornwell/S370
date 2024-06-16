@@ -779,7 +779,7 @@ func (cpu *CPU) readHalf(addr uint32) (uint32, uint16) {
 			return 0, IRC_ADDR
 		} else {
 			v = (v & 0xff) << 8
-			v |= v2 & 0xff
+			v |= (v2 >> 24) & 0xff
 		}
 	}
 

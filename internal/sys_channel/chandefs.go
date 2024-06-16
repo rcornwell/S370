@@ -113,7 +113,7 @@ const (
 	CMD_RDBWD uint8 = 0xc // Read backward
 
 	STATUS_ATTN   uint16 = 0x8000 // Device raised attention
-	STATUS_MOD    uint16 = 0x4000 // Status modifier
+	STATUS_SMS    uint16 = 0x4000 // Status modifier
 	STATUS_CTLEND uint16 = 0x2000 // Control end
 	STATUS_BUSY   uint16 = 0x1000 // Device busy
 	STATUS_CEND   uint16 = 0x0800 // Channel end

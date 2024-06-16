@@ -37,6 +37,7 @@ type Test_dev struct {
 	count int        // Pointer to input/output
 	max   int        // Maximum size of date
 	sense uint8      // Current sense byte
+	sms   bool       // Return SMS at end of command
 }
 
 //  /*
@@ -79,18 +80,20 @@ func (d *Test_dev) StartCmd(cmd uint8) uint8 {
 		d.cmd = cmd
 		d.count = 0
 		switch cmd {
-		case 0x3: // Nop
+		case 0x03: // Nop
 			r = SNS_CHNEND | SNS_DEVEND
-		case 0x1b: // Grab a data byte {
+			d.cmd = 0
+		case 0x0b: // Grab a data byte
 		case 0x13: // Issue channel end
 			r = SNS_CHNEND
 			Ev.AddEvent(d, d.callback, 10, 1)
 		default:
+			d.cmd = 0
 			d.sense = SNS_CMDREJ
 		}
 	case 4: // Sense
 		d.cmd = cmd
-		if cmd == 0xc { // Read backward
+		if cmd == 0x0c { // Read backward
 			d.sense = 0
 			d.count = 0
 		} else if cmd == 0x4 { // Sense
@@ -106,7 +109,7 @@ func (d *Test_dev) StartCmd(cmd uint8) uint8 {
 
 	if d.sense != 0 {
 		r = SNS_CHNEND | SNS_DEVEND | SNS_UNITCHK
-	} else if cmd != 0 && (r&SNS_CHNEND) == 0 {
+	} else if (r & SNS_CHNEND) == 0 {
 		Ev.AddEvent(d, d.callback, 10, 1)
 	}
 	return r
@@ -130,6 +133,7 @@ func (d *Test_dev) InitDev() uint8 {
 	d.count = 0
 	d.max = 0
 	d.sense = 0
+	d.sms = false
 	return 0
 }
 
@@ -139,43 +143,62 @@ func (d *Test_dev) callback(iarg int) {
 	var e bool
 
 	switch d.cmd {
-	case 0x1: // Write
-		if d.count >= d.max {
+	case 0x01: // Write
+		r := SNS_CHNEND | SNS_DEVEND
+		if d.sms {
+			r |= SNS_SMS
+		}
+		if d.count > d.max {
 			d.cmd = 0
-			ChanEnd(d.addr, SNS_DEVEND)
+			d.sms = false
+			ChanEnd(d.addr, r)
 			return
 		}
-		if v, e = ChanReadByte(d.addr); e {
+		v, e = ChanReadByte(d.addr)
+		if e {
+			d.data[d.count] = v
+			d.count++
 			d.cmd = 0
-			ChanEnd(d.addr, SNS_DEVEND)
+			d.sms = false
+			ChanEnd(d.addr, r)
 			return
 		}
 		d.data[d.count] = v
 		d.count++
 		Ev.AddEvent(d, d.callback, 10, 1)
-	case 0x02, 0xc: // Read and Read backwards
+	case 0x02, 0x0c: // Read and Read backwards
+		r := SNS_CHNEND | SNS_DEVEND
+		if d.sms {
+			r |= SNS_SMS
+		}
 		if d.count >= d.max {
 			d.cmd = 0
-			ChanEnd(d.addr, SNS_DEVEND)
+			d.sms = false
+			ChanEnd(d.addr, r)
 			return
 		}
 		if ChanWriteByte(d.addr, d.data[d.count]) {
 			d.cmd = 0
-			ChanEnd(d.addr, SNS_DEVEND|SNS_UNITEXP)
+			d.sms = false
+			ChanEnd(d.addr, r)
 		} else {
 			d.count++
 			Ev.AddEvent(d, d.callback, 10, 1)
 		}
-	case 0x4:
+	case 0x0b:
+		d.cmd = 0x13
+		d.data[0], _ = ChanReadByte(d.addr)
+		ChanEnd(d.addr, SNS_CHNEND)
+		Ev.AddEvent(d, d.callback, 10, 1)
+	case 0x04:
+		d.cmd = 0
 		if ChanWriteByte(d.addr, d.sense) {
-			d.cmd = 0
-			ChanEnd(d.addr, SNS_DEVEND|SNS_UNITEXP)
+			ChanEnd(d.addr, SNS_CHNEND|SNS_DEVEND|SNS_UNITEXP)
 		} else {
-			d.cmd = 0
-			ChanEnd(d.addr, SNS_DEVEND)
+			ChanEnd(d.addr, SNS_CHNEND|SNS_DEVEND)
 		}
 	case 0x13: // Return channel end
 		d.cmd = 0
-		ChanEnd(d.addr, SNS_DEVEND)
+		SetDevAttn(d.addr, SNS_DEVEND)
 	}
 }

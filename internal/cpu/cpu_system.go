@@ -767,7 +767,7 @@ func (cpu *CPU) opHIO(step *stepInfo) uint16 {
 	if (cpu.flags & PROBLEM) != 0 {
 		return IRC_PRIV
 	}
-	cpu.cc = sys_channel.HaltioIO(uint16(step.address1 & 0xfff))
+	cpu.cc = sys_channel.HaltIO(uint16(step.address1 & 0xfff))
 	return 0
 }
 
