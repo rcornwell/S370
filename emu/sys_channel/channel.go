@@ -24,8 +24,8 @@ package sys_channel
 */
 
 import (
-	D "github.com/rcornwell/S370/internal/device"
-	M "github.com/rcornwell/S370/internal/memory"
+	D "github.com/rcornwell/S370/emu/device"
+	M "github.com/rcornwell/S370/emu/memory"
 )
 
 var chanUnit [MAX_CHAN]chanDev // Hold infomation about channels
@@ -130,13 +130,36 @@ func StartIO(devNum uint16) uint8 {
 
 	// If channel returned busy save CSW and return CC = 1
 	if (sc.chanStatus & STATUS_BUSY) != 0 {
-		M.SetMemory(0x40, 0)
-		M.SetMemory(0x44, uint32(sc.chanStatus)<<16)
+		M.SetMemoryMask(0x44, uint32(sc.chanStatus)<<16, M.UMASK)
 		sc.chanStatus = 0
 		sc.ccwCmd = 0
 		sc.devAddr = NO_DEV
 		sc.dev = nil
 		cu.devStatus[d] = 0
+		return 1
+	}
+
+	// If immediate command and not command chainting
+	if (sc.chanStatus&STATUS_CEND) != 0 && (sc.ccwFlags&FLAG_CC) == 0 {
+		// If we also have data end write out fill CSW and mark subchannel free
+
+		if (sc.chanStatus & STATUS_DEND) != 0 {
+			storeCSW(sc)
+		} else {
+			M.SetMemoryMask(0x44, uint32(sc.chanStatus)<<16, M.UMASK)
+		}
+		sc.ccwCmd = 0
+		sc.devAddr = NO_DEV
+		sc.dev = nil
+		cu.devStatus[d] = 0
+		sc.chanStatus = 0
+
+		return 1
+	}
+
+	// If immediate command and chaining report status, but don't clear things
+	if (sc.chanStatus&(STATUS_CEND|STATUS_DEND)) == STATUS_CEND && (sc.ccwFlags&FLAG_CC) != 0 {
+		M.SetMemoryMask(0x44, uint32(sc.chanStatus)<<16, M.UMASK)
 		return 1
 	}
 
@@ -578,9 +601,9 @@ func SetDevAttn(devNum uint16, flags uint8) {
 		ch.chanStatus |= uint16(flags) << 8
 		ch.ccwCmd = 0
 	} else {
-		cu := &chanUnit[(devNum>>8)&0xf]
 		// Check if Device is currently on channel
-		if ch.devAddr == devNum && (ch.chanStatus&STATUS_CEND) != 0 && (flags&SNS_DEVEND) != 0 {
+		if ch.devAddr == devNum && (flags&SNS_DEVEND) != 0 &&
+			((ch.chanStatus&STATUS_CEND) != 0 || ch.ccwCmd != 0) {
 			ch.chanStatus |= uint16(flags) << 8
 			ch.ccwCmd = 0
 		} else { // Device reporting status change
@@ -648,19 +671,17 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 				_ = loadCCW(cu, sc, true)
 			}
 
-			// Grab another command if command chaining in effect
-			if (sc.ccwFlags & FLAG_CC) != 0 {
-				// If channel end, check if we should continue
-				if (sc.chanStatus & STATUS_DEND) != 0 {
+			if (sc.chanStatus & STATUS_DEND) != 0 {
+				// Grab another command if command chaining in effect
+				if (sc.ccwFlags & FLAG_CC) != 0 {
+					// If channel end, check if we should continue
 					_ = loadCCW(cu, sc, true)
-				} else {
-					IrqPending = true
-				}
-			} else if irqEnb || Loading != NO_DEV {
-				// Disconnect from device
-				if (imask&mask) != 0 || Loading != NO_DEV {
-					pendDev = sc.devAddr
-					break
+				} else if irqEnb || Loading != NO_DEV {
+					// Disconnect from device
+					if (imask&mask) != 0 || Loading != NO_DEV {
+						pendDev = sc.devAddr
+						break
+					}
 				}
 			}
 		}
@@ -702,7 +723,7 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 					if cu.devStatus[j] != 0 {
 						cu.irqPending = true
 						IrqPending = true
-						M.SetMemory(0x44, uint32(cu.devStatus[j])<<16)
+						M.SetMemory(0x44, uint32(cu.devStatus[j])<<24)
 						M.SetMemory(0x40, 0)
 						cu.devStatus[j] = 0
 						return uint16((i << 8)) | uint16(j)
@@ -926,7 +947,7 @@ loop:
 		sc.caw &= M.AMASK
 
 		// TIC can't follow TIC nor bt first in chain
-		cmd := uint8((word >> 24) & 0xf)
+		cmd := uint8((word >> 24) & 0xff)
 		if cmd == CMD_TIC {
 			// Pretend to fetch next word.
 			sc.caw += 4
@@ -1023,14 +1044,10 @@ loop:
 			return true
 		}
 
-		// Check if meediate channel end
+		// Check if immediate channel end
 		if (sc.chanStatus & STATUS_CEND) != 0 {
 			sc.ccwFlags |= FLAG_SLI // Force SLI for immediate command
 			if (sc.chanStatus & STATUS_DEND) != 0 {
-				// If we are not chaining, save status.
-				//			if (sc.ccw_flags & FLAG_CC) != 0 {
-				//				cu.dev_status[sc.daddr&0xff] = uint8((sc.chan_status >> 8) & 0xff)
-				//			}
 				sc.ccwCmd = 0
 				cu.irqPending = true
 				IrqPending = true

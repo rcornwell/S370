@@ -26,7 +26,7 @@ package sys_channel
  */
 
 import (
-	Ev "github.com/rcornwell/S370/internal/event"
+	Ev "github.com/rcornwell/S370/emu/event"
 )
 
 type Test_dev struct {

@@ -28,8 +28,8 @@ package sys_channel
 import (
 	"testing"
 
-	Ev "github.com/rcornwell/S370/internal/event"
-	M "github.com/rcornwell/S370/internal/memory"
+	Ev "github.com/rcornwell/S370/emu/event"
+	M "github.com/rcornwell/S370/emu/memory"
 )
 
 func setup(devNum uint16) *Test_dev {
@@ -286,14 +286,10 @@ func TestStartIONop(t *testing.T) {
 	}
 
 	cc := StartIO(0x00f)
-	if cc != 0 {
-		t.Errorf("Start I/O nop expected %d got: %d", 0, cc)
+	if cc != 1 {
+		t.Errorf("Start I/O nop expected %d got: %d", 1, cc)
 	}
 
-	dev := runChannel()
-	if dev != 0xf {
-		t.Errorf("Start I/O nop expected %d got: %d", 0xf, dev)
-	}
 	v = M.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O nop CSW1 expected %08x got: %08x", 0x00000508, v)
@@ -357,22 +353,30 @@ func TestStartIOCEOnly(t *testing.T) {
 	}
 
 	cc := StartIO(0x00f)
-	if cc != 0 {
-		t.Errorf("Start I/O ce only expected %d got: %d", 0, cc)
+	if cc != 1 {
+		t.Errorf("Start I/O ce only expected %d got: %d", 1, cc)
 	}
 
+	v = M.GetMemory(0x40)
+	if v != 0xffffffff {
+		t.Errorf("Start I/O ce only Initial CSW1 expected %08x got: %08x", 0xffffffff, v)
+	}
+	v = M.GetMemory(0x44)
+	if v != 0x0800ffff {
+		t.Errorf("Start I/O ce only Initial CSW2 expected %08x got: %08x", 0x0800ffff, v)
+	}
 	dev := runChannel()
 
 	if dev != 0xf {
 		t.Errorf("Start I/O ce only expected %d got: %d", 0xf, dev)
 	}
 	v = M.GetMemory(0x40)
-	if v != 0x00000508 {
-		t.Errorf("Start I/O ce only CSW1 expected %08x got: %08x", 0x00000508, v)
+	if v != 0x00000000 {
+		t.Errorf("Start I/O ce only CSW1 expected %08x got: %08x", 0x00000000, v)
 	}
 	v = M.GetMemory(0x44)
-	if v != 0x0c000001 {
-		t.Errorf("Start I/O ce only CSW2 expected %08x got: %08x", 0x0c000001, v)
+	if v != 0x04000000 {
+		t.Errorf("Start I/O ce only CSW2 expected %08x got: %08x", 0x04000000, v)
 	}
 	v = M.GetMemory(0x600)
 	if v != 0x55555555 {
@@ -399,8 +403,17 @@ func TestStartIOCCNop(t *testing.T) {
 	}
 
 	cc := StartIO(0x00f)
-	if cc != 0 {
-		t.Errorf("Start I/O ce only expected %d got: %d", 0, cc)
+	if cc != 1 {
+		t.Errorf("Start I/O ce only expected %d got: %d", 1, cc)
+	}
+
+	v = M.GetMemory(0x40)
+	if v != 0xffffffff {
+		t.Errorf("Start I/O ce only Initial CSW1 expected %08x got: %08x", 0xffffffff, v)
+	}
+	v = M.GetMemory(0x44)
+	if v != 0x0800ffff {
+		t.Errorf("Start I/O ce only Initial CSW2 expected %08x got: %08x", 0x0800ffff, v)
 	}
 
 	dev := runChannel()
