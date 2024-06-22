@@ -1,5 +1,3 @@
-package cpu
-
 /* CPU definitions for IBM 370 simulator definitions
 
    Copyright (c) 2024, Richard Cornwell
@@ -23,76 +21,117 @@ package cpu
 
 */
 
+package cpu
+
 import (
 	"time"
 
-	"github.com/rcornwell/S370/internal/memory"
-	"github.com/rcornwell/S370/internal/sys_channel"
+	"github.com/rcornwell/S370/emu/memory"
+	"github.com/rcornwell/S370/emu/sys_channel"
 )
 
-var cpu CPU
+/*
+   Introduced by IBM on Jun 30th, 1970. The IBM370 was an upgrade to the
+   IBM 360, it added many new instruction and Dynamic Address Translation.
+
+   The IBM 370 supported 32 bit memory and 16 32 bit registers. Optionally
+   it could have 4 64 bit floating point registers. Optionally the machine
+   could also process packed decimal numbers directly. There was also a
+   64 bit processor status word. Up to 16MB of memory could be supported.
+
+   Instructions ranged from 2 bytes to up to 6 bytes. In the following formats:
+   Address are a 12 bit offset and one or two index registers. Index register
+   0 results in a zero value.
+
+    RR format:  (Register to Register).
+
+      +----+----+----+----+
+      |   op    | R1 | R2 |
+      +----+----+----+----+
+       * R1 could be register or 4 bit mask.
+
+    RX format:  (Memory to Register).
+      +----+----+----+----+----+----+----+----+
+      |   op    | R1 | B2 | D2 |   Offset2    |
+      +----+----+----+----+----+----+----+----+
+
+    RS format:  (Memory to Register).
+      +----+----+----+----+----+----+----+----+
+      |   op    | R1 | R3 | D2 |   Offset2    |
+      +----+----+----+----+----+----+----+----+
+       * R3 could be register or 4 bit mask.
+
+    SI format:  (Immediate to Memory).
+      +----+----+----+----+----+----+----+----+
+      |   op    |  Immed  | D1 |   Offset1    |
+      +----+----+----+----+----+----+----+----+
+
+    SS format:  (Memory to Memory).
+      +----+----+----+----+----+----+----+----+----+----+----+----+
+      |   op    |  Length | D1 |   Offset1    | D2 |   Offset2    |
+      +----+----+----+----+----+----+----+----+----+----+----+----+
+        * Length could be either 1 byte or to 4 bit lengths.
+
+*/
+
+var cpuState cpu
 
 var mem_cycle int
 
-// Return pointer to CPU variable
-func New() *CPU {
-	return &cpu
-}
-
 // Initialize CPU to basic state
 func InitializeCPU() {
-	cpu.createTable()
-	cpu.PC = 0
-	cpu.sysMask = 0
-	cpu.stKey = 0
-	cpu.cc = 0
-	cpu.ilc = 0
-	cpu.progMask = 0
-	cpu.flags = 0
-	cpu.perRegMod = 0
-	cpu.perAddr = 0
-	cpu.perCode = 0
-	cpu.clkCmp[0] = FMASK
-	cpu.clkCmp[1] = FMASK
-	cpu.timerTics = 0
-	cpu.cpuTimer[0] = 0
-	cpu.cpuTimer[1] = 0
-	cpu.perEnb = false
-	cpu.ecMode = false
-	cpu.pageEnb = false
-	cpu.irqEnb = false
-	cpu.extEnb = false
-	cpu.extIrq = false
-	cpu.intIrq = false
-	cpu.intEnb = false
-	cpu.todEnb = false
-	cpu.todIrq = false
-	cpu.vmEnb = false
+	cpuState.createTable()
+	cpuState.PC = 0
+	cpuState.sysMask = 0
+	cpuState.stKey = 0
+	cpuState.cc = 0
+	cpuState.ilc = 0
+	cpuState.progMask = 0
+	cpuState.flags = 0
+	cpuState.perRegMod = 0
+	cpuState.perAddr = 0
+	cpuState.perCode = 0
+	cpuState.clkCmp[0] = FMASK
+	cpuState.clkCmp[1] = FMASK
+	cpuState.timerTics = 0
+	cpuState.cpuTimer[0] = 0
+	cpuState.cpuTimer[1] = 0
+	cpuState.perEnb = false
+	cpuState.ecMode = false
+	cpuState.pageEnb = false
+	cpuState.irqEnb = false
+	cpuState.extEnb = false
+	cpuState.extIrq = false
+	cpuState.intIrq = false
+	cpuState.intEnb = false
+	cpuState.todEnb = false
+	cpuState.todIrq = false
+	cpuState.vmEnb = false
 
 	// Clear registers
 	for i := range 16 {
-		cpu.regs[i] = 0
-		cpu.cregs[i] = 0
+		cpuState.regs[i] = 0
+		cpuState.cregs[i] = 0
 	}
 
 	// Initialize Control regisers to default
-	cpu.cregs[0] = 0x000000e0
-	cpu.cregs[2] = 0xffffffff
-	cpu.cregs[14] = 0xc2000000
-	cpu.cregs[15] = 512
+	cpuState.cregs[0] = 0x000000e0
+	cpuState.cregs[2] = 0xffffffff
+	cpuState.cregs[14] = 0xc2000000
+	cpuState.cregs[15] = 512
 
 	// Clear floating point registers
 	for i := range 8 {
-		cpu.fpregs[i] = 0
+		cpuState.fpregs[i] = 0
 	}
 
 	// Clear TBL tables
 	for i := range 256 {
-		cpu.tlb[i] = 0
+		cpuState.tlb[i] = 0
 	}
 
 	// Set clock to current time
-	if !cpu.todSet {
+	if !cpuState.todSet {
 		// Set TOD to current time
 		now := time.Now()
 		sec := now.Unix()
@@ -103,111 +142,111 @@ func InitializeCPU() {
 		sec *= 1000000
 		sec <<= 12
 		usec := uint64(sec)
-		cpu.todClock[0] = uint32((usec >> 32) & LMASKL)
-		cpu.todClock[1] = uint32(usec & LMASKL)
-		cpu.todSet = true
+		cpuState.todClock[0] = uint32((usec >> 32) & LMASKL)
+		cpuState.todClock[1] = uint32(usec & LMASKL)
+		cpuState.todSet = true
 	}
 
-	cpu.pageMask = 0
+	cpuState.pageMask = 0
 }
 
 // Execute one instruction or take an interrupt
-func Cycle() int {
+func CycleCPU() int {
 	var err uint16
 	mem_cycle = 0
-	cpu.perRegMod = 0
-	cpu.perCode = 0
-	cpu.perAddr = cpu.PC
-	cpu.iPC = cpu.PC
-	cpu.ilc = 0
 
 	// Check if we should see if an IRQ is pending
-	irq := sys_channel.ChanScan(cpu.sysMask, cpu.irqEnb)
+	irq := sys_channel.ChanScan(cpuState.sysMask, cpuState.irqEnb)
 	if irq != sys_channel.NO_DEV {
-		cpu.ilc = 0
-		if sys_channel.Loading != sys_channel.NO_DEV {
-			cpu.suppress(OIOPSW, irq)
+		cpuState.ilc = 0
+		if sys_channel.Loading == sys_channel.NO_DEV {
+			cpuState.suppress(OIOPSW, irq)
 		}
 		return mem_cycle
 	}
 
 	// Check for external interrupts
-	if cpu.extEnb {
-		if cpu.extIrq {
-			if !cpu.ecMode || (cpu.cregs[0]&0x20) != 0 ||
-				(cpu.cregs[6]&0x40) != 0 {
-				cpu.extIrq = false
-				cpu.suppress(OEPSW, 0x40)
+	if cpuState.extEnb {
+		if cpuState.extIrq {
+			if !cpuState.ecMode || (cpuState.cregs[0]&0x20) != 0 ||
+				(cpuState.cregs[6]&0x40) != 0 {
+				cpuState.extIrq = false
+				cpuState.suppress(OEPSW, 0x40)
 				return mem_cycle
 			}
 		}
 
-		if cpu.intIrq && (cpu.cregs[0]&0x80) != 0 {
-			cpu.intIrq = false
-			cpu.suppress(OEPSW, 0x80)
+		if cpuState.intIrq && (cpuState.cregs[0]&0x80) != 0 {
+			cpuState.intIrq = false
+			cpuState.suppress(OEPSW, 0x80)
 			return mem_cycle
 		}
-		if cpu.clkIrq && cpu.intEnb {
-			cpu.clkIrq = false
-			cpu.suppress(OEPSW, 0x1005)
+		if cpuState.clkIrq && cpuState.intEnb {
+			cpuState.clkIrq = false
+			cpuState.suppress(OEPSW, 0x1005)
 			return mem_cycle
 		}
-		if cpu.todIrq && cpu.todEnb {
-			cpu.todIrq = false
-			cpu.suppress(OEPSW, 0x1004)
+		if cpuState.todIrq && cpuState.todEnb {
+			cpuState.todIrq = false
+			cpuState.suppress(OEPSW, 0x1004)
 			return mem_cycle
 		}
 	}
 
 	/* If we have wait flag or loading, nothing more to do */
-	if sys_channel.Loading != sys_channel.NO_DEV || (cpu.flags&WAIT) != 0 {
+	if sys_channel.Loading != sys_channel.NO_DEV || (cpuState.flags&WAIT) != 0 {
 		/* CPU IDLE */
-		if !cpu.irqEnb && !cpu.extEnb {
+		if !cpuState.irqEnb && !cpuState.extEnb {
 			return mem_cycle
 		}
+		return mem_cycle
 	}
 
-	if (cpu.PC & 1) != 0 {
-		cpu.suppress(OPPSW, IRC_SPEC)
+	if (cpuState.PC & 1) != 0 {
+		cpuState.suppress(OPPSW, IRC_SPEC)
 		return mem_cycle
 	}
 
 	// Check if triggered PER event.
-	if cpu.perEnb && cpu.perFetch {
-		cpu.perAddrCheck(cpu.PC, 0x4000)
+	if cpuState.perEnb && cpuState.perFetch {
+		cpuState.perAddrCheck(cpuState.PC, 0x4000)
 	}
 
 	var opr, t uint32
 	var step stepInfo
 
 	// Fetch the next instruction
-	t, err = cpu.readFull(cpu.PC & ^uint32(0x2))
+	t, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
 	if err != 0 {
-		cpu.suppress(OPPSW, err)
+		cpuState.suppress(OPPSW, err)
 		return mem_cycle
 	}
 
 	// Save instruction
-	if (cpu.PC & 2) == 0 {
+	if (cpuState.PC & 2) == 0 {
 		opr = (t >> 16) & 0xffff
 	} else {
 		opr = t & 0xffff
 	}
-	cpu.ilc++
+	cpuState.perRegMod = 0
+	cpuState.perCode = 0
+	cpuState.perAddr = cpuState.PC
+	cpuState.iPC = cpuState.PC
+	cpuState.ilc = 1
 	step.opcode = uint8((opr >> 8) & 0xff)
 	step.reg = uint8(opr & 0xff)
 	step.R1 = (step.reg >> 4) & 0xf
 	step.R2 = step.reg & 0xf
-	cpu.PC += 2
+	cpuState.PC += 2
 
 	// Check type of instruction
 	if (step.opcode & 0xc0) != 0 {
 		// Check if we need new word
-		cpu.ilc++
-		if (cpu.PC & 2) == 0 {
-			t, err = cpu.readFull(cpu.PC & ^uint32(0x2))
+		cpuState.ilc++
+		if (cpuState.PC & 2) == 0 {
+			t, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
 			if err != 0 {
-				cpu.suppress(OPPSW, err)
+				cpuState.suppress(OPPSW, err)
 				return mem_cycle
 			}
 			step.address1 = (t >> 16)
@@ -215,14 +254,14 @@ func Cycle() int {
 			step.address1 = t
 		}
 		step.address1 &= 0xffff
-		cpu.PC += 2
+		cpuState.PC += 2
 		// SI instruction
 		if (step.opcode & 0xc0) == 0xc0 {
-			cpu.ilc++
-			if (cpu.PC & 2) != 0 {
-				t, err = cpu.readFull(cpu.PC & ^uint32(0x2))
+			cpuState.ilc++
+			if (cpuState.PC & 2) != 0 {
+				t, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
 				if err != 0 {
-					cpu.suppress(OPPSW, err)
+					cpuState.suppress(OPPSW, err)
 					return mem_cycle
 				}
 				step.address2 = (t >> 16)
@@ -230,18 +269,18 @@ func Cycle() int {
 				step.address2 = t
 			}
 			step.address2 &= 0xffff
-			cpu.PC += 2
+			cpuState.PC += 2
 		}
 	}
 
-	err = cpu.execute(&step)
+	err = cpuState.execute(&step)
 	if err != 0 {
-		cpu.suppress(OPPSW, err)
+		cpuState.suppress(OPPSW, err)
 	}
 
 	// See if PER event happened
-	if cpu.perEnb && cpu.perCode != 0 {
-		cpu.suppress(OPPSW, 0)
+	if cpuState.perEnb && cpuState.perCode != 0 {
+		cpuState.suppress(OPPSW, 0)
 	}
 	return mem_cycle
 }
@@ -249,7 +288,7 @@ func Cycle() int {
 // Generate addresses for operands and if
 // approperate fetch the values. Then execute the
 // instruction and return any error condition
-func (cpu *CPU) execute(step *stepInfo) uint16 {
+func (cpu *cpu) execute(step *stepInfo) uint16 {
 	// Compute addresses of operands
 	if (step.opcode & 0xc0) != 0 { // RS, RX, SS
 		temp := (step.address1 >> 12) & 0xf
@@ -339,7 +378,7 @@ func (cpu *CPU) execute(step *stepInfo) uint16 {
 				return err
 			}
 		} else {
-			step.address2 = step.src2
+			step.src2 = step.address1
 		}
 	}
 
@@ -353,7 +392,7 @@ func (cpu *CPU) execute(step *stepInfo) uint16 {
 }
 
 // Create function table
-func (c *CPU) createTable() {
+func (c *cpu) createTable() {
 	c.table = [256]func(*stepInfo) uint16{
 		//  0         1         2         3          4         5         6          7
 		c.opUnk, c.opUnk, c.opUnk, c.opUnk, c.opSPM, c.opBAL, c.opBCT, c.opBC, // 0x
@@ -425,7 +464,7 @@ func (c *CPU) createTable() {
  */
 
 // Translate an address from virtual to physical.
-func (cpu *CPU) transAddr(va uint32) (pa uint32, error uint16) {
+func (cpu *cpu) transAddr(va uint32) (pa uint32, error uint16) {
 	var entry uint32
 	var err bool
 
@@ -539,7 +578,7 @@ func (cpu *CPU) transAddr(va uint32) (pa uint32, error uint16) {
 /*
  * Store the PSW at given address with irq value.
  */
-func (cpu *CPU) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
+func (cpu *cpu) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 	var word1, word2 uint32
 	irqaddr = vector + 0x40
 
@@ -616,7 +655,7 @@ func (cpu *CPU) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 /*
  * Check for protection violation.
  */
-func (cpu *CPU) checkProtect(addr uint32, write bool) bool {
+func (cpu *cpu) checkProtect(addr uint32, write bool) bool {
 	/* Check storage key */
 	if cpu.stKey == 0 {
 		return false
@@ -637,7 +676,7 @@ func (cpu *CPU) checkProtect(addr uint32, write bool) bool {
 /*
  * Check if we can access a range of memory.
  */
-func (cpu *CPU) testAccess(va uint32, size uint32, write bool) uint16 {
+func (cpu *cpu) testAccess(va uint32, size uint32, write bool) uint16 {
 
 	// Translate address
 	if pa, err := cpu.transAddr(va); err != 0 {
@@ -666,7 +705,7 @@ func (cpu *CPU) testAccess(va uint32, size uint32, write bool) uint16 {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *CPU) readFull(addr uint32) (uint32, uint16) {
+func (cpu *cpu) readFull(addr uint32) (uint32, uint16) {
 	var pa uint32
 	var v uint32
 	var err bool
@@ -726,7 +765,7 @@ func (cpu *CPU) readFull(addr uint32) (uint32, uint16) {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *CPU) readHalf(addr uint32) (uint32, uint16) {
+func (cpu *cpu) readHalf(addr uint32) (uint32, uint16) {
 	var pa uint32
 	var v uint32
 	var err bool
@@ -796,7 +835,7 @@ func (cpu *CPU) readHalf(addr uint32) (uint32, uint16) {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *CPU) readByte(addr uint32) (uint32, uint16) {
+func (cpu *cpu) readByte(addr uint32) (uint32, uint16) {
 	var pa uint32
 	var v uint32
 	var err bool
@@ -826,7 +865,7 @@ func (cpu *CPU) readByte(addr uint32) (uint32, uint16) {
 	return v, 0
 }
 
-func (cpu *CPU) perAddrCheck(addr uint32, code uint16) {
+func (cpu *cpu) perAddrCheck(addr uint32, code uint16) {
 	if cpu.cregs[10] <= cpu.cregs[11] {
 		if addr >= cpu.cregs[10] && addr <= cpu.cregs[11] {
 			cpu.perCode |= code
@@ -839,7 +878,7 @@ func (cpu *CPU) perAddrCheck(addr uint32, code uint16) {
 }
 
 // Check if address is in the range of PER modify range
-func (cpu *CPU) perCheck(addr uint32) {
+func (cpu *cpu) perCheck(addr uint32) {
 	if cpu.perEnb && cpu.perStore {
 		cpu.perAddrCheck(addr, 0x2000)
 	}
@@ -850,7 +889,7 @@ func (cpu *CPU) perCheck(addr uint32) {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *CPU) writeFull(addr, data uint32) uint16 {
+func (cpu *cpu) writeFull(addr, data uint32) uint16 {
 	var e uint16
 	var pa uint32
 	var err1, err2 bool
@@ -910,9 +949,9 @@ func (cpu *CPU) writeFull(addr, data uint32) uint16 {
 		err2 = memory.PutWordMask(pa2, data<<16, 0xffff0000)
 	case 3:
 		mem_cycle++
-		err1 = memory.PutWordMask(pa, data>>24, 0xff000000)
+		err1 = memory.PutWordMask(pa, data>>24, 0x000000ff)
 		mem_cycle++
-		err2 = memory.PutWordMask(pa2, data<<8, 0x00ffffff)
+		err2 = memory.PutWordMask(pa2, data<<8, 0xffffff00)
 	}
 
 	if err1 || err2 {
@@ -929,7 +968,7 @@ func (cpu *CPU) writeFull(addr, data uint32) uint16 {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *CPU) writeHalf(addr, data uint32) uint16 {
+func (cpu *cpu) writeHalf(addr, data uint32) uint16 {
 	var e uint16
 	var pa uint32
 	var err bool
@@ -996,7 +1035,7 @@ func (cpu *CPU) writeHalf(addr, data uint32) uint16 {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *CPU) writeByte(addr, data uint32) uint16 {
+func (cpu *cpu) writeByte(addr, data uint32) uint16 {
 	var e uint16
 	var pa uint32
 	var err bool
@@ -1025,7 +1064,7 @@ func (cpu *CPU) writeByte(addr, data uint32) uint16 {
 }
 
 // Suppress execution of instruction
-func (cpu *CPU) suppress(code uint32, irc uint16) {
+func (cpu *cpu) suppress(code uint32, irc uint16) {
 	irqaddr := cpu.storePSW(code, irc)
 
 	// For IPL, save device after saving load complete
@@ -1043,7 +1082,7 @@ func (cpu *CPU) suppress(code uint32, irc uint16) {
 }
 
 // Load new processor status double word
-func (cpu *CPU) lpsw(src1, src2 uint32) {
+func (cpu *cpu) lpsw(src1, src2 uint32) {
 	cpu.ecMode = (src1 & 0x00080000) != 0
 	cpu.extEnb = (src1 & 0x01000000) != 0
 
@@ -1080,13 +1119,13 @@ func (cpu *CPU) lpsw(src1, src2 uint32) {
 }
 
 // Load register pair into 64 bit integer
-func (cpu *CPU) loadDouble(r uint8) uint64 {
+func (cpu *cpu) loadDouble(r uint8) uint64 {
 	t := (uint64(cpu.regs[r]) << 32) | uint64(cpu.regs[r|1])
 	return t
 }
 
 // Store a 64 bit integer in register pair
-func (cpu *CPU) storeDouble(r uint8, v uint64) {
+func (cpu *cpu) storeDouble(r uint8, v uint64) {
 	cpu.regs[r|1] = uint32(v & LMASKL)
 	cpu.regs[r] = uint32((v >> 32) & LMASKL)
 	cpu.perRegMod |= 3 << r

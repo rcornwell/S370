@@ -24,7 +24,7 @@ package cpu
 */
 
 // Floating point half register
-func (cpu *CPU) opFPHalf(step *stepInfo) uint16 {
+func (cpu *cpu) opFPHalf(step *stepInfo) uint16 {
 	var e1 int
 	var sign bool
 
@@ -74,7 +74,7 @@ func (cpu *CPU) opFPHalf(step *stepInfo) uint16 {
 }
 
 // Floating load register
-func (cpu *CPU) opFPLoad(step *stepInfo) uint16 {
+func (cpu *cpu) opFPLoad(step *stepInfo) uint16 {
 	if (step.opcode & 0x10) == 0 {
 		cpu.fpregs[step.R1] = step.fsrc2
 	} else {
@@ -84,7 +84,7 @@ func (cpu *CPU) opFPLoad(step *stepInfo) uint16 {
 }
 
 // Floating point load register with sign change
-func (cpu *CPU) opLcs(step *stepInfo) uint16 {
+func (cpu *cpu) opLcs(step *stepInfo) uint16 {
 	if (step.opcode & 0x2) == 0 { // LP, LN
 		step.fsrc2 &= ^MSIGNL
 	}
@@ -109,7 +109,7 @@ func (cpu *CPU) opLcs(step *stepInfo) uint16 {
 }
 
 // Floating point store register double
-func (cpu *CPU) opSTD(step *stepInfo) uint16 {
+func (cpu *cpu) opSTD(step *stepInfo) uint16 {
 	t := uint32(step.fsrc1 & LMASKL)
 	if error := cpu.writeFull(step.address1+4, t); error != 0 {
 		return error
@@ -119,13 +119,13 @@ func (cpu *CPU) opSTD(step *stepInfo) uint16 {
 }
 
 // Floating point store register short
-func (cpu *CPU) opSTE(step *stepInfo) uint16 {
+func (cpu *cpu) opSTE(step *stepInfo) uint16 {
 	t := uint32((step.fsrc1 >> 32) & LMASKL)
 	return cpu.writeFull(step.address1, t)
 }
 
 // Floating point compare short
-func (cpu *CPU) opCE(step *stepInfo) uint16 {
+func (cpu *cpu) opCE(step *stepInfo) uint16 {
 
 	// Extract number and adjust
 	e1 := int((step.fsrc1 & EMASKL) >> 56)
@@ -192,7 +192,7 @@ func (cpu *CPU) opCE(step *stepInfo) uint16 {
 }
 
 // Floating point short add and subtract
-func (cpu *CPU) opFPAdd(step *stepInfo) uint16 {
+func (cpu *cpu) opFPAdd(step *stepInfo) uint16 {
 	// SER 3B
 	// SUR 3F
 	// SE  7B
@@ -333,7 +333,7 @@ func (cpu *CPU) opFPAdd(step *stepInfo) uint16 {
 }
 
 // Double floating compare
-func (cpu *CPU) opCD(step *stepInfo) uint16 {
+func (cpu *cpu) opCD(step *stepInfo) uint16 {
 	// OP_CD	0x69
 	// OP_CDR	0x29
 
@@ -401,7 +401,7 @@ func (cpu *CPU) opCD(step *stepInfo) uint16 {
 }
 
 // Floating point double add and subtract
-func (cpu *CPU) opFPAddD(step *stepInfo) uint16 {
+func (cpu *cpu) opFPAddD(step *stepInfo) uint16 {
 	// SDR 3B
 	// SWR 3F
 	// SD  6B
@@ -541,7 +541,7 @@ func (cpu *CPU) opFPAddD(step *stepInfo) uint16 {
 }
 
 // Floating point multiply
-func (cpu *CPU) opFPMul(step *stepInfo) uint16 {
+func (cpu *cpu) opFPMul(step *stepInfo) uint16 {
 	// MDR	2c
 	// MER  3c
 	// ME   7c
@@ -635,7 +635,7 @@ func (cpu *CPU) opFPMul(step *stepInfo) uint16 {
 }
 
 // Floating point divide
-func (cpu *CPU) opFPDiv(step *stepInfo) uint16 {
+func (cpu *cpu) opFPDiv(step *stepInfo) uint16 {
 	// MDR	2c
 	// MER  3c
 	// ME   7c
@@ -752,7 +752,7 @@ func (cpu *CPU) opFPDiv(step *stepInfo) uint16 {
 }
 
 // Extended precision load round
-func (cpu *CPU) opLRER(step *stepInfo) uint16 {
+func (cpu *cpu) opLRER(step *stepInfo) uint16 {
 	var err uint16 = 0
 	var v uint64 = step.fsrc2
 
@@ -781,7 +781,7 @@ func (cpu *CPU) opLRER(step *stepInfo) uint16 {
 	return err
 }
 
-func (cpu *CPU) opLRDR(step *stepInfo) uint16 {
+func (cpu *cpu) opLRDR(step *stepInfo) uint16 {
 	if (step.R2 & 0xb) != 0 {
 		return IRC_SPEC
 	}
@@ -809,7 +809,7 @@ func (cpu *CPU) opLRDR(step *stepInfo) uint16 {
 	return err
 }
 
-func (cpu *CPU) opAXR(step *stepInfo) uint16 {
+func (cpu *cpu) opAXR(step *stepInfo) uint16 {
 	if (step.R1&0xb) != 0 || (step.R2&0xb) != 0 {
 		return IRC_SPEC
 	}
@@ -986,7 +986,7 @@ func (cpu *CPU) opAXR(step *stepInfo) uint16 {
 }
 
 // Floating Point Multiply producing extended result.
-func (cpu *CPU) opMXD(step *stepInfo) uint16 {
+func (cpu *cpu) opMXD(step *stepInfo) uint16 {
 	// Check if registers are valid.
 	if (step.R1 & 0xb) != 0 { // 0 or 4
 		return IRC_SPEC
@@ -1090,7 +1090,7 @@ func (cpu *CPU) opMXD(step *stepInfo) uint16 {
 	return err
 }
 
-func (cpu *CPU) opMXR(step *stepInfo) uint16 {
+func (cpu *cpu) opMXR(step *stepInfo) uint16 {
 	if (step.R1&0xb) != 0 || (step.R2&0xb) != 0 {
 		return IRC_SPEC
 	}
