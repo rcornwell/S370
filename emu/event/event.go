@@ -26,7 +26,7 @@ package event
  */
 
 import (
-	D "github.com/rcornwell/S370/internal/device"
+	D "github.com/rcornwell/S370/emu/device"
 )
 
 type Callback = func(iarg int)
