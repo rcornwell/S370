@@ -31,7 +31,7 @@ type mem struct {
 	size uint32
 }
 
-var Mem mem
+var memory mem
 
 const (
 	AMASK uint32 = 0x00ffffff // Mask address bits
@@ -46,74 +46,79 @@ func SetSize(k int) {
 	if k > (16 * 1024) {
 		k = 16 * 1024
 	}
-	Mem.size = uint32(k * 1024)
+	memory.size = uint32(k * 1024)
+}
+
+// Return size of memory in bytes
+func GetSize() uint32 {
+	return memory.size
 }
 
 // Get memory value without range check
 func GetMemory(addr uint32) uint32 {
-	Mem.key[addr>>11] |= 0x4 // Update access bits
-	return Mem.mem[addr>>2]
+	memory.key[addr>>11] |= 0x4 // Update access bits
+	return memory.mem[addr>>2]
 }
 
 // Set memory to a value, without range check
 func SetMemory(addr, data uint32) {
-	Mem.key[addr>>11] |= 0x6 // Update Access and modify bits
-	Mem.mem[addr>>2] = data
+	memory.key[addr>>11] |= 0x6 // Update Access and modify bits
+	memory.mem[addr>>2] = data
 }
 
 // Set memory to a value, without range check
 func SetMemoryMask(addr uint32, data uint32, mask uint32) {
-	Mem.key[addr>>11] |= 0x6 // Update Access and modify bits
+	memory.key[addr>>11] |= 0x6 // Update Access and modify bits
 	addr >>= 2
-	Mem.mem[addr] &= ^mask
-	Mem.mem[addr] |= data & mask
+	memory.mem[addr] &= ^mask
+	memory.mem[addr] |= data & mask
 }
 
 // Check if address out of range
 func CheckAddr(addr uint32) bool {
-	return addr < Mem.size
+	return addr < memory.size
 }
 
 // Get a word from memory
 func GetWord(addr uint32) (value uint32, error bool) {
-	if addr >= Mem.size {
+	if addr >= memory.size {
 		return 0, true
 	}
-	Mem.key[addr>>11] |= 0x4 // Update Access bits
-	return Mem.mem[addr>>2], false
+	memory.key[addr>>11] |= 0x4 // Update Access bits
+	return memory.mem[addr>>2], false
 }
 
 // Put a word to memory
 func PutWord(addr, data uint32) bool {
-	if addr >= Mem.size {
+	if addr >= memory.size {
 		return true
 	}
-	Mem.key[addr>>11] |= 0x6 // Update Access and modify bits
-	Mem.mem[addr>>2] = data
+	memory.key[addr>>11] |= 0x6 // Update Access and modify bits
+	memory.mem[addr>>2] = data
 	return false
 }
 
 // Put a word to memory, under mask
 func PutWordMask(addr, data, mask uint32) bool {
-	if addr >= Mem.size {
+	if addr >= memory.size {
 		return true
 	}
-	Mem.key[addr>>11] |= 0x6 // Update Access and modify bits
+	memory.key[addr>>11] |= 0x6 // Update Access and modify bits
 	addr >>= 2
-	Mem.mem[addr] &= ^mask
-	Mem.mem[addr] |= data & mask
+	memory.mem[addr] &= ^mask
+	memory.mem[addr] |= data & mask
 	return false
 }
 
 func GetKey(addr uint32) uint8 {
-	if addr >= Mem.size {
+	if addr >= memory.size {
 		return 0
 	}
-	return Mem.key[addr>>11]
+	return memory.key[addr>>11]
 }
 
 func PutKey(addr uint32, key uint8) {
-	if addr < Mem.size {
-		Mem.key[addr>>11] = key
+	if addr < memory.size {
+		memory.key[addr>>11] = key
 	}
 }
