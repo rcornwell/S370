@@ -63,7 +63,7 @@ func (d *Test_dev) StartIO() uint8 {
 func (d *Test_dev) StartCmd(cmd uint8) uint8 {
 	var r uint8 = 0
 	if d.cmd != 0 {
-		return SNS_BSY
+		return CStatusBusy
 	}
 	switch cmd & 7 {
 	case 0: // Test I/O
@@ -82,15 +82,15 @@ func (d *Test_dev) StartCmd(cmd uint8) uint8 {
 		d.count = 0
 		switch cmd {
 		case 0x03: // Nop
-			r = SNS_CHNEND | SNS_DEVEND
+			r = CStatusChnEnd | CStatusDevEnd
 			d.cmd = 0
 		case 0x0b: // Grab a data byte
 		case 0x13: // Issue channel end
-			r = SNS_CHNEND
+			r = CStatusChnEnd
 			Ev.AddEvent(d, d.callback, 10, 1)
 		default:
 			d.cmd = 0
-			d.sense = SNS_CMDREJ
+			d.sense = SenseCMDREJ
 		}
 	case 4: // Sense
 		d.cmd = cmd
@@ -102,16 +102,16 @@ func (d *Test_dev) StartCmd(cmd uint8) uint8 {
 			return 0
 		} else {
 			d.cmd = 0
-			d.sense = SNS_CMDREJ
+			d.sense = SenseCMDREJ
 		}
 	default:
-		d.sense = SNS_CMDREJ
+		d.sense = SenseCMDREJ
 	}
 
 	d.halt = false
 	if d.sense != 0 {
-		r = SNS_CHNEND | SNS_DEVEND | SNS_UNITCHK
-	} else if (r & SNS_CHNEND) == 0 {
+		r = CStatusChnEnd | CStatusDevEnd | CStatusCheck
+	} else if (r & CStatusChnEnd) == 0 {
 		Ev.AddEvent(d, d.callback, 10, 1)
 	}
 	return r
@@ -140,9 +140,9 @@ func (d *Test_dev) callback(iarg int) {
 
 	switch d.cmd {
 	case 0x01: // Write
-		r := SNS_CHNEND | SNS_DEVEND
+		r := CStatusChnEnd | CStatusDevEnd
 		if d.sms {
-			r |= SNS_SMS
+			r |= CStatusSMS
 		}
 		if d.count > d.max {
 			d.cmd = 0
@@ -151,7 +151,7 @@ func (d *Test_dev) callback(iarg int) {
 			return
 		}
 		if d.halt {
-			ChanEnd(d.addr, SNS_CHNEND|SNS_DEVEND)
+			ChanEnd(d.addr, CStatusChnEnd|CStatusDevEnd)
 			d.cmd = 0
 			d.halt = false
 			return
@@ -169,9 +169,9 @@ func (d *Test_dev) callback(iarg int) {
 		d.count++
 		Ev.AddEvent(d, d.callback, 10, 1)
 	case 0x02, 0x0c: // Read and Read backwards
-		r := SNS_CHNEND | SNS_DEVEND
+		r := CStatusChnEnd | CStatusDevEnd
 		if d.sms {
-			r |= SNS_SMS
+			r |= CStatusSMS
 		}
 		if d.count >= d.max {
 			d.cmd = 0
@@ -180,7 +180,7 @@ func (d *Test_dev) callback(iarg int) {
 			return
 		}
 		if d.halt {
-			ChanEnd(d.addr, SNS_CHNEND|SNS_DEVEND)
+			ChanEnd(d.addr, CStatusChnEnd|CStatusDevEnd)
 			d.cmd = 0
 			d.halt = false
 			return
@@ -196,17 +196,17 @@ func (d *Test_dev) callback(iarg int) {
 	case 0x0b:
 		d.cmd = 0x13
 		d.data[0], _ = ChanReadByte(d.addr)
-		ChanEnd(d.addr, SNS_CHNEND)
+		ChanEnd(d.addr, CStatusChnEnd)
 		Ev.AddEvent(d, d.callback, 10, 1)
 	case 0x04:
 		d.cmd = 0
 		if ChanWriteByte(d.addr, d.sense) {
-			ChanEnd(d.addr, SNS_CHNEND|SNS_DEVEND|SNS_UNITEXP)
+			ChanEnd(d.addr, CStatusChnEnd|CStatusDevEnd|CStatusExpt)
 		} else {
-			ChanEnd(d.addr, SNS_CHNEND|SNS_DEVEND)
+			ChanEnd(d.addr, CStatusChnEnd|CStatusDevEnd)
 		}
 	case 0x13: // Return channel end
 		d.cmd = 0
-		SetDevAttn(d.addr, SNS_DEVEND)
+		SetDevAttn(d.addr, CStatusDevEnd)
 	}
 }

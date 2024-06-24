@@ -87,7 +87,7 @@ func StartIO(devNum uint16) uint8 {
 	}
 
 	ds := cu.devStatus[d]
-	if ds == SNS_DEVEND || ds == (SNS_DEVEND|SNS_CHNEND) {
+	if ds == CStatusDevEnd || ds == (CStatusDevEnd|CStatusChnEnd) {
 		cu.devStatus[d] = 0
 		ds = 0
 	}
@@ -486,7 +486,7 @@ func ChanWriteByte(devNum uint16, data uint8) bool {
 	mask := uint32(0xff000000 >> offset)
 	sc.chanBuffer &= ^mask
 	sc.chanBuffer |= uint32(data) << (24 - offset)
-	if (sc.ccwCmd & 0xf) == CMD_RDBWD {
+	if (sc.ccwCmd & 0xf) == CmdRDBWD {
 		if (sc.chanByte & 3) != 0 {
 			sc.chanByte--
 		} else {
@@ -514,7 +514,7 @@ func ChanWriteByte(devNum uint16, data uint8) bool {
 // Compute address of next byte to read/write
 func nextAddress(cu *chanDev, sc *chanCtl) bool {
 	if (sc.ccwFlags & flagIDA) != 0 {
-		if (sc.ccwCmd & 0xf) == CMD_RDBWD {
+		if (sc.ccwCmd & 0xf) == CmdRDBWD {
 			sc.ccwIAddr--
 			if (sc.ccwIAddr & 0x7ff) == 0x7ff {
 				sc.ccwAddr += 4
@@ -537,7 +537,7 @@ func nextAddress(cu *chanDev, sc *chanCtl) bool {
 		}
 		sc.chanByte = uint8(sc.ccwIAddr & 3)
 	} else {
-		if (sc.ccwCmd & 0xf) == CMD_RDBWD {
+		if (sc.ccwCmd & 0xf) == CmdRDBWD {
 			sc.ccwAddr -= 1 + (sc.ccwAddr & 0x3)
 		} else {
 			sc.ccwAddr += 4 - (sc.ccwAddr & 0x3)
@@ -575,11 +575,11 @@ func ChanEnd(devNum uint16, flags uint8) {
 		sc.chanStatus |= statusLength
 	}
 
-	if (flags & (SNS_ATTN | SNS_UNITCHK | SNS_UNITEXP)) != 0 {
+	if (flags & (CStatusAttn | CStatusCheck | CStatusExpt)) != 0 {
 		sc.ccwFlags = 0
 	}
 
-	if (flags & SNS_DEVEND) != 0 {
+	if (flags & CStatusDevEnd) != 0 {
 		sc.ccwFlags &= ^(chainData | flagSLI)
 	}
 
@@ -597,11 +597,11 @@ func SetDevAttn(devNum uint16, flags uint8) {
 	}
 	cu := &chanUnit[(devNum>>8)&0xf]
 	// Check if chain being held
-	if ch.devAddr == devNum && ch.chainFlg && (flags&SNS_DEVEND) != 0 {
+	if ch.devAddr == devNum && ch.chainFlg && (flags&CStatusDevEnd) != 0 {
 		ch.chanStatus |= uint16(flags) << 8
 	} else {
 		// Check if Device is currently on channel
-		if ch.devAddr == devNum && (flags&SNS_DEVEND) != 0 &&
+		if ch.devAddr == devNum && (flags&CStatusDevEnd) != 0 &&
 			((ch.chanStatus&statusChnEnd) != 0 || ch.ccwCmd != 0) {
 			ch.chanStatus |= uint16(flags) << 8
 			ch.ccwCmd = 0
@@ -946,7 +946,7 @@ loop:
 
 		// TIC can't follow TIC nor bt first in chain
 		cmd := uint8((word & cmdMask) >> 24)
-		if cmd == CMD_TIC {
+		if cmd == CmdTIC {
 			// Pretend to fetch next word.
 			sc.caw += 4
 			sc.caw &= addrMask

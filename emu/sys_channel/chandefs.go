@@ -96,24 +96,24 @@ const (
 	bufEnd   uint8 = 0x10 // Device has returned channel end, no more data
 
 	// Common Channel sense bytes
-	SNS_ATTN    uint8 = 0x80 // Unit attention
-	SNS_SMS     uint8 = 0x40 // Status modifier
-	SNS_CTLEND  uint8 = 0x20 // Control unit end
-	SNS_BSY     uint8 = 0x10 // Unit Busy
-	SNS_CHNEND  uint8 = 0x08 // Channel end
-	SNS_DEVEND  uint8 = 0x04 // Device end
-	SNS_UNITCHK uint8 = 0x02 // Unit check
-	SNS_UNITEXP uint8 = 0x01 // Unit exception
+	CStatusAttn   uint8 = 0x80 // Unit attention
+	CStatusSMS    uint8 = 0x40 // Status modifier
+	CStatusCtlEnd uint8 = 0x20 // Control unit end
+	CStatusBusy   uint8 = 0x10 // Unit Busy
+	CStatusChnEnd uint8 = 0x08 // Channel end
+	CStatusDevEnd uint8 = 0x04 // Device end
+	CStatusCheck  uint8 = 0x02 // Unit check
+	CStatusExpt   uint8 = 0x01 // Unit exception
 
 	// Command masks
-	CMD_TYPE  uint8 = 0x3 // Type mask
-	CMD_CHAN  uint8 = 0x0 // Channel command
-	CMD_WRITE uint8 = 0x1 // Write command
-	CMD_READ  uint8 = 0x2 // Read command
-	CMD_CTL   uint8 = 0x3 // Control command
-	CMD_SENSE uint8 = 0x4 // Sense channel command
-	CMD_TIC   uint8 = 0x8 // Transfer in channel
-	CMD_RDBWD uint8 = 0xc // Read backward
+	//CMD_TYPE uint8 = 0x3 // Type mask
+	//	CMD_CHAN  uint8 = 0x0 // Channel command
+	CmdWrite uint8 = 0x1 // Write command
+	CmdRead  uint8 = 0x2 // Read command
+	CmdCTL   uint8 = 0x3 // Control command
+	CmdSense uint8 = 0x4 // Sense channel command
+	CmdTIC   uint8 = 0x8 // Transfer in channel
+	CmdRDBWD uint8 = 0xc // Read backward
 
 	// Channel status information
 	statusAttn   uint16 = 0x8000 // Device raised attention
@@ -136,13 +136,13 @@ const (
 	NoDev uint16 = 0xffff // Code for no device
 
 	// Basic sense information
-	SNS_CMDREJ  uint8 = 0x80 // Command reject
-	SNS_INTVENT uint8 = 0x40 // Unit intervention required
-	SNS_BUSCHK  uint8 = 0x20 // Parity error on bus
-	SNS_EQUCHK  uint8 = 0x10 // Equipment check
-	SNS_DATCHK  uint8 = 0x08 // Data Check
-	SNS_UNITSPC uint8 = 0x04 // Specific to unit
-	SNS_CTLCHK  uint8 = 0x02 // Timeout on device
-	SNS_OVRRUN  uint8 = 0x02 // Data Overrun
-	SNS_OPRCHK  uint8 = 0x01 // Invalid operation to device
+	SenseCMDREJ  uint8 = 0x80 // Command reject
+	SenseINTVENT uint8 = 0x40 // Unit intervention required
+	SenseBUSCHK  uint8 = 0x20 // Parity error on bus
+	SenseEQUCHK  uint8 = 0x10 // Equipment check
+	SenseDATCHK  uint8 = 0x08 // Data Check
+	SenseUNITSPC uint8 = 0x04 // Specific to unit
+	SenseCTLCHK  uint8 = 0x02 // Timeout on device
+	SenseOVRRUN  uint8 = 0x02 // Data Overrun
+	SenseOPRCHK  uint8 = 0x01 // Invalid operation to device
 )
