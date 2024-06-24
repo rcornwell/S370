@@ -64,7 +64,7 @@ const (
 )
 
 type Card struct {
-	image [80]uint16 // Image of individual cards
+	Image [80]uint16 // Image of individual cards
 }
 
 type CardContext struct {
@@ -81,6 +81,8 @@ type cardBuffer struct {
 	buffer [8192 + 500]uint8 // Buffer data
 	len    int               // Amount of data in buffer
 }
+
+var emptyCard Card
 
 /* Generic Card read/punch routines for simulators.
 
@@ -196,7 +198,7 @@ func (ctx *CardContext) CardEOF() bool {
 		return true
 	}
 	c := ctx.deck[ctx.hopperPos]
-	return (c.image[0] & flag_eof) != 0
+	return (c.Image[0] & flag_eof) != 0
 }
 
 func (ctx *CardContext) FileName() string {
@@ -209,34 +211,34 @@ func (ctx *CardContext) FileName() string {
 // Set end of file flag on last card in deck
 func (ctx *CardContext) SetEOF() {
 	if ctx.hopperCards != 0 {
-		ctx.deck[ctx.hopperCards-1].image[0] |= flag_eof
+		ctx.deck[ctx.hopperCards-1].Image[0] |= flag_eof
 	}
 }
 
-func (ctx *CardContext) ReadCard() (*Card, int) {
+func (ctx *CardContext) ReadCard() (Card, int) {
 
 	if ctx.eofPending {
 		ctx.eofPending = false
-		return nil, CARD_EOF
+		return emptyCard, CARD_EOF
 	}
 	if ctx.hopperPos >= ctx.hopperCards {
-		return nil, CARD_EMPTY
+		return emptyCard, CARD_EMPTY
 	}
-	c := &ctx.deck[ctx.hopperPos]
+	c := ctx.deck[ctx.hopperPos]
 	ctx.hopperPos++
 
-	if (c.image[0] & flag_eof) != 0 {
-		if (c.image[0] & flag_dat) != 0 {
+	if (c.Image[0] & flag_eof) != 0 {
+		if (c.Image[0] & flag_dat) != 0 {
 			ctx.eofPending = true
-			c.image[0] &= 07777
+			c.Image[0] &= 07777
 			return c, CARD_OK
 		}
-		return nil, CARD_EOF
+		return emptyCard, CARD_EOF
 	}
-	if (c.image[0] & flag_err) != 0 {
-		return nil, CARD_ERROR
+	if (c.Image[0] & flag_err) != 0 {
+		return emptyCard, CARD_ERROR
 	}
-	c.image[0] &= 07777
+	c.Image[0] &= 07777
 	return c, CARD_OK
 }
 
@@ -274,7 +276,7 @@ func (ctx *CardContext) PunchCard(img Card) {
 		// Try to convert each column to ascii
 		for i := range 80 {
 			var ch uint8
-			c := img.image[i]
+			c := img.Image[i]
 			switch ctx.table {
 			case TYPE_029, TYPE_ASCII:
 				ch = holToAsciiTable29[c]
@@ -301,7 +303,7 @@ func (ctx *CardContext) PunchCard(img Card) {
 		// Try to convert each column to ascii
 		for i := range 80 {
 			var ch uint8
-			c := img.image[i]
+			c := img.Image[i]
 			switch ctx.table {
 			case TYPE_029, TYPE_ASCII:
 				ch = holToAsciiTable29[c]
@@ -327,7 +329,7 @@ func (ctx *CardContext) PunchCard(img Card) {
 
 		var i int
 		for i = 79; i >= 0; i-- {
-			if img.image[i] != 0 {
+			if img.Image[i] != 0 {
 				i++
 				break
 			}
@@ -338,15 +340,15 @@ func (ctx *CardContext) PunchCard(img Card) {
 		if i == 0 {
 			out[1] = 'e'
 			out[2] = 'o'
-			if img.image[0] == 07 {
+			if img.Image[0] == 07 {
 				out[3] = 'r'
 				goto fin
 			}
-			if img.image[0] == 015 {
+			if img.Image[0] == 015 {
 				out[3] = 'f'
 				goto fin
 			}
-			if img.image[0] == 017 {
+			if img.Image[0] == 017 {
 				out[3] = 'i'
 				goto fin
 			}
@@ -356,10 +358,10 @@ func (ctx *CardContext) PunchCard(img Card) {
 		out[3] = 'w'
 
 		for p := range i {
-			out[o] = byte((img.image[p]>>9)&7) + '0'
-			out[o+1] = byte((img.image[p]>>6)&7) + '0'
-			out[o+2] = byte((img.image[p]>>3)&7) + '0'
-			out[o+3] = byte((img.image[p]>>0)&7) + '0'
+			out[o] = byte((img.Image[p]>>9)&7) + '0'
+			out[o+1] = byte((img.Image[p]>>6)&7) + '0'
+			out[o+2] = byte((img.Image[p]>>3)&7) + '0'
+			out[o+3] = byte((img.Image[p]>>0)&7) + '0'
 			o += 4
 		}
 	fin:
@@ -369,14 +371,14 @@ func (ctx *CardContext) PunchCard(img Card) {
 	case MODE_BIN:
 		out = out[0:160]
 		for i := range 80 {
-			out[i*2] = byte((img.image[i] & 0x00f) << 4)
-			out[(i*2)+1] = byte((img.image[i] & 0xff0) >> 4)
+			out[i*2] = byte((img.Image[i] & 0x00f) << 4)
+			out[(i*2)+1] = byte((img.Image[i] & 0xff0) >> 4)
 		}
 	case MODE_CBN:
 		out = out[0:160]
 		for i := range 80 {
-			out[i*2] = byte(img.image[i]>>6) & 077
-			out[(i*2)+1] = byte(img.image[i] & 077)
+			out[i*2] = byte(img.Image[i]>>6) & 077
+			out[(i*2)+1] = byte(img.Image[i] & 077)
 		}
 		// Set parity
 		for i := range 160 {
@@ -386,7 +388,7 @@ func (ctx *CardContext) PunchCard(img Card) {
 	case MODE_BCD:
 		out = out[0:80]
 		for i := range 80 {
-			out[i] = HolToBcd(img.image[i])
+			out[i] = HolToBcd(img.Image[i])
 			if out[i] != 0x7f {
 				out[i] |= xlat.ParityTable[out[i]]
 			} else {
@@ -397,7 +399,7 @@ func (ctx *CardContext) PunchCard(img Card) {
 	case MODE_EBCDIC:
 		out = out[0:80]
 		for i := range 80 {
-			out[i] = byte(HolToEbcdic(img.image[i]))
+			out[i] = byte(HolToEbcdic(img.Image[i]))
 		}
 	}
 	ctx.hopperPos++
@@ -414,7 +416,7 @@ func (ctx *CardContext) EmptyDeck() {
 func (ctx *CardContext) BlankDeck(n int) {
 	var c Card
 	for i := range 80 {
-		c.image[i] = 0
+		c.Image[i] = 0
 	}
 	for range n {
 		ctx.deck = append(ctx.deck, c)
@@ -523,7 +525,7 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 
 		}
 		if ctx.mode != MODE_AUTO && ctx.mode != mode {
-			c.image[0] = flag_err
+			c.Image[0] = flag_err
 			goto card_done
 		}
 	} else {
@@ -550,7 +552,7 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 				}
 			}
 			if f {
-				c.image[0] = flag_eof
+				c.Image[0] = flag_eof
 				goto endCard
 			}
 			if cmpCard(buf, "RAW") {
@@ -559,13 +561,13 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 				for i := 4; col < 80 && i < buf.len; i++ {
 					ch = buf.buffer[i]
 					if ch >= '0' && ch <= '7' {
-						c.image[col] = (c.image[col] << 3) | (uint16(ch - '0'))
+						c.Image[col] = (c.Image[col] << 3) | (uint16(ch - '0'))
 						j++
 						p++
 					} else if ch == '\n' || ch == '\r' {
 						break
 					} else {
-						c.image[0] = flag_err
+						c.Image[0] = flag_err
 					}
 					if j == 4 {
 						col++
@@ -573,13 +575,13 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 					}
 				}
 			} else if cmpCard(buf, "EOR") {
-				c.image[0] = 07 // 7/8/9 punch
+				c.Image[0] = 07 // 7/8/9 punch
 				p = 4
 			} else if cmpCard(buf, "EOF") {
-				c.image[0] = 015 // 6/7/9 punch
+				c.Image[0] = 015 // 6/7/9 punch
 				p = 4
 			} else if cmpCard(buf, "EOI") {
-				c.image[0] = 017 // 6/7/8/9 punch
+				c.Image[0] = 017 // 6/7/8/9 punch
 				p = 4
 
 			}
@@ -609,7 +611,7 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 				if (t & 0xf000) != 0 {
 					t = 0xfff
 				}
-				c.image[col] = t & 0xfff
+				c.Image[col] = t & 0xfff
 				col++
 			}
 		}
@@ -627,25 +629,25 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 	case MODE_BIN:
 		t := uint16(0)
 		if buf.len < 160 {
-			c.image[0] = flag_err
+			c.Image[0] = flag_err
 			goto card_done
 		}
 		// Move data to buffer
 		for p = 0; p < 160; {
 			t |= uint16(buf.buffer[p] & 0xff)
-			c.image[col] = uint16((buf.buffer[p] >> 4) & 0xf)
-			c.image[col] |= uint16(buf.buffer[p+1]&0xff) << 4
+			c.Image[col] = uint16((buf.buffer[p] >> 4) & 0xf)
+			c.Image[col] |= uint16(buf.buffer[p+1]&0xff) << 4
 			col++
 			p += 2
 		}
 		if (t & 0xf) != 0 {
-			c.image[0] = flag_err
+			c.Image[0] = flag_err
 		}
 	case MODE_CBN:
 		// Check if first character is a tape mark
 		if buf.buffer[0] == 0217 && (buf.len == 1 || (buf.buffer[1]&0200) != 0) {
 			p = 1
-			c.image[0] = flag_eof
+			c.Image[0] = flag_eof
 			break
 		}
 
@@ -664,7 +666,7 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 			if xlat.ParityTable[ch] == (buf.buffer[p] & 0100) {
 				error = true
 			}
-			c.image[col] = uint16(ch) << 6
+			c.Image[col] = uint16(ch) << 6
 			p++
 			ch = buf.buffer[p]
 			if (ch & 0x80) != 0 {
@@ -674,7 +676,7 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 			if xlat.ParityTable[ch] == (buf.buffer[p] & 0100) {
 				error = true
 			}
-			c.image[col] |= uint16(ch)
+			c.Image[col] |= uint16(ch)
 			col++
 			p++
 		}
@@ -691,13 +693,13 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 			}
 		}
 		if error {
-			c.image[0] = flag_err
+			c.Image[0] = flag_err
 		}
 	case MODE_BCD:
 		// Check if first character is a tape mark
 		if buf.buffer[0] == 0217 && (buf.len == 1 || (buf.buffer[1]&0200) != 0) {
 			p = 1
-			c.image[0] = flag_eof
+			c.Image[0] = flag_eof
 			break
 		}
 
@@ -714,7 +716,7 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 			if xlat.ParityTable[ch] != (buf.buffer[p] & 0100) {
 				error = true
 			}
-			c.image[col] = BcdToHol(ch)
+			c.Image[col] = BcdToHol(ch)
 			col++
 		}
 
@@ -733,27 +735,27 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 
 		// Clear out remainder of record if needed
 		for col < 80 {
-			c.image[col] = 0
+			c.Image[col] = 0
 			col++
 		}
 
 		// Set error flage if something wrong
 		if error {
-			c.image[0] = flag_err
+			c.Image[0] = flag_err
 		}
 	case MODE_EBCDIC:
 		// Move data to buffere
 		for p = 0; p < 80 && p < buf.len; p++ {
-			c.image[p] = ebcdicToHolTable[buf.buffer[p]]
+			c.Image[p] = ebcdicToHolTable[buf.buffer[p]]
 		}
 		if buf.len < 80 {
-			c.image[0] |= 0xfff
+			c.Image[0] |= 0xfff
 		}
 	}
 
 card_done:
-	if (c.image[0] & (flag_eof | flag_err)) == 0 {
-		c.image[0] |= flag_dat
+	if (c.Image[0] & (flag_eof | flag_err)) == 0 {
+		c.Image[0] |= flag_dat
 	}
 	ctx.deck = append(ctx.deck, c)
 	ctx.hopperCards++

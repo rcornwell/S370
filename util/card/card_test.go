@@ -277,7 +277,7 @@ func TestReadCardMatch(t *testing.T) {
 	}
 	var err int
 	for i := range 10 {
-		var c *Card
+		var c Card
 		c, err = ctx.ReadCard()
 		if err != CARD_OK {
 			break
@@ -296,8 +296,8 @@ func TestReadCardMatch(t *testing.T) {
 		cor[3] = numToHol(i / 10)
 
 		for j := range 80 {
-			if cor[j] != c.image[j] {
-				t.Errorf(" Card %d failed to match %d %03x != %03x", i, j, cor[j], c.image[j])
+			if cor[j] != c.Image[j] {
+				t.Errorf(" Card %d failed to match %d %03x != %03x", i, j, cor[j], c.Image[j])
 				break
 			}
 		}
@@ -327,14 +327,14 @@ func TestReadBlankDeck(t *testing.T) {
 	}
 	var err int
 	for i := range 10 {
-		var c *Card
+		var c Card
 		c, err = ctx.ReadCard()
 		if err != CARD_OK {
 			break
 		}
 
 		for j := range 80 {
-			if c.image[j] != 0 {
+			if c.Image[j] != 0 {
 
 				t.Errorf("Blank card not blank %d", i)
 				break
@@ -360,8 +360,8 @@ func TestPunchCardBlank(t *testing.T) {
 
 	// Create blank card
 	c := Card{}
-	for i := range len(c.image) {
-		c.image[i] = 0
+	for i := range len(c.Image) {
+		c.Image[i] = 0
 	}
 	f, err := os.CreateTemp("", "deck")
 	if err != nil {
@@ -414,12 +414,12 @@ func TestPunchCardDeck(t *testing.T) {
 
 	// Create test card
 	c := Card{}
-	for i := range len(c.image) {
-		c.image[i] = testImage[i]
+	for i := range len(c.Image) {
+		c.Image[i] = testImage[i]
 	}
 	// Set count into testImage
 	for i := range 5 {
-		c.image[i] = 0x200
+		c.Image[i] = 0x200
 	}
 	f, err := os.CreateTemp("", "deck")
 	if err != nil {
@@ -436,8 +436,8 @@ func TestPunchCardDeck(t *testing.T) {
 		return
 	}
 	for i := range 50 {
-		c.image[4] = numToHol(i % 10)
-		c.image[3] = numToHol(i / 10)
+		c.Image[4] = numToHol(i % 10)
+		c.Image[3] = numToHol(i / 10)
 		ctx.PunchCard(c)
 	}
 
@@ -484,12 +484,12 @@ func TestPunchCardEBCDIC(t *testing.T) {
 
 	// Create test card
 	c := Card{}
-	for i := range len(c.image) {
-		c.image[i] = testImage[i]
+	for i := range len(c.Image) {
+		c.Image[i] = testImage[i]
 	}
 	// Set count into testImage
 	for i := range 5 {
-		c.image[i] = 0x200
+		c.Image[i] = 0x200
 	}
 	f, err := os.CreateTemp("", "deck")
 	if err != nil {
@@ -508,8 +508,8 @@ func TestPunchCardEBCDIC(t *testing.T) {
 		return
 	}
 	for i := range 50 {
-		c.image[4] = numToHol(i % 10)
-		c.image[3] = numToHol(i / 10)
+		c.Image[4] = numToHol(i % 10)
+		c.Image[3] = numToHol(i / 10)
 		ctx.PunchCard(c)
 	}
 
@@ -577,7 +577,7 @@ func TestReadDeckEBCDIC(t *testing.T) {
 	}
 	count := 0
 	for {
-		var c *Card
+		var c Card
 		var e int
 		c, e = ctx.ReadCard()
 		if e == CARD_EMPTY {
@@ -602,8 +602,8 @@ func TestReadDeckEBCDIC(t *testing.T) {
 		cor[4] = numToHol(count % 10)
 
 		for j := range 80 {
-			if cor[j] != c.image[j] {
-				t.Errorf(" Card %d failed to match %d %03x != %03x", count, j, cor[j], c.image[j])
+			if cor[j] != c.Image[j] {
+				t.Errorf(" Card %d failed to match %d %03x != %03x", count, j, cor[j], c.Image[j])
 				break
 			}
 		}
@@ -639,18 +639,18 @@ func TestPunchCardBinary(t *testing.T) {
 		return
 	}
 	// Copy test image to card
-	for i := range len(c.image) {
-		c.image[i] = testImage[i]
+	for i := range len(c.Image) {
+		c.Image[i] = testImage[i]
 	}
 	// Blank out sequence
 	for i := range 5 {
-		c.image[i] = 0x200
+		c.Image[i] = 0x200
 		testImage[i] = 0x200
 	}
 	for i := range 50 {
 		// Set count into testImage
-		c.image[4] = numToHol(i % 10)
-		c.image[3] = numToHol(i / 10)
+		c.Image[4] = numToHol(i % 10)
+		c.Image[3] = numToHol(i / 10)
 		ctx.PunchCard(c)
 	}
 
@@ -749,7 +749,7 @@ func TestReadDeckBinary(t *testing.T) {
 	}
 	count := 0
 	for {
-		var c *Card
+		var c Card
 		var e int
 		c, e = ctx.ReadCard()
 		if e == CARD_EMPTY {
@@ -764,8 +764,8 @@ func TestReadDeckBinary(t *testing.T) {
 		testImage[3] = numToHol(count / 10)
 
 		for j := range 80 {
-			if testImage[j] != c.image[j] {
-				t.Errorf(" Card %d failed to match %d %03x != %03x", count, j, c.image[j], testImage[j])
+			if testImage[j] != c.Image[j] {
+				t.Errorf(" Card %d failed to match %d %03x != %03x", count, j, c.Image[j], testImage[j])
 			}
 		}
 		count++
@@ -800,17 +800,17 @@ func TestPunchCardCBN(t *testing.T) {
 		return
 	}
 	// Copy test image to card
-	for i := range len(c.image) {
-		c.image[i] = testImage[i]
+	for i := range len(c.Image) {
+		c.Image[i] = testImage[i]
 	}
 	// Blank out sequence
 	for i := range 5 {
-		c.image[i] = 0x200
+		c.Image[i] = 0x200
 	}
 	for i := range 50 {
 		// Set count into testImage
-		c.image[4] = numToHol(i % 10)
-		c.image[3] = numToHol(i / 10)
+		c.Image[4] = numToHol(i % 10)
+		c.Image[3] = numToHol(i / 10)
 		ctx.PunchCard(c)
 	}
 
@@ -910,7 +910,7 @@ func TestReadDeckCBN(t *testing.T) {
 	}
 	count := 0
 	for {
-		var c *Card
+		var c Card
 		var e int
 		c, e = ctx.ReadCard()
 		if e == CARD_EMPTY {
@@ -925,8 +925,8 @@ func TestReadDeckCBN(t *testing.T) {
 		testImage[3] = uint16(0x200) >> (count / 10)
 
 		for j := range 80 {
-			if testImage[j] != c.image[j] {
-				t.Errorf(" Card %d failed to match %d %03x != %03x", count, j, c.image[j], testImage[j])
+			if testImage[j] != c.Image[j] {
+				t.Errorf(" Card %d failed to match %d %03x != %03x", count, j, c.Image[j], testImage[j])
 			}
 		}
 		count++
@@ -961,17 +961,17 @@ func TestPunchCardBCD(t *testing.T) {
 		return
 	}
 	// Copy test image to card
-	for i := range len(c.image) {
-		c.image[i] = testImage[i]
+	for i := range len(c.Image) {
+		c.Image[i] = testImage[i]
 	}
 	// Blank out sequence
 	for i := range 5 {
-		c.image[i] = 0x200
+		c.Image[i] = 0x200
 	}
 	for i := range 50 {
 		// Set count into testImage
-		c.image[4] = numToHol(i % 10)
-		c.image[3] = numToHol(i / 10)
+		c.Image[4] = numToHol(i % 10)
+		c.Image[3] = numToHol(i / 10)
 		ctx.PunchCard(c)
 	}
 
@@ -1084,7 +1084,7 @@ func TestReadDeckBCD(t *testing.T) {
 	}
 	count := 0
 	for {
-		var c *Card
+		var c Card
 		var e int
 		c, e = ctx.ReadCard()
 		if e == CARD_EMPTY {
@@ -1099,8 +1099,8 @@ func TestReadDeckBCD(t *testing.T) {
 		testImage[3] = numToHol(count / 10)
 
 		for j := range 80 {
-			if testImage[j] != c.image[j] {
-				t.Errorf(" Card %d failed to match %d %03x != %03x", count, j, c.image[j], testImage[j])
+			if testImage[j] != c.Image[j] {
+				t.Errorf(" Card %d failed to match %d %03x != %03x", count, j, c.Image[j], testImage[j])
 			}
 		}
 		count++
@@ -1135,17 +1135,17 @@ func TestPunchCardOctal(t *testing.T) {
 		return
 	}
 	// Copy test image to card
-	for i := range len(c.image) {
-		c.image[i] = testImage[i]
+	for i := range len(c.Image) {
+		c.Image[i] = testImage[i]
 	}
 	// Blank out sequence
 	for i := range 5 {
-		c.image[i] = 0x200
+		c.Image[i] = 0x200
 	}
 	for i := range 50 {
 		// Set count into testImage
-		c.image[4] = numToHol(i % 10)
-		c.image[3] = numToHol(i / 10)
+		c.Image[4] = numToHol(i % 10)
+		c.Image[3] = numToHol(i / 10)
 		ctx.PunchCard(c)
 	}
 
@@ -1270,7 +1270,7 @@ func TestReadDeckOctal(t *testing.T) {
 	}
 	count := 0
 	for {
-		var c *Card
+		var c Card
 		var e int
 		c, e = ctx.ReadCard()
 		if e == CARD_EMPTY {
@@ -1285,8 +1285,8 @@ func TestReadDeckOctal(t *testing.T) {
 		testImage[3] = numToHol(count / 10)
 
 		for j := range 80 {
-			if testImage[j] != c.image[j] {
-				t.Errorf(" Card %d failed to match %d %03x != %03x", count, j, c.image[j], testImage[j])
+			if testImage[j] != c.Image[j] {
+				t.Errorf(" Card %d failed to match %d %03x != %03x", count, j, c.Image[j], testImage[j])
 			}
 		}
 		count++
@@ -1322,13 +1322,13 @@ func TestReadDeckAuto(t *testing.T) {
 	}
 	var c Card
 	// Copy test image to card
-	for i := range len(c.image) {
-		c.image[i] = testImage[i]
+	for i := range len(c.Image) {
+		c.Image[i] = testImage[i]
 	}
 	for i := range 60 {
 		// Create test card image
-		c.image[4] = numToHol(i % 10)
-		c.image[3] = numToHol(i / 10)
+		c.Image[4] = numToHol(i % 10)
+		c.Image[3] = numToHol(i / 10)
 		ctx.PunchCard(c)
 		switch i {
 		case 10:
@@ -1358,7 +1358,7 @@ func TestReadDeckAuto(t *testing.T) {
 		match[i] = testImage[i]
 	}
 	for {
-		var c *Card
+		var c Card
 		var e int
 		c, e = ctx.ReadCard()
 		if e == CARD_EMPTY {
@@ -1375,12 +1375,12 @@ func TestReadDeckAuto(t *testing.T) {
 		for j := range 80 {
 			// BCD translates space differntly
 			if count >= 10 && count <= 20 {
-				if c.image[j] == 0x82 {
-					c.image[j] = 0
+				if c.Image[j] == 0x82 {
+					c.Image[j] = 0
 				}
 			}
-			if match[j] != c.image[j] {
-				t.Errorf(" Card %d failed to match %d %03x != %03x", count, j, c.image[j], match[j])
+			if match[j] != c.Image[j] {
+				t.Errorf(" Card %d failed to match %d %03x != %03x", count, j, c.Image[j], match[j])
 			}
 		}
 		count++
@@ -1421,7 +1421,7 @@ func TestReadDeckSpecial(t *testing.T) {
 	for i := range 5 {
 		testImage[i] = 0x200
 	}
-	var c *Card
+	var c Card
 	var e int
 	c, e = ctx.ReadCard()
 	if e == CARD_EMPTY {
@@ -1434,8 +1434,8 @@ func TestReadDeckSpecial(t *testing.T) {
 	}
 
 	for j := range 80 {
-		if testImage[j] != c.image[j] {
-			t.Errorf(" Card %d failed to match %d %03x != %03x", 1, j, c.image[j], testImage[j])
+		if testImage[j] != c.Image[j] {
+			t.Errorf(" Card %d failed to match %d %03x != %03x", 1, j, c.Image[j], testImage[j])
 		}
 	}
 
@@ -1456,8 +1456,8 @@ card2:
 	match[0] = 07
 	for j := range 80 {
 
-		if match[j] != c.image[j] {
-			t.Errorf(" Card %d failed to match %d %03x != %03x", 2, j, c.image[j], match[j])
+		if match[j] != c.Image[j] {
+			t.Errorf(" Card %d failed to match %d %03x != %03x", 2, j, c.Image[j], match[j])
 		}
 	}
 card3:
@@ -1473,8 +1473,8 @@ card3:
 	match[0] = 015
 	for j := range 80 {
 
-		if match[j] != c.image[j] {
-			t.Errorf(" Card %d failed to match %d %03x != %03x", 3, j, c.image[j], match[j])
+		if match[j] != c.Image[j] {
+			t.Errorf(" Card %d failed to match %d %03x != %03x", 3, j, c.Image[j], match[j])
 		}
 	}
 card4:
@@ -1490,8 +1490,8 @@ card4:
 	match[0] = 017
 	for j := range 80 {
 
-		if match[j] != c.image[j] {
-			t.Errorf(" Card %d failed to match %d %03x != %03x", 4, j, c.image[j], match[j])
+		if match[j] != c.Image[j] {
+			t.Errorf(" Card %d failed to match %d %03x != %03x", 4, j, c.Image[j], match[j])
 		}
 	}
 card5:
@@ -1517,8 +1517,8 @@ card5:
 	}
 
 	for j := range 80 {
-		if testImage[j] != c.image[j] {
-			t.Errorf(" Card %d failed to match %d %03x != %03x", 6, j, c.image[j], testImage[j])
+		if testImage[j] != c.Image[j] {
+			t.Errorf(" Card %d failed to match %d %03x != %03x", 6, j, c.Image[j], testImage[j])
 		}
 	}
 card7:
@@ -1545,68 +1545,3 @@ card7:
 	ctx.Detach()
 
 }
-
-//  /* Test autodecktion of binary deck.
-// 	correctly and that it can be re-read
-//  */
-//  CTEST2(card_test, auto_deck) {
-// 	 uint16_t    card_image[80];
-// 	 char        buffer[500];
-// 	 char        buffer2[500];
-// 	 int         i, j;
-
-// 	 for (j = 0; j < 10; j++) {
-// 		for (i = 0; i < 80; i++) {
-// 			 card_image[i] = i;
-// 		}
-// 		stack_card(card_ctx, &card_image);
-// 	 }
-// 	 memset(card_image, 0, sizeof(card_image));
-// 	 card_image[0] = 07; /* Stack EOR card */
-// 	 stack_card(card_ctx, &card_image);
-// 	 card_image[0] = 015; /* Stack EOF card */
-// 	 stack_card(card_ctx, &card_image);
-// 	 card_image[0] = 017; /* Stack EOI card */
-// 	 stack_card(card_ctx, &card_image);
-// 	 /* Now stack some ascii text... should auto handle it */
-// 	 for (i = 13; i < 23; i++) {
-// 		 sprintf(buffer, "%05d ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789  ", i);
-// 		 for (j = 0; j < 80; j++) {
-// 			 card_image[j] = ascii_to_hol(buffer[j]);
-// 		 }
-// 		 stack_card(card_ctx, &card_image);
-// 	 }
-// 	 card_ctx->mode = MODE_BIN;
-// 	 ASSERT_EQUAL(0, save_deck(card_ctx, "file1.deck"));
-// 	 ASSERT_EQUAL(0, hopper_size(card_ctx));
-// 	 card_ctx->mode = MODE_AUTO;
-// 	 /* Now read the deck in and compare */
-// 	 ASSERT_EQUAL(1, read_deck(card_ctx, "file1.deck"));
-// 	 for (i = 0; hopper_size(card_ctx) != 0; i++) {
-// 		 ASSERT_EQUAL(1, read_card(card_ctx, &card_image));
-// 		 if (i < 10) {
-// 			 for (j = 0; j < 80; j++) {
-// 				 ASSERT_EQUAL( j, card_image[j]);
-// 			 }
-// 		 } else if (i == 10) {
-// 			 ASSERT_EQUAL(07, card_image[0]);
-// 		 } else if (i == 11) {
-// 			 ASSERT_EQUAL(015, card_image[0]);
-// 		 } else if (i == 12) {
-// 			 ASSERT_EQUAL(017, card_image[0]);
-// 		 } else {
-// 			 sprintf(buffer2, "%05d ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789  ", i);
-// 			 for (j = 0; j < 80; j++) {
-// 				 buffer[j] = hol_to_ascii(card_image[j]);
-// 			 }
-// 			 buffer[80] = '\0';
-// 			 ASSERT_STR(buffer2, buffer);
-// 		 }
-// 		 if (i >= 10 && i <= 12) {
-// 			 for (j = 1; j < 80; j++) {
-// 				 ASSERT_EQUAL( 0, card_image[j]);
-// 			 }
-// 		 }
-// 	 }
-// 	 ASSERT_EQUAL(23, i);
-//  }

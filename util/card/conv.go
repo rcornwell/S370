@@ -45,6 +45,10 @@ func AsciiToHol(v uint8) uint16 {
 	return asciiToHol29[v]
 }
 
+func AsciiToSix(v uint8) uint8 {
+	return uint8(asciiToSix[v])
+}
+
 // Convert BCD character into hollerith code
 func BcdToHol(bcd uint8) uint16 {
 
