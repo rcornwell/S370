@@ -1,5 +1,3 @@
-package cpu
-
 /* IBM 370 Floating point instructions
 
    Copyright (c) 2024, Richard Cornwell
@@ -22,6 +20,8 @@ package cpu
    CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 */
+
+package cpu
 
 // Floating point half register
 func (cpu *cpu) opFPHalf(step *stepInfo) uint16 {
@@ -47,7 +47,7 @@ func (cpu *cpu) opFPHalf(step *stepInfo) uint16 {
 		// Check if underflow
 		if e1 < 0 {
 			if (cpu.progMask & EXPUNDER) != 0 {
-				return IRC_EXPUND
+				return ircExpUnder
 			} else {
 				sign = false
 				step.fsrc2 = 0
@@ -259,7 +259,7 @@ func (cpu *cpu) opFPAdd(step *stepInfo) uint16 {
 		r >>= 4
 		e1++
 		if e1 >= 128 {
-			return IRC_EXPOVR
+			return ircExpOver
 		}
 	}
 
@@ -298,7 +298,7 @@ func (cpu *cpu) opFPAdd(step *stepInfo) uint16 {
 	var err uint16 = 0
 	// Check signifigance exceptions
 	if cpu.cc == 0 && (cpu.progMask&SIGMASK) != 0 {
-		err = IRC_SIGNIF
+		err = ircSignif
 	} else {
 		// Check if we are normalized addition
 		if (step.opcode & 0x0e) != 0x0e {
@@ -310,7 +310,7 @@ func (cpu *cpu) opFPAdd(step *stepInfo) uint16 {
 				// Check if underflow
 				if e1 < 0 {
 					if (cpu.progMask & EXPUNDER) != 0 {
-						return IRC_EXPUND
+						return ircExpUnder
 					} else {
 						r = 0
 						s1 = false
@@ -467,7 +467,7 @@ func (cpu *cpu) opFPAddD(step *stepInfo) uint16 {
 		r >>= 4
 		e1++
 		if e1 >= 128 {
-			return IRC_EXPOVR
+			return ircExpOver
 		}
 	}
 
@@ -506,7 +506,7 @@ func (cpu *cpu) opFPAddD(step *stepInfo) uint16 {
 	var err uint16 = 0
 	// Check signifigance exceptions
 	if cpu.cc == 0 && (cpu.progMask&SIGMASK) != 0 {
-		err = IRC_SIGNIF
+		err = ircSignif
 	} else {
 		// Check if we are normalized addition
 		if (step.opcode & 0x0e) != 0x0e {
@@ -518,7 +518,7 @@ func (cpu *cpu) opFPAddD(step *stepInfo) uint16 {
 				// Check if underflow
 				if e1 < 0 {
 					if (cpu.progMask & EXPUNDER) != 0 {
-						return IRC_EXPUND
+						return ircExpUnder
 					} else {
 						r = 0
 						s1 = false
@@ -597,7 +597,7 @@ func (cpu *cpu) opFPMul(step *stepInfo) uint16 {
 	var err uint16 = 0
 	// Check for overflow
 	if e1 >= 128 {
-		err = IRC_EXPOVR
+		err = ircExpOver
 	}
 
 	// Align the results
@@ -609,7 +609,7 @@ func (cpu *cpu) opFPMul(step *stepInfo) uint16 {
 		// Check if underflow
 		if e1 < 0 {
 			if (cpu.progMask & EXPUNDER) != 0 {
-				err = IRC_EXPUND
+				err = ircExpUnder
 			} else {
 				r = 0
 				s1 = false
@@ -650,7 +650,7 @@ func (cpu *cpu) opFPDiv(step *stepInfo) uint16 {
 	v2 := step.fsrc2 & MMASKL
 
 	if v2 == 0 {
-		return IRC_FPDIV
+		return ircFPDiv
 	}
 
 	// Pre-nomalize v1 and v2 */
@@ -714,7 +714,7 @@ func (cpu *cpu) opFPDiv(step *stepInfo) uint16 {
 	var err uint16 = 0
 	// Check for overflow
 	if e1 >= 128 {
-		err = IRC_EXPOVR
+		err = ircExpOver
 	}
 
 	// Align the results
@@ -726,7 +726,7 @@ func (cpu *cpu) opFPDiv(step *stepInfo) uint16 {
 		// Check if underflow
 		if e1 < 0 {
 			if (cpu.progMask & EXPUNDER) != 0 {
-				err = IRC_EXPUND
+				err = ircExpUnder
 			} else {
 				r = 0
 				s1 = false
@@ -768,7 +768,7 @@ func (cpu *cpu) opLRER(step *stepInfo) uint16 {
 			v >>= 4
 			e++
 			if e > 128 {
-				err = IRC_EXPOVR
+				err = ircExpOver
 			}
 		}
 		// Store results
@@ -783,7 +783,7 @@ func (cpu *cpu) opLRER(step *stepInfo) uint16 {
 
 func (cpu *cpu) opLRDR(step *stepInfo) uint16 {
 	if (step.R2 & 0xb) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	}
 	var err uint16 = 0
 	var v uint64 = cpu.fpregs[step.R2]
@@ -796,7 +796,7 @@ func (cpu *cpu) opLRDR(step *stepInfo) uint16 {
 			v >>= 4
 			e++
 			if e > 128 {
-				err = IRC_EXPOVR
+				err = ircExpOver
 			}
 		}
 		// Store results
@@ -811,7 +811,7 @@ func (cpu *cpu) opLRDR(step *stepInfo) uint16 {
 
 func (cpu *cpu) opAXR(step *stepInfo) uint16 {
 	if (step.R1&0xb) != 0 || (step.R2&0xb) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	}
 	var err uint16 = 0
 	v1l := cpu.fpregs[step.R1]
@@ -915,7 +915,7 @@ func (cpu *cpu) opAXR(step *stepInfo) uint16 {
 		v1h >>= 4
 		e1++
 		if e1 >= 128 {
-			err = IRC_EXPOVR
+			err = ircExpOver
 		}
 	}
 
@@ -936,7 +936,7 @@ func (cpu *cpu) opAXR(step *stepInfo) uint16 {
 	if cpu.cc == 0 && (cpu.progMask&SIGMASK) != 0 {
 		cpu.fpregs[step.R1] = 0
 		cpu.fpregs[step.R1|2] = 0
-		return IRC_SIGNIF
+		return ircSignif
 	}
 
 	// Check if we need to normalize results
@@ -951,7 +951,7 @@ func (cpu *cpu) opAXR(step *stepInfo) uint16 {
 		// Check if underflow
 		if e1 < 0 {
 			if (cpu.progMask & EXPUNDER) != 0 {
-				err = IRC_EXPUND
+				err = ircExpUnder
 			} else {
 				v1l = 0
 				v1h = 0
@@ -989,7 +989,7 @@ func (cpu *cpu) opAXR(step *stepInfo) uint16 {
 func (cpu *cpu) opMXD(step *stepInfo) uint16 {
 	// Check if registers are valid.
 	if (step.R1 & 0xb) != 0 { // 0 or 4
-		return IRC_SPEC
+		return ircSpec
 	}
 
 	// Extract number and adjust
@@ -1046,7 +1046,7 @@ func (cpu *cpu) opMXD(step *stepInfo) uint16 {
 
 		// Check for overflow
 		if e1 >= 128 {
-			err = IRC_EXPOVR
+			err = ircExpOver
 		}
 
 	}
@@ -1063,7 +1063,7 @@ func (cpu *cpu) opMXD(step *stepInfo) uint16 {
 		// Check if underflow
 		if e1 < 0 {
 			if (cpu.progMask & EXPUNDER) != 0 {
-				err = IRC_EXPUND
+				err = ircExpUnder
 			} else {
 				r = 0
 				v1 = 0
@@ -1092,7 +1092,7 @@ func (cpu *cpu) opMXD(step *stepInfo) uint16 {
 
 func (cpu *cpu) opMXR(step *stepInfo) uint16 {
 	if (step.R1&0xb) != 0 || (step.R2&0xb) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	}
 	// Extract number and adjust
 	e1 := int((step.fsrc1 & EMASKL) >> 56)
@@ -1161,7 +1161,7 @@ func (cpu *cpu) opMXR(step *stepInfo) uint16 {
 		rh >>= 4
 		e1++
 		if e1 >= 128 {
-			err = IRC_EXPOVR
+			err = ircExpOver
 		}
 	}
 	// Remove guard digit

@@ -1,5 +1,3 @@
-package cpu
-
 /* IBM 370 System instructions
 
    Copyright (c) 2024, Richard Cornwell
@@ -23,6 +21,8 @@ package cpu
 
 */
 
+package cpu
+
 import (
 	"github.com/rcornwell/S370/emu/memory"
 	"github.com/rcornwell/S370/emu/sys_channel"
@@ -30,15 +30,15 @@ import (
 
 // Set storage key
 func (cpu *cpu) opSSK(step *stepInfo) uint16 {
-	if (cpu.flags & PROBLEM) != 0 {
+	if (cpu.flags & problem) != 0 {
 		// Try to do quick SSK
 		//if (QVMA && vma_stssk(R1, addr1))
 		//    break;
-		return IRC_PRIV
+		return ircPriv
 	} else if (step.address1 & 0x0f) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	} else if memory.CheckAddr(step.address1) {
-		return IRC_ADDR
+		return ircAddr
 	}
 	t := uint8(step.src1 & 0xf8)
 	memory.PutKey(step.address1, t)
@@ -47,14 +47,14 @@ func (cpu *cpu) opSSK(step *stepInfo) uint16 {
 
 // Insert storage Key into register
 func (cpu *cpu) opISK(step *stepInfo) uint16 {
-	if (cpu.flags & PROBLEM) != 0 {
+	if (cpu.flags & problem) != 0 {
 		//  if (QVMA && vma_stisk(src1, addr1))
 		// break;
-		return IRC_PRIV
+		return ircPriv
 	} else if (step.address1 & 0x0f) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	} else if memory.CheckAddr(step.address1) {
-		return IRC_ADDR
+		return ircAddr
 	}
 	t := memory.GetKey(step.address1)
 	cpu.regs[step.R1] &= 0xffffff00
@@ -73,7 +73,7 @@ func (cpu *cpu) opSVC(step *stepInfo) uint16 {
 	//  (cpu_unit[0].flags & (FEAT_370|FEAT_VMA)) == (FEAT_370|FEAT_VMA) && \
 	//  (cregs[6] & 0x88000000) == MSIGN && vma_stsvc(reg))
 	//  break
-	irqaddr := cpu.storePSW(OSPSW, uint16(step.R1))
+	irqaddr := cpu.storePSW(oSPSW, uint16(step.R1))
 	mem_cycle++
 	src1 := memory.GetMemory(irqaddr)
 	mem_cycle++
@@ -84,13 +84,13 @@ func (cpu *cpu) opSVC(step *stepInfo) uint16 {
 
 // Set system mask
 func (cpu *cpu) opSSM(step *stepInfo) uint16 {
-	if (cpu.flags & PROBLEM) != 0 {
+	if (cpu.flags & problem) != 0 {
 		//      sim_debug(DEBUG_VMA, &cpu_dev, "SSM  CR6 %08x\n", cregs[6]);
 		//      if (QVMA && vma_ssm(addr1))
 		//          break;
-		return IRC_PRIV
+		return ircPriv
 	} else if (cpu.cregs[0] & 0x40000000) != 0 {
-		return IRC_SPOP
+		return ircSpecOp
 	} else {
 		var t uint32
 		var err uint16
@@ -99,19 +99,20 @@ func (cpu *cpu) opSSM(step *stepInfo) uint16 {
 			return err
 		}
 
-		cpu.extEnb = (t & 0x01) != 0
+		ssm := uint8(t)
+		cpu.extEnb = (ssm & extEnable) != 0
 		if cpu.ecMode {
-			if (t & 0x02) != 0 {
+			if (ssm & irqEnable) != 0 {
 				cpu.irqEnb = true
 				cpu.sysMask = uint16(cpu.cregs[2] >> 16)
 			} else {
 				cpu.irqEnb = false
 				cpu.sysMask = 0
 			}
-			cpu.pageEnb = (t & 0x04) != 0
-			cpu.perEnb = (t & 0x08) != 0
+			cpu.pageEnb = (ssm & datEnable) != 0
+			cpu.perEnb = (ssm & perEnable) != 0
 			if (t & 0xb8) != 0 {
-				return IRC_SPEC
+				return ircSpec
 			}
 		} else {
 			cpu.sysMask = uint16(t&0xfc) << 8
@@ -129,12 +130,12 @@ func (cpu *cpu) opSSM(step *stepInfo) uint16 {
 // Load processor status word
 func (cpu *cpu) opLPSW(step *stepInfo) uint16 {
 
-	if (cpu.flags & PROBLEM) != 0 {
+	if (cpu.flags & problem) != 0 {
 		//       if (QVMA && vma_lpsw(addr1))
 		//           break;
-		return IRC_PRIV
+		return ircPriv
 	} else if (step.address1 & 0x7) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	} else {
 		var src1, src2 uint32
 		var err uint16
@@ -159,7 +160,7 @@ func (cpu *cpu) opCS(step *stepInfo) uint16 {
 	var src uint32
 
 	if (step.address1 & 0x3) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	}
 	orig, err = cpu.readFull(step.address1)
 	if err != 0 {
@@ -187,7 +188,7 @@ func (cpu *cpu) opCDS(step *stepInfo) uint16 {
 	var srcl, srch uint32
 
 	if (step.address1&0x7) != 0 || (step.R1&1) != 0 || (step.R2&1) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	}
 	origl, err = cpu.readFull(step.address1)
 	if err != 0 {
@@ -225,11 +226,11 @@ func (cpu *cpu) opLRA(step *stepInfo) uint16 {
 		step.address1 += cpu.regs[step.R2]
 		step.address1 &= AMASK
 	}
-	if (cpu.flags & PROBLEM) != 0 {
+	if (cpu.flags & problem) != 0 {
 		//                     /* Try to do quick LRA */
 		//                     if (QVMA && vma_lra(R1(reg), addr1, &cc))
 		//                         break;
-		return IRC_PRIV
+		return ircPriv
 		//                     storepsw(OPPSW, IRC_PRIV);
 	}
 	var seg, page, entry uint32
@@ -257,11 +258,11 @@ func (cpu *cpu) opLRA(step *stepInfo) uint16 {
 	mem_cycle++
 	entry, err = memory.GetWord(addr)
 	if err {
-		return IRC_ADDR
+		return ircAddr
 	}
 
 	/* Check if entry valid and in correct length */
-	if (entry & PTE_VALID) != 0 {
+	if (entry & pteValid) != 0 {
 		cpu.cc = 1
 		cpu.regs[step.R1] = addr
 		cpu.perRegMod |= 1 << step.R1
@@ -280,11 +281,11 @@ func (cpu *cpu) opLRA(step *stepInfo) uint16 {
 	}
 
 	// Now we need to fetch the actual entry
-	addr = ((entry & PTE_ADR) + (page << 1)) & AMASK
+	addr = ((entry & pteAddr) + (page << 1)) & AMASK
 	mem_cycle++
 	entry, err = memory.GetWord(addr)
 	if err {
-		return IRC_ADDR
+		return ircAddr
 	}
 
 	// extract actual PTE entry
@@ -302,7 +303,7 @@ func (cpu *cpu) opLRA(step *stepInfo) uint16 {
 
 	// Compute correct entry
 	entry = entry >> cpu.pteShift // Move physical to correct spot
-	addr = (step.address1 & cpu.pageMask) | (((entry & TLB_PHY) << cpu.pageShift) & AMASK)
+	addr = (step.address1 & cpu.pageMask) | (((entry & tlbPhy) << cpu.pageShift) & AMASK)
 	cpu.cc = 0
 	cpu.regs[step.R1] = addr
 	cpu.perRegMod |= 1 << step.R1
@@ -326,7 +327,7 @@ func (cpu *cpu) opEX(step *stepInfo) uint16 {
 
 	// Can't execute execute instruction
 	if s.opcode == OP_EX {
-		return IRC_EXEC
+		return ircExec
 	}
 	s.reg = uint8(step.src1 & 0xff)
 	s.R1 = (s.reg >> 4) & 0xf
@@ -358,104 +359,104 @@ func (cpu *cpu) opEX(step *stepInfo) uint16 {
 
 // Signal second processor
 func (cpu *cpu) opSIGP(step *stepInfo) uint16 {
-	if (cpu.flags & PROBLEM) != 0 {
-		return IRC_PRIV
+	if (cpu.flags & problem) != 0 {
+		return ircPriv
 	} else {
-		return IRC_OPR // Not supported
+		return ircOper // Not supported
 	}
 }
 
 // Machine check
 func (cpu *cpu) opMC(step *stepInfo) uint16 {
 	if (step.reg & 0xf0) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	}
 	if (cpu.cregs[8] & (1 << step.reg)) != 0 {
 		mem_cycle++
 		memory.SetMemoryMask(0x94, uint32(step.reg)<<16, HMASK)
-		return IRC_MCE
+		return ircMCE
 	}
 	return 0
 }
 
 // And or Or byte with system mask.
 func (cpu *cpu) opSTxSM(step *stepInfo) uint16 {
-	var t uint32
-	var r uint32
 
-	if (cpu.flags & PROBLEM) != 0 {
+	if (cpu.flags & problem) != 0 {
 		// Try to do quick STNSM
 		// if QVMA & vma_stnsm(reg, addr1))
 		// 	break
-		return IRC_PRIV
+		return ircPriv
 	}
 
-	t = 0
+	ssm := uint8(0)
+	var r uint8
+
 	if cpu.ecMode {
 		if cpu.pageEnb {
-			t |= 0x04
+			ssm |= datEnable
 		}
 		if cpu.irqEnb {
-			t |= 0x02
+			ssm |= irqEnable
 		}
 		if cpu.perEnb {
-			t |= 0x40
+			ssm |= perEnable
 		}
 		if cpu.extEnb {
-			t |= 0x01
+			ssm |= extEnable
 		}
 	} else {
-		t = (uint32(cpu.sysMask) >> 8 & 0xfe)
+		ssm = uint8((cpu.sysMask) >> 8 & 0xfe)
 		if cpu.extEnb {
-			t |= 0x01
+			ssm |= extEnable
 		}
 	}
 
 	// Merge mask
 	if step.opcode == OP_STNSM {
-		r = uint32(step.reg) & t
+		r = step.reg & ssm
 	} else {
-		r = uint32(step.reg) | t
+		r = step.reg | ssm
 	}
 
 	// Store original value
 
-	if err := cpu.writeByte(step.address1, t); err != 0 {
+	if err := cpu.writeByte(step.address1, uint32(r)); err != 0 {
 		return err
 	}
 
 	// Set new PSW
 	if cpu.ecMode {
 		if (r & 0xb8) != 0 {
-			return IRC_SPEC
+			return ircSpec
 		}
-		cpu.pageEnb = (r & 0x04) != 0
-		cpu.irqEnb = (r & 0x02) != 0
-		cpu.perEnb = (r & 0x40) != 0
+		cpu.pageEnb = (r & datEnable) != 0
+		cpu.irqEnb = (r & irqEnable) != 0
+		cpu.perEnb = (r & perEnable) != 0
 		if cpu.irqEnb {
 			cpu.sysMask = uint16(cpu.cregs[2] >> 16)
 		} else {
 			cpu.sysMask = 0
 		}
 		if (r & 0xb8) != 0 {
-			return IRC_SPEC
+			return ircSpec
 		}
 	} else {
-		cpu.sysMask = uint16((r << 8) & 0xfc00)
-		if (r & 0x2) != 0 {
-			cpu.sysMask |= uint16((cpu.cregs[2] >> 16) & 0x3ff)
+		cpu.sysMask = (uint16(r) << 8) & uint16(0xfc00)
+		if (r & irqEnable) != 0 {
+			cpu.sysMask |= uint16(cpu.cregs[2]>>16) & uint16(0x3ff)
 		}
 		cpu.irqEnb = cpu.sysMask != 0
 	}
 	sys_channel.IrqPending = true
-	cpu.extEnb = (r & 0x01) != 0
+	cpu.extEnb = (r & extEnable) != 0
 	return 0
 }
 
 // Load control registers
 func (cpu *cpu) opLCTL(step *stepInfo) uint16 {
-	if (cpu.flags & PROBLEM) != 0 {
-		return IRC_PRIV
+	if (cpu.flags & problem) != 0 {
+		return ircPriv
 	}
 
 	for {
@@ -559,11 +560,11 @@ func (cpu *cpu) opLCTL(step *stepInfo) uint16 {
 
 // Store control
 func (cpu *cpu) opSTCTL(step *stepInfo) uint16 {
-	if (cpu.flags & PROBLEM) != 0 {
+	if (cpu.flags & problem) != 0 {
 		// Try to do a quick STCTL
 		// if (QVMA && vm_stctl(step))
 		// return 0
-		return IRC_PRIV
+		return ircPriv
 	}
 	for {
 		if err := cpu.writeFull(step.address1, cpu.cregs[step.R1]); err != 0 {
@@ -581,10 +582,10 @@ func (cpu *cpu) opSTCTL(step *stepInfo) uint16 {
 
 // CPU Diagnostic instruction
 func (cpu *cpu) opDIAG(step *stepInfo) uint16 {
-	if (cpu.flags & PROBLEM) != 0 {
-		return IRC_PRIV
+	if (cpu.flags & problem) != 0 {
+		return ircPriv
 	}
-	cpu.storePSW(OMPSW, uint16(step.reg))
+	cpu.storePSW(oMPSW, uint16(step.reg))
 	return 0
 }
 
@@ -593,13 +594,13 @@ func (cpu *cpu) opB2(step *stepInfo) uint16 {
 	var t1, t2 uint32
 
 	if step.reg > 0x13 {
-		return IRC_OPR
+		return ircOper
 	}
-	if step.reg != 5 && (cpu.flags&PROBLEM) != 0 {
+	if step.reg != 5 && (cpu.flags&problem) != 0 {
 		//                        /* Try to do quick IPK */
 		//                        if (QVMA && vma_370(reg, addr1))
 		//                            break;
-		return IRC_PRIV
+		return ircPriv
 	}
 	switch step.reg {
 	case 0x00: // CONCS
@@ -734,26 +735,26 @@ func (cpu *cpu) opB2(step *stepInfo) uint16 {
 			cpu.tlb[i] = 0
 		}
 	case 0x10: // SPX
-		return IRC_OPR
+		return ircOper
 	case 0x11: // SPTX
-		return IRC_OPR
+		return ircOper
 	case 0x12: // STAP
-		return IRC_OPR
+		return ircOper
 	case 0x13: // RRB
 		// Set storage block reference bit to zero
 		k := memory.GetKey(step.address1)
 		memory.PutKey(step.address1, k&0xfb)
 		cpu.cc = (k >> 1) & 0x3
 	default:
-		return IRC_OPR
+		return ircOper
 	}
 	return 0
 }
 
 // Start I/O Operation
 func (cpu *cpu) opSIO(step *stepInfo) uint16 {
-	if (cpu.flags & PROBLEM) != 0 {
-		return IRC_PRIV
+	if (cpu.flags & problem) != 0 {
+		return ircPriv
 	}
 	cpu.cc = sys_channel.StartIO(uint16(step.address1 & 0xfff))
 	return 0
@@ -761,8 +762,8 @@ func (cpu *cpu) opSIO(step *stepInfo) uint16 {
 
 // Test state of device.
 func (cpu *cpu) opTIO(step *stepInfo) uint16 {
-	if (cpu.flags & PROBLEM) != 0 {
-		return IRC_PRIV
+	if (cpu.flags & problem) != 0 {
+		return ircPriv
 	}
 	cpu.cc = sys_channel.TestIO(uint16(step.address1 & 0xfff))
 	return 0
@@ -770,8 +771,8 @@ func (cpu *cpu) opTIO(step *stepInfo) uint16 {
 
 // Halt I/O device.
 func (cpu *cpu) opHIO(step *stepInfo) uint16 {
-	if (cpu.flags & PROBLEM) != 0 {
-		return IRC_PRIV
+	if (cpu.flags & problem) != 0 {
+		return ircPriv
 	}
 	cpu.cc = sys_channel.HaltIO(uint16(step.address1 & 0xfff))
 	return 0
@@ -779,8 +780,8 @@ func (cpu *cpu) opHIO(step *stepInfo) uint16 {
 
 // Check state of channel
 func (cpu *cpu) opTCH(step *stepInfo) uint16 {
-	if (cpu.flags & PROBLEM) != 0 {
-		return IRC_PRIV
+	if (cpu.flags & problem) != 0 {
+		return ircPriv
 	}
 	cpu.cc = sys_channel.TestChan(uint16(step.address1 & 0xfff))
 	return 0

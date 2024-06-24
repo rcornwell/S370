@@ -1,5 +1,3 @@
-package cpu
-
 /*
  * S370 - Channel I/O tests.
  *
@@ -25,31 +23,33 @@ package cpu
  *
  */
 
+package cpu
+
 import (
 	"testing"
 
-	Ev "github.com/rcornwell/S370/emu/event"
-	M "github.com/rcornwell/S370/emu/memory"
-	Ch "github.com/rcornwell/S370/emu/sys_channel"
+	ev "github.com/rcornwell/S370/emu/event"
+	mem "github.com/rcornwell/S370/emu/memory"
+	ch "github.com/rcornwell/S370/emu/sys_channel"
 )
 
 func ioSetup(devNum uint16) *Test_dev {
 	setup()
-	Ch.InitializeChannels()
-	Ch.AddChannel(0, Ch.TypeMux, 192)
-	d := &Test_dev{addr: devNum, mask: 0xff}
-	Ch.AddDevice(d, devNum)
+	ch.InitializeChannels()
+	ch.AddChannel(0, ch.TypeMux, 192)
+	d := &Test_dev{Addr: devNum, Mask: 0xff}
+	ch.AddDevice(d, devNum)
 	_ = d.InitDev()
 	for i := range 0x10 {
-		d.data[i] = uint8(0xf0 + i)
+		d.Data[i] = uint8(0xf0 + i)
 	}
-	d.max = 0x10
+	d.Max = 0x10
 	return d
 }
 
 /* Read byte from main memory */
 func getMemByte(addr uint32) uint8 {
-	v := M.GetMemory(addr)
+	v := mem.GetMemory(addr)
 	b := uint8((v >> (8 * (3 - (addr & 3))) & 0xff))
 	return b
 }
@@ -59,7 +59,7 @@ func setMemByte(addr uint32, data uint32) {
 	off := 8 * (3 - (addr & 3))
 	m := uint32(0xff << off)
 	d := (data & 0xff) << off
-	M.SetMemoryMask(addr, d, m)
+	mem.SetMemoryMask(addr, d, m)
 }
 
 func (cpu *cpu) iotestInst(mask uint8, steps int) {
@@ -67,8 +67,8 @@ func (cpu *cpu) iotestInst(mask uint8, steps int) {
 	cpu.progMask = mask & 0xf
 	cpu.sysMask = 0xff00
 	cpu.irqEnb = true
-	M.SetMemory(0x68, 0)
-	M.SetMemory(0x6c, 0x800)
+	mem.SetMemory(0x68, 0)
+	mem.SetMemory(0x6c, 0x800)
 	trap_flag = false
 	cy := 0
 	for range steps {
@@ -79,7 +79,7 @@ func (cpu *cpu) iotestInst(mask uint8, steps int) {
 			trap_flag = true
 		}
 		// Stop it next opcode = 0
-		w := M.GetMemory(cpu.PC)
+		w := mem.GetMemory(cpu.PC)
 		if (cpu.PC & 2) == 0 {
 			w >>= 16
 		}
@@ -89,21 +89,21 @@ func (cpu *cpu) iotestInst(mask uint8, steps int) {
 		if c == 0 {
 			c = 1
 		}
-		Ev.Advance(c)
+		ev.Advance(c)
 	}
 }
 
 // Debug channel test.
 func TestCycleTch(t *testing.T) {
 	ioSetup(0x00f)
-	M.SetMemory(0x400, 0x9f00040f)
-	M.SetMemory(0x404, 0)
+	mem.SetMemory(0x400, 0x9f00040f)
+	mem.SetMemory(0x404, 0)
 	cpuState.iotestInst(0, 20)
 	if cpuState.cc != 3 {
 		t.Errorf("Test Channel on non-existing channel failed expected %d got: %d", 3, cpuState.cc)
 	}
-	M.SetMemory(0x400, 0x9f00000f)
-	M.SetMemory(0x404, 0)
+	mem.SetMemory(0x400, 0x9f00000f)
+	mem.SetMemory(0x404, 0)
 	cpuState.iotestInst(0, 20)
 	if cpuState.cc != 0 {
 		t.Errorf("Test Channel on non-existing channel failed expected %d got: %d", 0, cpuState.cc)
@@ -112,14 +112,14 @@ func TestCycleTch(t *testing.T) {
 
 func TestTestIO(t *testing.T) {
 	_ = ioSetup(0x00f)
-	M.SetMemory(0x400, 0x9d00000f)
-	M.SetMemory(0x404, 0)
+	mem.SetMemory(0x400, 0x9d00000f)
+	mem.SetMemory(0x404, 0)
 	cpuState.iotestInst(0, 20)
 	if cpuState.cc != 0 {
 		t.Errorf("Test I/O expected %d got: %d", 0, cpuState.cc)
 	}
-	M.SetMemory(0x400, 0x9d00000d)
-	M.SetMemory(0x404, 0)
+	mem.SetMemory(0x400, 0x9d00000d)
+	mem.SetMemory(0x404, 0)
 	cpuState.iotestInst(0, 20)
 	if cpuState.cc != 3 {
 		t.Errorf("Test I/O expected %d got: %d", 3, cpuState.cc)
@@ -130,44 +130,44 @@ func TestCycleSIO(t *testing.T) {
 	var v uint32
 
 	td := ioSetup(0xf)
-	M.SetMemory(0x40, 0)
-	M.SetMemory(0x44, 0)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0)
+	mem.SetMemory(0x44, 0)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47000424) // BC  0,424
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47000424) // BC  0,424
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x02000600) // Set channel words
-	M.SetMemory(0x504, 0x00000010)
+	mem.SetMemory(0x500, 0x02000600) // Set channel words
+	mem.SetMemory(0x504, 0x00000010)
 
 	// Load memory with value not equal to rea1 CSW2d data.
 	for i := uint32(0x600); i < 0x640; i += 4 {
-		M.SetMemory(i, 0x55555555)
+		mem.SetMemory(i, 0x55555555)
 	}
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O 1 CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O 1 CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
 
-	v = M.GetMemory(0x38)
+	v = mem.GetMemory(0x38)
 	if v != 0xff06000f {
 		t.Errorf("Start I/O 1 OIOPSW2 expected %08x got: %08x", 0xff06000f, v)
 	}
-	v = M.GetMemory(0x3c)
+	v = mem.GetMemory(0x3c)
 	if v != 0x14000408 {
 		t.Errorf("Start I/O 1 OIOPSW2 expected %08x got: %08x", 0x94000408, v)
 	}
@@ -179,50 +179,50 @@ func TestCycleSIO(t *testing.T) {
 		}
 	}
 
-	M.SetMemory(0x40, 0)
-	M.SetMemory(0x44, 0)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0)
+	mem.SetMemory(0x44, 0)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47000424) // BC  0,424
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47000424) // BC  0,424
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x01000600) // Set channel words
-	M.SetMemory(0x504, 0x00000010)
+	mem.SetMemory(0x500, 0x01000600) // Set channel words
+	mem.SetMemory(0x504, 0x00000010)
 
-	M.SetMemory(0x600, 0xf0f1f2f3) // Validate data
-	M.SetMemory(0x604, 0xf4f5f6f7)
-	M.SetMemory(0x608, 0xf8f9fafb)
-	M.SetMemory(0x60C, 0xfcfdfeff)
+	mem.SetMemory(0x600, 0xf0f1f2f3) // Validate data
+	mem.SetMemory(0x604, 0xf4f5f6f7)
+	mem.SetMemory(0x608, 0xf8f9fafb)
+	mem.SetMemory(0x60C, 0xfcfdfeff)
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O 1 CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O 1 CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
 
-	v = M.GetMemory(0x38)
+	v = mem.GetMemory(0x38)
 	if v != 0xff06000f {
 		t.Errorf("Start I/O 1 OIOPSW2 expected %08x got: %08x", 0xff06000f, v)
 	}
-	v = M.GetMemory(0x3c)
+	v = mem.GetMemory(0x3c)
 	if v != 0x14000408 {
 		t.Errorf("Start I/O 1 OIOPSW2 expected %08x got: %08x", 0x94000408, v)
 	}
 
 	for i := range 0x10 {
-		b := td.data[i]
+		b := td.Data[i]
 		if b != uint8(0xf0+i) {
 			t.Errorf("Start I/O 2 Invalid data %02x expected: %02x got %02x", i, 0x0f+i, b)
 		}
@@ -233,34 +233,34 @@ func TestCycleSense(t *testing.T) {
 	var v uint32
 
 	_ = ioSetup(0xf)
-	M.SetMemory(0x40, 0)
-	M.SetMemory(0x44, 0)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0)
+	mem.SetMemory(0x44, 0)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x408, 0x47700404) // BC  7,404
-	M.SetMemory(0x410, 0x00000000)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x408, 0x47700404) // BC  7,404
+	mem.SetMemory(0x410, 0x00000000)
 
-	M.SetMemory(0x500, 0x04000600) // Set channel words
-	M.SetMemory(0x504, 0x00000001)
+	mem.SetMemory(0x500, 0x04000600) // Set channel words
+	mem.SetMemory(0x504, 0x00000001)
 
-	M.SetMemory(0x600, 0xffffffff) // Invalidate data
+	mem.SetMemory(0x600, 0xffffffff) // Invalidate data
 
 	cpuState.iotestInst(0, 50)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O 1 CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O 1 CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
 
-	v = M.GetMemory(0x600)
+	v = mem.GetMemory(0x600)
 	if v != 0x00ffffff {
 		t.Errorf("Start I/O sense expected %08x got: %08x", 0x00ffffff, v)
 	}
@@ -270,70 +270,70 @@ func TestCycleNop(t *testing.T) {
 	var v uint32
 
 	_ = ioSetup(0xf)
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x408, 0x47700404) // BC  7,424
-	M.SetMemory(0x410, 0xc0000000)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x408, 0x47700404) // BC  7,424
+	mem.SetMemory(0x410, 0xc0000000)
 
-	M.SetMemory(0x500, 0x03000600) // Set channel words
-	M.SetMemory(0x504, 0x00000001)
+	mem.SetMemory(0x500, 0x03000600) // Set channel words
+	mem.SetMemory(0x504, 0x00000001)
 
 	// Load memory with value not equal to read data.
 	for i := uint32(0x600); i < 0x640; i += 4 {
-		M.SetMemory(i, 0x55555555)
+		mem.SetMemory(i, 0x55555555)
 	}
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O nop CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000001 {
 		t.Errorf("Start I/O nop CSW2 expected %08x got: %08x", 0x0c000001, v)
 	}
 
-	v = M.GetMemory(0x600)
+	v = mem.GetMemory(0x600)
 	if v != 0x55555555 {
 		t.Errorf("Start I/O 1 CSW2 expected %08x got: %08x", 0x55555555, v)
 	}
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x408, 0x47700404) // BC  7,424
-	M.SetMemory(0x410, 0xc0000000)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x408, 0x47700404) // BC  7,424
+	mem.SetMemory(0x410, 0xc0000000)
 
-	M.SetMemory(0x500, 0x03000600) // Set channel words
-	M.SetMemory(0x504, 0x00000000)
+	mem.SetMemory(0x500, 0x03000600) // Set channel words
+	mem.SetMemory(0x504, 0x00000000)
 
 	// Load memory with value not equal to read data.
 	for i := uint32(0x600); i < 0x640; i += 4 {
-		M.SetMemory(i, 0x55555555)
+		mem.SetMemory(i, 0x55555555)
 	}
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0xffffffff {
 		t.Errorf("Start I/O zero count CSW1 expected %08x got: %08x", 0xffffffff, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0020ffff {
 		t.Errorf("Start I/O zero count CSW2 expected %08x got: %08x", 0x0020ffff, v)
 	}
 
-	v = M.GetMemory(0x600)
+	v = mem.GetMemory(0x600)
 	if v != 0x55555555 {
 		t.Errorf("Start I/O zero count Dsts expected %08x got: %08x", 0x55555555, v)
 	}
@@ -343,24 +343,24 @@ func TestCycleCEOnly(t *testing.T) {
 	var v uint32
 
 	_ = ioSetup(0xf)
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x47800410) // BC 8,410
-	M.SetMemory(0x408, 0x58100040) // L 1,40  Save initial status
-	M.SetMemory(0x40c, 0x58200044) // L 2,44
-	M.SetMemory(0x410, 0x82000430) // LPSW 0430
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x430, 0xff060000) // Wait PSW
-	M.SetMemory(0x434, 0x14000420)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x47800410) // BC 8,410
+	mem.SetMemory(0x408, 0x58100040) // L 1,40  Save initial status
+	mem.SetMemory(0x40c, 0x58200044) // L 2,44
+	mem.SetMemory(0x410, 0x82000430) // LPSW 0430
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x430, 0xff060000) // Wait PSW
+	mem.SetMemory(0x434, 0x14000420)
 
-	M.SetMemory(0x500, 0x13000600) // Set channel words
-	M.SetMemory(0x504, 0x00000001)
+	mem.SetMemory(0x500, 0x13000600) // Set channel words
+	mem.SetMemory(0x504, 0x00000001)
 
 	cpuState.iotestInst(0, 2000)
 
@@ -373,20 +373,20 @@ func TestCycleCEOnly(t *testing.T) {
 		t.Errorf("Start I/O Initial CSW2 expected %08x got: %08x", 0x0800ffff, v)
 	}
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000000 {
 		t.Errorf("Start I/O 1 CSW1 expected %08x got: %08x", 0x00000000, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x04000000 {
 		t.Errorf("Start I/O 1 CSW2 expected %08x got: %08x", 0x04000000, v)
 	}
 
-	v = M.GetMemory(0x38)
+	v = mem.GetMemory(0x38)
 	if v != 0xff06000f {
 		t.Errorf("Start I/O 1 OIOPSW2 expected %08x got: %08x", 0xff06000f, v)
 	}
-	v = M.GetMemory(0x3c)
+	v = mem.GetMemory(0x3c)
 	if v != 0x14000420 {
 		t.Errorf("Start I/O 1 OIOPSW2 expected %08x got: %08x", 0x14000420, v)
 	}
@@ -396,26 +396,26 @@ func TestCycleCCNop(t *testing.T) {
 	var v uint32
 
 	_ = ioSetup(0xf)
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x47800410) // BC 8,410
-	M.SetMemory(0x408, 0x58100040) // L 1,40  Save initial status
-	M.SetMemory(0x40c, 0x58200044) // L 2,44
-	M.SetMemory(0x410, 0x82000430) // LPSW 0430
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x430, 0xff060000) // Wait PSW
-	M.SetMemory(0x434, 0x14000420)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x47800410) // BC 8,410
+	mem.SetMemory(0x408, 0x58100040) // L 1,40  Save initial status
+	mem.SetMemory(0x40c, 0x58200044) // L 2,44
+	mem.SetMemory(0x410, 0x82000430) // LPSW 0430
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x430, 0xff060000) // Wait PSW
+	mem.SetMemory(0x434, 0x14000420)
 
-	M.SetMemory(0x500, 0x13000600) // Set channel words
-	M.SetMemory(0x504, 0x40000001)
-	M.SetMemory(0x508, 0x03000600)
-	M.SetMemory(0x50c, 0x00000001)
+	mem.SetMemory(0x500, 0x13000600) // Set channel words
+	mem.SetMemory(0x504, 0x40000001)
+	mem.SetMemory(0x508, 0x03000600)
+	mem.SetMemory(0x50c, 0x00000001)
 
 	cpuState.iotestInst(0, 2000)
 
@@ -428,20 +428,20 @@ func TestCycleCCNop(t *testing.T) {
 		t.Errorf("Start I/O Initial CCNOP CSW2 expected %08x got: %08x", 0x0800ffff, v)
 	}
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000510 {
 		t.Errorf("Start I/O 1 CSW1 CCNOP expected %08x got: %08x", 0x00000510, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000001 {
 		t.Errorf("Start I/O 1 CSW2 CCNOP expected %08x got: %08x", 0x0c000001, v)
 	}
 
-	v = M.GetMemory(0x38)
+	v = mem.GetMemory(0x38)
 	if v != 0xff06000f {
 		t.Errorf("Start I/O 1 OIOPSW2 CCNOP expected %08x got: %08x", 0xff06000f, v)
 	}
-	v = M.GetMemory(0x3c)
+	v = mem.GetMemory(0x3c)
 	if v != 0x14000420 {
 		t.Errorf("Start I/O 1 OIOPSW2 CCNOP expected %08x got: %08x", 0x14000420, v)
 	}
@@ -453,39 +453,39 @@ func TestCycleRead(t *testing.T) {
 	d := ioSetup(0xf)
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = uint8(0x10 + i)
+		d.Data[i] = uint8(0x10 + i)
 	}
-	d.max = 0x20
+	d.Max = 0x20
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x02000600) // Set channel words
-	M.SetMemory(0x504, 0x00000020)
+	mem.SetMemory(0x500, 0x02000600) // Set channel words
+	mem.SetMemory(0x504, 0x00000020)
 
 	// Load memory with value not equal to rea1 CSW2d data.
 	for i := uint32(0x600); i < 0x640; i += 4 {
-		M.SetMemory(i, 0x55555555)
+		mem.SetMemory(i, 0x55555555)
 	}
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O Read  CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O Read CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
@@ -510,39 +510,39 @@ func TestCycleReadShort(t *testing.T) {
 	d := ioSetup(0xf)
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = uint8(0x10 + i)
+		d.Data[i] = uint8(0x10 + i)
 	}
-	d.max = 0x20
+	d.Max = 0x20
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x02000600) // Set channel words
-	M.SetMemory(0x504, 0x00000010)
+	mem.SetMemory(0x500, 0x02000600) // Set channel words
+	mem.SetMemory(0x504, 0x00000010)
 
 	// Load memory with value not equal to rea1 CSW2d data.
 	for i := uint32(0x600); i < 0x640; i += 4 {
-		M.SetMemory(i, 0x55555555)
+		mem.SetMemory(i, 0x55555555)
 	}
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O Read Short CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c400000 {
 		t.Errorf("Start I/O Short Read Short CSW2 expected %08x got: %08x", 0x0c400000, v)
 	}
@@ -567,38 +567,38 @@ func TestCycleReadShortSLI(t *testing.T) {
 	d := ioSetup(0xf)
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = uint8(0x10 + i)
+		d.Data[i] = uint8(0x10 + i)
 	}
-	d.max = 0x20
+	d.Max = 0x20
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x02000600) // Set channel words
-	M.SetMemory(0x504, 0x20000010)
+	mem.SetMemory(0x500, 0x02000600) // Set channel words
+	mem.SetMemory(0x504, 0x20000010)
 
 	// Load memory with value not equal to rea1 CSW2d data.
 	for i := uint32(0x600); i < 0x640; i += 4 {
-		M.SetMemory(i, 0x55555555)
+		mem.SetMemory(i, 0x55555555)
 	}
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O Short Read SLI CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O Short Read SLI CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
@@ -623,26 +623,26 @@ func TestCycleWrite(t *testing.T) {
 	d := ioSetup(0xf)
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = uint8(0x55)
+		d.Data[i] = uint8(0x55)
 	}
-	d.max = 0x20
+	d.Max = 0x20
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x01000600) // Set channel words
-	M.SetMemory(0x504, 0x00000020)
+	mem.SetMemory(0x500, 0x01000600) // Set channel words
+	mem.SetMemory(0x504, 0x00000020)
 
 	// Load memory with value not equal to read data.
 	for i := range 0x20 {
@@ -650,17 +650,17 @@ func TestCycleWrite(t *testing.T) {
 	}
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O Write CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O Write CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
 
 	for i := range 0x20 {
-		vb := d.data[i]
+		vb := d.Data[i]
 		if vb != uint8(0x10+i) {
 			t.Errorf("Start I/O Write Dev Data expected %02x got: %02x at: %02x", 0x10+i, vb, i)
 		}
@@ -677,26 +677,26 @@ func TestCycleWriteShort(t *testing.T) {
 	d := ioSetup(0xf)
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = uint8(0x55)
+		d.Data[i] = uint8(0x55)
 	}
-	d.max = 0x10
+	d.Max = 0x10
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x01000600) // Set channel words
-	M.SetMemory(0x504, 0x00000020)
+	mem.SetMemory(0x500, 0x01000600) // Set channel words
+	mem.SetMemory(0x504, 0x00000020)
 
 	// Load memory with value not equal to read data.
 	for i := range 0x20 {
@@ -705,11 +705,11 @@ func TestCycleWriteShort(t *testing.T) {
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O Short Write CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c40000f {
 		t.Errorf("Start I/O Short Write CSW2 expected %08x got: %08x", 0x0c40000f, v)
 	}
@@ -719,7 +719,7 @@ func TestCycleWriteShort(t *testing.T) {
 		if i > 0x10 {
 			mb = 0x55
 		}
-		vb := d.data[i]
+		vb := d.Data[i]
 		if vb != mb {
 			t.Errorf("Start I/O Write Data expected %02x got: %02x at: %02x", mb, vb, i)
 		}
@@ -736,26 +736,26 @@ func TestCycleWriteShortSLI(t *testing.T) {
 	d := ioSetup(0xf)
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = uint8(0x55)
+		d.Data[i] = uint8(0x55)
 	}
-	d.max = 0x10
+	d.Max = 0x10
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x01000600) // Set channel words
-	M.SetMemory(0x504, 0x20000020)
+	mem.SetMemory(0x500, 0x01000600) // Set channel words
+	mem.SetMemory(0x504, 0x20000020)
 
 	// Load memory with value not equal to read data.
 	for i := range 0x20 {
@@ -763,11 +763,11 @@ func TestCycleWriteShortSLI(t *testing.T) {
 	}
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O Short Write CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c00000f {
 		t.Errorf("Start I/O Short Write CSW2 expected %08x got: %08x", 0x0c00000f, v)
 	}
@@ -777,7 +777,7 @@ func TestCycleWriteShortSLI(t *testing.T) {
 		if i > 0x10 {
 			mb = 0x55
 		}
-		vb := d.data[i]
+		vb := d.Data[i]
 		if vb != mb {
 			t.Errorf("Start I/O Write Data expected %02x got: %02x at: %02x", mb, vb, i)
 		}
@@ -794,41 +794,41 @@ func TestCycleReadCDA(t *testing.T) {
 	d := ioSetup(0xf)
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = uint8(0x10 + i)
+		d.Data[i] = uint8(0x10 + i)
 	}
-	d.max = 0x20
+	d.Max = 0x20
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x02000600) // Set channel words
-	M.SetMemory(0x504, 0x80000010)
-	M.SetMemory(0x508, 0x01000700)
-	M.SetMemory(0x50c, 0x00000010)
+	mem.SetMemory(0x500, 0x02000600) // Set channel words
+	mem.SetMemory(0x504, 0x80000010)
+	mem.SetMemory(0x508, 0x01000700)
+	mem.SetMemory(0x50c, 0x00000010)
 
 	// Load memory with value not equal to read data.
 	for i := range uint32(0x20) {
-		M.SetMemory(0x600+i, 0x55555555)
-		M.SetMemory(0x700+i, 0x55555555)
+		mem.SetMemory(0x600+i, 0x55555555)
+		mem.SetMemory(0x700+i, 0x55555555)
 	}
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000510 {
 		t.Errorf("Start I/O Read CDA CSW1 expected %08x got: %08x", 0x00000510, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O Read CDA CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
@@ -859,58 +859,58 @@ func TestCycleWriteCDA(t *testing.T) {
 	d := ioSetup(0xf)
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = 0x55
+		d.Data[i] = 0x55
 	}
-	d.max = 0x20
+	d.Max = 0x20
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x01000600) // Set channel words
-	M.SetMemory(0x504, 0x80000010)
-	M.SetMemory(0x508, 0x00000700)
-	M.SetMemory(0x50c, 0x00000010)
+	mem.SetMemory(0x500, 0x01000600) // Set channel words
+	mem.SetMemory(0x504, 0x80000010)
+	mem.SetMemory(0x508, 0x00000700)
+	mem.SetMemory(0x50c, 0x00000010)
 
-	M.SetMemory(0x600, 0x0f1f2f3f) // Data to send
-	M.SetMemory(0x604, 0x4f5f6f7f)
-	M.SetMemory(0x608, 0x8f9fafbf)
-	M.SetMemory(0x60c, 0xcfdfefff)
-	M.SetMemory(0x700, 0x0c1c2c3c) // Data to send
-	M.SetMemory(0x704, 0x4c5c6c7c)
-	M.SetMemory(0x708, 0x8c9cacbc)
-	M.SetMemory(0x70c, 0xccdcecfc)
+	mem.SetMemory(0x600, 0x0f1f2f3f) // Data to send
+	mem.SetMemory(0x604, 0x4f5f6f7f)
+	mem.SetMemory(0x608, 0x8f9fafbf)
+	mem.SetMemory(0x60c, 0xcfdfefff)
+	mem.SetMemory(0x700, 0x0c1c2c3c) // Data to send
+	mem.SetMemory(0x704, 0x4c5c6c7c)
+	mem.SetMemory(0x708, 0x8c9cacbc)
+	mem.SetMemory(0x70c, 0xccdcecfc)
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000510 {
 		t.Errorf("Start I/O Write CDA CSW1 expected %08x got: %08x", 0x00000510, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O Write CDA CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
 
 	for i := range 0x10 {
-		vb := d.data[i]
+		vb := d.Data[i]
 		mb := uint8(0xf + (i << 4))
 		if vb != mb {
 			t.Errorf("Start I/O Write CDA Data expected %02x got: %02x at: %02x", mb, vb, i)
 		}
 	}
 	for i := range 0x10 {
-		vb := d.data[i+0x10]
+		vb := d.Data[i+0x10]
 		mb := uint8(0xc + (i << 4))
 		if vb != mb {
 			t.Errorf("Start I/O Write CDA Data expected %02x got: %02x at: %02x", mb, vb, i+0x10)
@@ -924,41 +924,41 @@ func TestCycleReadCDASkip(t *testing.T) {
 	d := ioSetup(0xf)
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = uint8(0x10 + i)
+		d.Data[i] = uint8(0x10 + i)
 	}
-	d.max = 0x10
+	d.Max = 0x10
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x02000600) // Set channel words
-	M.SetMemory(0x504, 0x90000005)
-	M.SetMemory(0x508, 0x02000606)
-	M.SetMemory(0x50c, 0x0000000b)
+	mem.SetMemory(0x500, 0x02000600) // Set channel words
+	mem.SetMemory(0x504, 0x90000005)
+	mem.SetMemory(0x508, 0x02000606)
+	mem.SetMemory(0x50c, 0x0000000b)
 
 	// Load memory with value not equal to read data.
 	for i := range uint32(0x20) {
-		M.SetMemory(0x600+i, 0x55555555)
-		M.SetMemory(0x700+i, 0x55555555)
+		mem.SetMemory(0x600+i, 0x55555555)
+		mem.SetMemory(0x700+i, 0x55555555)
 	}
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000510 {
 		t.Errorf("Start I/O Read CDA CSW1 expected %08x got: %08x", 0x00000510, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O Read CDA CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
@@ -987,41 +987,41 @@ func TestCycleReadBkwd(t *testing.T) {
 
 	// Load Data
 	for i := range 0x10 {
-		d.data[i] = uint8(0x10 + (0x0f - i))
+		d.Data[i] = uint8(0x10 + (0x0f - i))
 	}
-	d.max = 0x10
+	d.Max = 0x10
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x0c00060f) // Set channel words
-	M.SetMemory(0x504, 0x00000010)
-	M.SetMemory(0x508, 0)
-	M.SetMemory(0x50c, 0)
+	mem.SetMemory(0x500, 0x0c00060f) // Set channel words
+	mem.SetMemory(0x504, 0x00000010)
+	mem.SetMemory(0x508, 0)
+	mem.SetMemory(0x50c, 0)
 
 	// Load memory with value not equal to read data.
 	for i := uint32(0x600); i < 0x640; i += 4 {
-		M.SetMemory(i, 0x55555555)
+		mem.SetMemory(i, 0x55555555)
 	}
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O Read Bkwd CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O Read Bkwd CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
@@ -1041,44 +1041,44 @@ func TestCycleCChain(t *testing.T) {
 
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = 0x55
+		d.Data[i] = 0x55
 	}
-	d.max = 0x20
+	d.Max = 0x20
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x01000600) // Set channel words
-	M.SetMemory(0x504, 0x40000010)
-	M.SetMemory(0x508, 0x03000701)
-	M.SetMemory(0x50c, 0x40000001)
-	M.SetMemory(0x508, 0x04000701)
-	M.SetMemory(0x50c, 0x00000001)
+	mem.SetMemory(0x500, 0x01000600) // Set channel words
+	mem.SetMemory(0x504, 0x40000010)
+	mem.SetMemory(0x508, 0x03000701)
+	mem.SetMemory(0x50c, 0x40000001)
+	mem.SetMemory(0x508, 0x04000701)
+	mem.SetMemory(0x50c, 0x00000001)
 
-	M.SetMemory(0x700, 0xffffffff)
-	M.SetMemory(0x600, 0x0f1f2f3f) // Data to send
-	M.SetMemory(0x604, 0x4f5f6f7f)
-	M.SetMemory(0x608, 0x8f9fafbf)
-	M.SetMemory(0x60c, 0xcfdfefff)
+	mem.SetMemory(0x700, 0xffffffff)
+	mem.SetMemory(0x600, 0x0f1f2f3f) // Data to send
+	mem.SetMemory(0x604, 0x4f5f6f7f)
+	mem.SetMemory(0x608, 0x8f9fafbf)
+	mem.SetMemory(0x60c, 0xcfdfefff)
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000510 {
 		t.Errorf("Start I/O CChain CSW1 expected %08x got: %08x", 0x00000518, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O CChain CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
@@ -1090,7 +1090,7 @@ func TestCycleCChain(t *testing.T) {
 			t.Errorf("Start I/O CChain Data expected %02x got: %02x at: %02x", mb, vb, i)
 		}
 	}
-	v = M.GetMemory(0x701)
+	v = mem.GetMemory(0x701)
 	if v != 0xff00ffff {
 		t.Errorf("Start I/O CChain Sebnse expected %08x got: %08x", 0xff00ffff, v)
 	}
@@ -1103,42 +1103,42 @@ func TestCycleCChainSLI(t *testing.T) {
 
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = uint8(0x10 + i)
+		d.Data[i] = uint8(0x10 + i)
 	}
-	d.max = 0x20
+	d.Max = 0x20
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x02000600) // Set channel words
-	M.SetMemory(0x504, 0x60000010)
-	M.SetMemory(0x508, 0x02000700)
-	M.SetMemory(0x50c, 0x00000020)
+	mem.SetMemory(0x500, 0x02000600) // Set channel words
+	mem.SetMemory(0x504, 0x60000010)
+	mem.SetMemory(0x508, 0x02000700)
+	mem.SetMemory(0x50c, 0x00000020)
 
 	// Load memory with value not equal to read data.
 	for i := uint32(0x600); i < 0x640; i += 4 {
-		M.SetMemory(i, 0x55555555)
-		M.SetMemory(i+0x100, 0x55555555)
+		mem.SetMemory(i, 0x55555555)
+		mem.SetMemory(i+0x100, 0x55555555)
 	}
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000510 {
 		t.Errorf("Start I/O CChain SLI CSW1 expected %08x got: %08x", 0x00000510, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O CChain SLI CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
@@ -1166,36 +1166,36 @@ func TestCycleCChainNop(t *testing.T) {
 
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = uint8(0x10 + i)
+		d.Data[i] = uint8(0x10 + i)
 	}
-	d.max = 0x20
+	d.Max = 0x20
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x03000600) // Set channel words
-	M.SetMemory(0x504, 0x40000001)
-	M.SetMemory(0x508, 0x03000700)
-	M.SetMemory(0x50c, 0x00000001)
+	mem.SetMemory(0x500, 0x03000600) // Set channel words
+	mem.SetMemory(0x504, 0x40000001)
+	mem.SetMemory(0x508, 0x03000700)
+	mem.SetMemory(0x50c, 0x00000001)
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000510 {
 		t.Errorf("Start I/O CChain Nop CSW1 expected %08x got: %08x", 0x00000510, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000001 {
 		t.Errorf("Start I/O CChain Nop CSW2 expected %08x got: %08x", 0x0c000001, v)
 	}
@@ -1209,57 +1209,57 @@ func TestStartIOTic(t *testing.T) {
 
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = 0x55
+		d.Data[i] = 0x55
 	}
-	d.max = 0x10
+	d.Max = 0x10
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x01000600) // Set channel words
-	M.SetMemory(0x504, 0x40000010)
-	M.SetMemory(0x508, 0x08000520) // TIC to 520
-	M.SetMemory(0x50c, 0x40000001)
-	M.SetMemory(0x520, 0x03000701) // NOP
-	M.SetMemory(0x524, 0x40000001)
-	M.SetMemory(0x528, 0x04000701) // Sense
-	M.SetMemory(0x52c, 0x00000001)
+	mem.SetMemory(0x500, 0x01000600) // Set channel words
+	mem.SetMemory(0x504, 0x40000010)
+	mem.SetMemory(0x508, 0x08000520) // TIC to 520
+	mem.SetMemory(0x50c, 0x40000001)
+	mem.SetMemory(0x520, 0x03000701) // NOP
+	mem.SetMemory(0x524, 0x40000001)
+	mem.SetMemory(0x528, 0x04000701) // Sense
+	mem.SetMemory(0x52c, 0x00000001)
 
-	M.SetMemory(0x700, 0xffffffff)
-	M.SetMemory(0x600, 0x0f1f2f3f) // Data to send
-	M.SetMemory(0x604, 0x4f5f6f7f)
-	M.SetMemory(0x608, 0x8f9fafbf)
-	M.SetMemory(0x60c, 0xcfdfefff)
+	mem.SetMemory(0x700, 0xffffffff)
+	mem.SetMemory(0x600, 0x0f1f2f3f) // Data to send
+	mem.SetMemory(0x604, 0x4f5f6f7f)
+	mem.SetMemory(0x608, 0x8f9fafbf)
+	mem.SetMemory(0x60c, 0xcfdfefff)
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000530 {
 		t.Errorf("Start I/O Tic CSW1 expected %08x got: %08x", 0x00000530, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O Tic CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
 
-	v = M.GetMemory(0x700)
+	v = mem.GetMemory(0x700)
 	if v != 0xff00ffff {
 		t.Errorf("Start I/O Tic Sense Data expected %08x got: %08x", 0xff00ffff, v)
 	}
 
 	for i := range 0x10 {
-		vb := d.data[i]
+		vb := d.Data[i]
 		mb := uint8(0xf + (i << 4))
 		if vb != mb {
 			t.Errorf("Start I/O Tic Data expected %02x got: %02x at: %02x", mb, vb, i)
@@ -1275,57 +1275,57 @@ func TestCycleTicTic(t *testing.T) {
 
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = uint8(0x10 + i)
+		d.Data[i] = uint8(0x10 + i)
 	}
-	d.max = 0x10
+	d.Max = 0x10
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x01000600) // Set channel words
-	M.SetMemory(0x504, 0x40000010)
-	M.SetMemory(0x508, 0x08000518) // TIC to 518
-	M.SetMemory(0x50c, 0x40000001)
-	M.SetMemory(0x510, 0x04000701) // Sense
-	M.SetMemory(0x514, 0x00000001)
-	M.SetMemory(0x518, 0x08000510) // TIC to 510
-	M.SetMemory(0x51c, 0x00000000) // TIC to 510
+	mem.SetMemory(0x500, 0x01000600) // Set channel words
+	mem.SetMemory(0x504, 0x40000010)
+	mem.SetMemory(0x508, 0x08000518) // TIC to 518
+	mem.SetMemory(0x50c, 0x40000001)
+	mem.SetMemory(0x510, 0x04000701) // Sense
+	mem.SetMemory(0x514, 0x00000001)
+	mem.SetMemory(0x518, 0x08000510) // TIC to 510
+	mem.SetMemory(0x51c, 0x00000000) // TIC to 510
 
-	M.SetMemory(0x600, 0x0f1f2f3f) // Data to send
-	M.SetMemory(0x604, 0x4f5f6f7f)
-	M.SetMemory(0x608, 0x8f9fafbf)
-	M.SetMemory(0x60c, 0xcfdfefff)
+	mem.SetMemory(0x600, 0x0f1f2f3f) // Data to send
+	mem.SetMemory(0x604, 0x4f5f6f7f)
+	mem.SetMemory(0x608, 0x8f9fafbf)
+	mem.SetMemory(0x60c, 0xcfdfefff)
 
-	M.SetMemory(0x700, 0xffffffff)
+	mem.SetMemory(0x700, 0xffffffff)
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000520 {
 		t.Errorf("Start I/O Tic Tic CSW1 expected %08x got: %08x", 0x00000520, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x00200000 {
 		t.Errorf("Start I/O Tic Tic CSW2 expected %08x got: %08x", 0x00200000, v)
 	}
 
-	v = M.GetMemory(0x700)
+	v = mem.GetMemory(0x700)
 	if v != 0xffffffff {
 		t.Errorf("Start I/O Tic Tic Sense Data expected %08x got: %08x", 0xfffffff, v)
 	}
 
 	for i := range 0x10 {
-		vb := d.data[i]
+		vb := d.Data[i]
 		mb := uint8(0xf + (i << 4))
 		if vb != mb {
 			t.Errorf("Start I/O Tic Tic Data expected %02x got: %02x at: %02x", mb, vb, i)
@@ -1341,42 +1341,42 @@ func TestCycleTicError(t *testing.T) {
 
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = uint8(0x10 + i)
+		d.Data[i] = uint8(0x10 + i)
 	}
-	d.max = 0x20
+	d.Max = 0x20
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 0f
-	M.SetMemory(0x404, 0x47300400) // BC 3,404
-	M.SetMemory(0x408, 0x47800428) // BC 8,428
-	M.SetMemory(0x40c, 0x9d00000f) // TIO 0f
-	M.SetMemory(0x410, 0x4770040c) // BC 7,40c
-	M.SetMemory(0x414, 0x47f00428) // BC 0xf,428
-	M.SetMemory(0x420, 0x00000000) // stop
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 0f
+	mem.SetMemory(0x404, 0x47300400) // BC 3,404
+	mem.SetMemory(0x408, 0x47800428) // BC 8,428
+	mem.SetMemory(0x40c, 0x9d00000f) // TIO 0f
+	mem.SetMemory(0x410, 0x4770040c) // BC 7,40c
+	mem.SetMemory(0x414, 0x47f00428) // BC 0xf,428
+	mem.SetMemory(0x420, 0x00000000) // stop
 
-	M.SetMemory(0x500, 0x08000520) // Set channel words
-	M.SetMemory(0x504, 0x40000001)
-	M.SetMemory(0x508, 0x04000702)
-	M.SetMemory(0x50c, 0x40000001)
-	M.SetMemory(0x700, 0xffffffff)
+	mem.SetMemory(0x500, 0x08000520) // Set channel words
+	mem.SetMemory(0x504, 0x40000001)
+	mem.SetMemory(0x508, 0x04000702)
+	mem.SetMemory(0x50c, 0x40000001)
+	mem.SetMemory(0x700, 0xffffffff)
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0xffffffff {
 		t.Errorf("Start I/O TIC Error CSW1 expected %08x got: %08x", 0xffffffff, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0020ffff {
 		t.Errorf("Start I/O TIC Error CSW2 expected %08x got: %08x", 0x0020ffff, v)
 	}
 
-	v = M.GetMemory(0x700)
+	v = mem.GetMemory(0x700)
 	if v != 0xffffffff {
 		t.Errorf("Start I/O Tic Error Sense Data expected %08x got: %08x", 0xfffffff, v)
 	}
@@ -1391,63 +1391,63 @@ func TestCycleSMSTic(t *testing.T) {
 
 	// Load Data
 	for i := range 0x20 {
-		d.data[i] = 0x55
+		d.Data[i] = 0x55
 	}
-	d.max = 0x10
-	d.sms = true
+	d.Max = 0x10
+	d.Sms = true
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000408)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000408)
 
-	M.SetMemory(0x500, 0x01000600) // Set channel words
-	M.SetMemory(0x504, 0x40000010)
-	M.SetMemory(0x508, 0x08000520) // TIC to 520
-	M.SetMemory(0x50c, 0x00000000)
-	M.SetMemory(0x510, 0x08000540)
-	M.SetMemory(0x514, 0x00000000)
-	M.SetMemory(0x520, 0x03000701) // NOP
-	M.SetMemory(0x524, 0x40000001)
-	M.SetMemory(0x528, 0x04000701) // Sense
-	M.SetMemory(0x52c, 0x00000001)
-	M.SetMemory(0x540, 0x04000703) // Sense
-	M.SetMemory(0x544, 0x00000001)
+	mem.SetMemory(0x500, 0x01000600) // Set channel words
+	mem.SetMemory(0x504, 0x40000010)
+	mem.SetMemory(0x508, 0x08000520) // TIC to 520
+	mem.SetMemory(0x50c, 0x00000000)
+	mem.SetMemory(0x510, 0x08000540)
+	mem.SetMemory(0x514, 0x00000000)
+	mem.SetMemory(0x520, 0x03000701) // NOP
+	mem.SetMemory(0x524, 0x40000001)
+	mem.SetMemory(0x528, 0x04000701) // Sense
+	mem.SetMemory(0x52c, 0x00000001)
+	mem.SetMemory(0x540, 0x04000703) // Sense
+	mem.SetMemory(0x544, 0x00000001)
 
-	M.SetMemory(0x600, 0x0f1f2f3f) // Data to send
-	M.SetMemory(0x604, 0x4f5f6f7f)
-	M.SetMemory(0x608, 0x8f9fafbf)
-	M.SetMemory(0x60c, 0xcfdfefff)
+	mem.SetMemory(0x600, 0x0f1f2f3f) // Data to send
+	mem.SetMemory(0x604, 0x4f5f6f7f)
+	mem.SetMemory(0x608, 0x8f9fafbf)
+	mem.SetMemory(0x60c, 0xcfdfefff)
 
-	M.SetMemory(0x700, 0xffffffff)
+	mem.SetMemory(0x700, 0xffffffff)
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000548 {
 		t.Errorf("Start I/O SMS CSW1 expected %08x got: %08x", 0x00000548, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O SMS CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
 
-	v = M.GetMemory(0x700)
+	v = mem.GetMemory(0x700)
 	if v != 0xffffff00 {
 		t.Errorf("Start I/O SMS Memory expected %08x got: %08x", 0xffffff00, v)
 	}
 
 	for i := range 0x10 {
-		vb := d.data[i]
+		vb := d.Data[i]
 		mb := uint8(0xf + (i << 4))
 		if vb != mb {
 			t.Errorf("Start I/O SMS Data expected %02x got: %02x at: %02x", mb, vb, i)
@@ -1463,47 +1463,47 @@ func TestCyclePCI(t *testing.T) {
 
 	// Load Data
 	for i := range 0x40 {
-		d.data[i] = uint8(0x10 + i)
+		d.Data[i] = uint8(0x10 + i)
 	}
-	d.max = 0x40
+	d.Max = 0x40
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x408)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x408)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000430) // LPSW 0430
-	M.SetMemory(0x408, 0x58000040) // L 0, 040
-	M.SetMemory(0x40c, 0x58100044) // L 1, 044
-	M.SetMemory(0x410, 0x41200440) // LA 2,440
-	M.SetMemory(0x414, 0x5020007c) // ST 2,04c
-	M.SetMemory(0x418, 0x82000438) // LPSW 0438
-	M.SetMemory(0x440, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x444, 0x47700440) // BC  7,420
-	M.SetMemory(0x448, 0)
-	M.SetMemory(0x430, 0xff060000) // Wait PSW
-	M.SetMemory(0x434, 0x14000404)
-	M.SetMemory(0x438, 0xff060000) // Wait PSW
-	M.SetMemory(0x43c, 0x14000438)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000430) // LPSW 0430
+	mem.SetMemory(0x408, 0x58000040) // L 0, 040
+	mem.SetMemory(0x40c, 0x58100044) // L 1, 044
+	mem.SetMemory(0x410, 0x41200440) // LA 2,440
+	mem.SetMemory(0x414, 0x5020007c) // ST 2,04c
+	mem.SetMemory(0x418, 0x82000438) // LPSW 0438
+	mem.SetMemory(0x440, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x444, 0x47700440) // BC  7,420
+	mem.SetMemory(0x448, 0)
+	mem.SetMemory(0x430, 0xff060000) // Wait PSW
+	mem.SetMemory(0x434, 0x14000404)
+	mem.SetMemory(0x438, 0xff060000) // Wait PSW
+	mem.SetMemory(0x43c, 0x14000438)
 
-	M.SetMemory(0x500, 0x02000600) // Set channel words
-	M.SetMemory(0x504, 0x80000005)
-	M.SetMemory(0x508, 0x00000605)
-	M.SetMemory(0x50c, 0x8800000b)
-	M.SetMemory(0x510, 0x00000610)
-	M.SetMemory(0x514, 0x20000020)
+	mem.SetMemory(0x500, 0x02000600) // Set channel words
+	mem.SetMemory(0x504, 0x80000005)
+	mem.SetMemory(0x508, 0x00000605)
+	mem.SetMemory(0x50c, 0x8800000b)
+	mem.SetMemory(0x510, 0x00000610)
+	mem.SetMemory(0x514, 0x20000020)
 
-	M.SetMemory(0x600, 0x55555555) // Invalid data
-	M.SetMemory(0x604, 0x55555555)
-	M.SetMemory(0x608, 0x55555555)
-	M.SetMemory(0x60c, 0x55555555)
-	M.SetMemory(0x610, 0x55555555)
-	M.SetMemory(0x614, 0x55555555)
-	M.SetMemory(0x618, 0x55555555)
-	M.SetMemory(0x61c, 0x55555555)
-	M.SetMemory(0x620, 0x55555555)
+	mem.SetMemory(0x600, 0x55555555) // Invalid data
+	mem.SetMemory(0x604, 0x55555555)
+	mem.SetMemory(0x608, 0x55555555)
+	mem.SetMemory(0x60c, 0x55555555)
+	mem.SetMemory(0x610, 0x55555555)
+	mem.SetMemory(0x614, 0x55555555)
+	mem.SetMemory(0x618, 0x55555555)
+	mem.SetMemory(0x61c, 0x55555555)
+	mem.SetMemory(0x620, 0x55555555)
 
 	cpuState.iotestInst(0, 2000)
 
@@ -1517,17 +1517,17 @@ func TestCyclePCI(t *testing.T) {
 		t.Errorf("Start I/O PCI CSW2 PCI expected %08x got: %08x", 0x00800000, v)
 	}
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000518 {
 		t.Errorf("Start I/O PCI CSW1 expected %08x got: %08x", 0x00000518, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O PCI CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
 
 	for i := range 0x20 {
-		vb := d.data[i]
+		vb := d.Data[i]
 		mb := uint8(0x10 + i)
 		if vb != mb {
 			t.Errorf("Start I/O PCI Data expected %02x got: %02x at: %02x", mb, vb, i)
@@ -1540,19 +1540,19 @@ func TestCycleHaltIO1(t *testing.T) {
 
 	// Load Data
 	for i := range 0x40 {
-		d.data[i] = uint8(0x10 + i)
+		d.Data[i] = uint8(0x10 + i)
 	}
-	d.max = 0x40
+	d.Max = 0x40
 
-	M.SetMemory(0x40, 0) // Set CSW to zero
-	M.SetMemory(0x44, 0)
-	M.SetMemory(0x78, 0x00000000)
-	M.SetMemory(0x7c, 0x00000408)
+	mem.SetMemory(0x40, 0) // Set CSW to zero
+	mem.SetMemory(0x44, 0)
+	mem.SetMemory(0x78, 0x00000000)
+	mem.SetMemory(0x7c, 0x00000408)
 
-	M.SetMemory(0x400, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x404, 0x47000400) // BC  0,400
-	M.SetMemory(0x408, 0x9e00000f) // HIO 00f
-	M.SetMemory(0x40c, 0)
+	mem.SetMemory(0x400, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x404, 0x47000400) // BC  0,400
+	mem.SetMemory(0x408, 0x9e00000f) // HIO 00f
+	mem.SetMemory(0x40c, 0)
 
 	cpuState.iotestInst(0, 2000)
 
@@ -1569,41 +1569,41 @@ func TestCycleHaltIO2(t *testing.T) {
 
 	// Load Data
 	for i := range 0x80 {
-		d.data[i] = uint8(0x10 + i)
+		d.Data[i] = uint8(0x10 + i)
 	}
-	d.max = 0x80
+	d.Max = 0x80
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x408)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x408)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000430) // LPSW 0430
-	M.SetMemory(0x408, 0x58000040) // L 0, 040
-	M.SetMemory(0x40c, 0x58100044) // L 1, 044
-	M.SetMemory(0x410, 0x9e00000f) // HIO 00f
-	M.SetMemory(0x414, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x418, 0x47700414) // BC  7,414
-	M.SetMemory(0x420, 0)
-	M.SetMemory(0x430, 0xff060000) // Wait PSW
-	M.SetMemory(0x434, 0x14000408)
-	M.SetMemory(0x438, 0xff060000) // Wait PSW
-	M.SetMemory(0x43c, 0x14000440)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000430) // LPSW 0430
+	mem.SetMemory(0x408, 0x58000040) // L 0, 040
+	mem.SetMemory(0x40c, 0x58100044) // L 1, 044
+	mem.SetMemory(0x410, 0x9e00000f) // HIO 00f
+	mem.SetMemory(0x414, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x418, 0x47700414) // BC  7,414
+	mem.SetMemory(0x420, 0)
+	mem.SetMemory(0x430, 0xff060000) // Wait PSW
+	mem.SetMemory(0x434, 0x14000408)
+	mem.SetMemory(0x438, 0xff060000) // Wait PSW
+	mem.SetMemory(0x43c, 0x14000440)
 
-	M.SetMemory(0x500, 0x02000600) // Set channel words
-	M.SetMemory(0x504, 0xc8000001)
-	M.SetMemory(0x508, 0x00000601)
-	M.SetMemory(0x50c, 0x8000003f)
-	M.SetMemory(0x510, 0x00000640)
-	M.SetMemory(0x514, 0x00000040)
-	M.SetMemory(0x518, 0x04000700)
-	M.SetMemory(0x51c, 0x00000001)
+	mem.SetMemory(0x500, 0x02000600) // Set channel words
+	mem.SetMemory(0x504, 0xc8000001)
+	mem.SetMemory(0x508, 0x00000601)
+	mem.SetMemory(0x50c, 0x8000003f)
+	mem.SetMemory(0x510, 0x00000640)
+	mem.SetMemory(0x514, 0x00000040)
+	mem.SetMemory(0x518, 0x04000700)
+	mem.SetMemory(0x51c, 0x00000001)
 	for i := range uint32(0x100) {
-		M.SetMemory(0x600+i, 0x55555555) // Invalid data
+		mem.SetMemory(0x600+i, 0x55555555) // Invalid data
 	}
-	M.SetMemory(0x700, 0xffffffff)
+	mem.SetMemory(0x700, 0xffffffff)
 
 	cpuState.iotestInst(0, 2000)
 
@@ -1612,15 +1612,15 @@ func TestCycleHaltIO2(t *testing.T) {
 		t.Errorf("Start I/O Haltio2 CSW2 PCI expected %08x got: %08x", 0x00800000, v)
 	}
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O Haltio2 CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
-	v = M.GetMemory(0x44) & 0xffbf0000
+	v = mem.GetMemory(0x44) & 0xffbf0000
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O Haltio2 CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
-	v = M.GetMemory(0x700)
+	v = mem.GetMemory(0x700)
 	if v != 0xffffffff {
 		t.Errorf("Start I/O Haltio2 Memory expected %08x got: %08x", 0xffffffff, v)
 	}
@@ -1634,38 +1634,38 @@ func TestCycleTIOBusy(t *testing.T) {
 
 	// Load Data
 	for i := range 0x80 {
-		d.data[i] = uint8(0x10 + i)
+		d.Data[i] = uint8(0x10 + i)
 	}
-	d.max = 0x80
+	d.Max = 0x80
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x408)
-	M.SetMemory(0x48, 0x500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x408)
+	mem.SetMemory(0x48, 0x500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000430) // LPSW 0430
-	M.SetMemory(0x408, 0x9d00000f) // TIO  00f
-	M.SetMemory(0x40c, 0x05109d00) // BALR 1,0, TIO 00f
-	M.SetMemory(0x410, 0x000f0771) // 00f, BCR 7,1
-	M.SetMemory(0x414, 0)
-	M.SetMemory(0x430, 0xff060000) // Wait PSW
-	M.SetMemory(0x434, 0x14000408)
-	M.SetMemory(0x438, 0xff060000) // Wait PSW
-	M.SetMemory(0x43c, 0x14000440)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000430) // LPSW 0430
+	mem.SetMemory(0x408, 0x9d00000f) // TIO  00f
+	mem.SetMemory(0x40c, 0x05109d00) // BALR 1,0, TIO 00f
+	mem.SetMemory(0x410, 0x000f0771) // 00f, BCR 7,1
+	mem.SetMemory(0x414, 0)
+	mem.SetMemory(0x430, 0xff060000) // Wait PSW
+	mem.SetMemory(0x434, 0x14000408)
+	mem.SetMemory(0x438, 0xff060000) // Wait PSW
+	mem.SetMemory(0x43c, 0x14000440)
 
-	M.SetMemory(0x500, 0x02000600) // Set channel words
-	M.SetMemory(0x504, 0xc8000001)
-	M.SetMemory(0x508, 0x00000601)
-	M.SetMemory(0x50c, 0x0000007f)
-	M.SetMemory(0x510, 0x04000700)
-	M.SetMemory(0x514, 0x00000001)
+	mem.SetMemory(0x500, 0x02000600) // Set channel words
+	mem.SetMemory(0x504, 0xc8000001)
+	mem.SetMemory(0x508, 0x00000601)
+	mem.SetMemory(0x50c, 0x0000007f)
+	mem.SetMemory(0x510, 0x04000700)
+	mem.SetMemory(0x514, 0x00000001)
 
 	for i := range uint32(0x100) {
-		M.SetMemory(0x600+i, 0x55555555) // Invalid data
+		mem.SetMemory(0x600+i, 0x55555555) // Invalid data
 	}
-	M.SetMemory(0x700, 0xffffffff)
+	mem.SetMemory(0x700, 0xffffffff)
 
 	cpuState.iotestInst(0, 2000)
 
@@ -1675,11 +1675,11 @@ func TestCycleTIOBusy(t *testing.T) {
 		t.Errorf("Start I/O TIO Busy CSW2 PCI expected %08x got: %08x", 0x6000040e, v)
 	}
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x00000510 {
 		t.Errorf("Start I/O TIO Busy CSW1 expected %08x got: %08x", 0x00000510, v)
 	}
-	v = M.GetMemory(0x44) & 0xffbf0000
+	v = mem.GetMemory(0x44) & 0xffbf0000
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O TIO Busy CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
@@ -1693,52 +1693,52 @@ func TestCycleReadProt(t *testing.T) {
 
 	// Load Data
 	for i := range 0x10 {
-		d.data[i] = 0x55
+		d.Data[i] = 0x55
 	}
-	d.max = 0x10
+	d.Max = 0x10
 
-	M.PutKey(0x4000, 0x30)
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x20000500)
+	mem.PutKey(0x4000, 0x30)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x20000500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x0)
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000410)
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700404) // BC  7,420
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x0)
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000410)
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700404) // BC  7,420
 
-	M.SetMemory(0x500, 0x01004000) // Set channel words
-	M.SetMemory(0x504, 0x00000010)
+	mem.SetMemory(0x500, 0x01004000) // Set channel words
+	mem.SetMemory(0x504, 0x00000010)
 
-	M.SetMemory(0x4000, 0x0f1f2f3f) // Data to send
-	M.SetMemory(0x4004, 0x4f5f6f7f)
-	M.SetMemory(0x4008, 0x8f9fafbf)
-	M.SetMemory(0x400c, 0xcfdfefff)
+	mem.SetMemory(0x4000, 0x0f1f2f3f) // Data to send
+	mem.SetMemory(0x4004, 0x4f5f6f7f)
+	mem.SetMemory(0x4008, 0x8f9fafbf)
+	mem.SetMemory(0x400c, 0xcfdfefff)
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x20000508 {
 		t.Errorf("Start I/O Read Prot CSW1 expected %08x got: %08x", 0x20000508, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O Read Prot CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
 
 	for i := range 0x10 {
-		vb := d.data[i]
+		vb := d.Data[i]
 		mb := uint8(0xf + (i << 4))
 		if vb != mb {
 			t.Errorf("Start I/O Read Prot Data expected %02x got: %02x at: %02x", mb, vb, i)
 		}
 	}
-	M.PutKey(0x4000, 0x0)
+	mem.PutKey(0x4000, 0x0)
 }
 
 func TestCycleWriteProt(t *testing.T) {
@@ -1748,41 +1748,41 @@ func TestCycleWriteProt(t *testing.T) {
 
 	// Load Data
 	for i := range 0x10 {
-		d.data[i] = uint8(0xf0 + i)
+		d.Data[i] = uint8(0xf0 + i)
 	}
-	d.max = 0x10
+	d.Max = 0x10
 
-	M.PutKey(0x4000, 0x30)
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x20000500)
+	mem.PutKey(0x4000, 0x30)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x20000500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000404)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000404)
 
-	M.SetMemory(0x500, 0x02004000) // Set channel words
-	M.SetMemory(0x504, 0x00000010)
-	M.SetMemory(0x508, 0)
-	M.SetMemory(0x50c, 0)
+	mem.SetMemory(0x500, 0x02004000) // Set channel words
+	mem.SetMemory(0x504, 0x00000010)
+	mem.SetMemory(0x508, 0)
+	mem.SetMemory(0x50c, 0)
 	// Load memory with value not equal to read data.
 	for i := uint32(0x4000); i < 0x4040; i += 4 {
-		M.SetMemory(i, 0x55555555)
+		mem.SetMemory(i, 0x55555555)
 	}
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x20000508 {
 		t.Errorf("Start I/O Write Prot  CSW1 expected %08x got: %08x", 0x20000508, v)
 	}
-	v = M.GetMemory(0x44) & HMASK
+	v = mem.GetMemory(0x44) & HMASK
 	if v != 0x0c500000 {
 		t.Errorf("Start I/O Write Prot CSW2 expected %08x got: %08x", 0x0c500000, v)
 	}
@@ -1793,7 +1793,7 @@ func TestCycleWriteProt(t *testing.T) {
 			t.Errorf("Start I/O Write Prot Data expected %02x got: %02x at: %02x", 0x55, vb, i)
 		}
 	}
-	M.PutKey(0x4000, 0x0)
+	mem.PutKey(0x4000, 0x0)
 }
 
 // Read Protection check
@@ -1804,52 +1804,52 @@ func TestCycleReadProt2(t *testing.T) {
 
 	// Load Data
 	for i := range 0x10 {
-		d.data[i] = 0x55
+		d.Data[i] = 0x55
 	}
-	d.max = 0x10
+	d.Max = 0x10
 
-	M.PutKey(0x4000, 0x30)
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x30000500)
+	mem.PutKey(0x4000, 0x30)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x30000500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000404)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000404)
 
-	M.SetMemory(0x500, 0x01004000) // Set channel words
-	M.SetMemory(0x504, 0x00000010)
+	mem.SetMemory(0x500, 0x01004000) // Set channel words
+	mem.SetMemory(0x504, 0x00000010)
 
-	M.SetMemory(0x4000, 0x0f1f2f3f) // Data to send
-	M.SetMemory(0x4004, 0x4f5f6f7f)
-	M.SetMemory(0x4008, 0x8f9fafbf)
-	M.SetMemory(0x400c, 0xcfdfefff)
+	mem.SetMemory(0x4000, 0x0f1f2f3f) // Data to send
+	mem.SetMemory(0x4004, 0x4f5f6f7f)
+	mem.SetMemory(0x4008, 0x8f9fafbf)
+	mem.SetMemory(0x400c, 0xcfdfefff)
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x30000508 {
 		t.Errorf("Start I/O Read Prot CSW1 expected %08x got: %08x", 0x30000508, v)
 	}
-	v = M.GetMemory(0x44)
+	v = mem.GetMemory(0x44)
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O Read Prot CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
 
 	for i := range 0x10 {
-		vb := d.data[i]
+		vb := d.Data[i]
 		mb := uint8(0xf + (i << 4))
 		if vb != mb {
 			t.Errorf("Start I/O Read Prot Data expected %02x got: %02x at: %02x", mb, vb, i)
 		}
 	}
-	M.PutKey(0x4000, 0x0)
+	mem.PutKey(0x4000, 0x0)
 }
 
 func TestCycleWriteProt2(t *testing.T) {
@@ -1859,41 +1859,41 @@ func TestCycleWriteProt2(t *testing.T) {
 
 	// Load Data
 	for i := range 0x10 {
-		d.data[i] = uint8(0xf0 + i)
+		d.Data[i] = uint8(0xf0 + i)
 	}
-	d.max = 0x10
+	d.Max = 0x10
 
-	M.PutKey(0x4000, 0x30)
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x420)
-	M.SetMemory(0x48, 0x30000500)
+	mem.PutKey(0x4000, 0x30)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x420)
+	mem.SetMemory(0x48, 0x30000500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 00f
-	M.SetMemory(0x404, 0x82000410) // LPSW 0410
-	M.SetMemory(0x408, 0x47000408) // Dummy instruction
-	M.SetMemory(0x410, 0xff060000) // Wait PSW
-	M.SetMemory(0x414, 0x14000404)
-	M.SetMemory(0x420, 0x9d00000f) // TIO 00f
-	M.SetMemory(0x424, 0x47700420) // BC  7,420
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 00f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 0410
+	mem.SetMemory(0x408, 0x47000408) // Dummy instruction
+	mem.SetMemory(0x410, 0xff060000) // Wait PSW
+	mem.SetMemory(0x414, 0x14000404)
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 00f
+	mem.SetMemory(0x424, 0x47700420) // BC  7,420
 
-	M.SetMemory(0x500, 0x02004000) // Set channel words
-	M.SetMemory(0x504, 0x00000010)
-	M.SetMemory(0x508, 0)
-	M.SetMemory(0x50c, 0)
+	mem.SetMemory(0x500, 0x02004000) // Set channel words
+	mem.SetMemory(0x504, 0x00000010)
+	mem.SetMemory(0x508, 0)
+	mem.SetMemory(0x50c, 0)
 	// Load memory with value not equal to read data.
 	for i := uint32(0x4000); i < 0x4040; i += 4 {
-		M.SetMemory(i, 0x55555555)
+		mem.SetMemory(i, 0x55555555)
 	}
 
 	cpuState.iotestInst(0, 2000)
 
-	v = M.GetMemory(0x40)
+	v = mem.GetMemory(0x40)
 	if v != 0x30000508 {
 		t.Errorf("Start I/O Write Prot  CSW1 expected %08x got: %08x", 0x30000508, v)
 	}
-	v = M.GetMemory(0x44) & HMASK
+	v = mem.GetMemory(0x44) & HMASK
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O Write Prot CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
@@ -1905,45 +1905,45 @@ func TestCycleWriteProt2(t *testing.T) {
 			t.Errorf("Start I/O Write Prot Data expected %02x got: %02x at: %02x", mb, vb, i)
 		}
 	}
-	M.PutKey(0x4000, 0x0)
+	mem.PutKey(0x4000, 0x0)
 }
 
 func TestCycleBusy(t *testing.T) {
 	var v uint32
 
 	d := ioSetup(0xf)
-	d.max = 0x10
+	d.Max = 0x10
 
-	M.SetMemory(0x40, 0xffffffff)
-	M.SetMemory(0x44, 0xffffffff)
-	M.SetMemory(0x78, 0)
-	M.SetMemory(0x7c, 0x430)
-	M.SetMemory(0x48, 0x00000500)
+	mem.SetMemory(0x40, 0xffffffff)
+	mem.SetMemory(0x44, 0xffffffff)
+	mem.SetMemory(0x78, 0)
+	mem.SetMemory(0x7c, 0x430)
+	mem.SetMemory(0x48, 0x00000500)
 
-	M.SetMemory(0x400, 0x9c00000f) // SIO 0f
-	M.SetMemory(0x404, 0x82000410) // LPSW 410
-	M.SetMemory(0x410, 0xff060000) // Wait state PSW
-	M.SetMemory(0x414, 0x12000404)
+	mem.SetMemory(0x400, 0x9c00000f) // SIO 0f
+	mem.SetMemory(0x404, 0x82000410) // LPSW 410
+	mem.SetMemory(0x410, 0xff060000) // Wait state PSW
+	mem.SetMemory(0x414, 0x12000404)
 
-	M.SetMemory(0x420, 0x9d00000f) // TIO 0f
-	M.SetMemory(0x424, 0x47700420) // BC 7,420
+	mem.SetMemory(0x420, 0x9d00000f) // TIO 0f
+	mem.SetMemory(0x424, 0x47700420) // BC 7,420
 
-	M.SetMemory(0x430, 0x58100040) // L 1,40
-	M.SetMemory(0x434, 0x58200044) // L 2,44
-	M.SetMemory(0x438, 0x41300448) // LA 3,448
-	M.SetMemory(0x43c, 0x5030007c) // ST 3,7c  Adjust address
-	M.SetMemory(0x440, 0x50300040) // ST 3,78  Overwrite csw
-	M.SetMemory(0x444, 0x82000410) // Wait some more
-	M.SetMemory(0x448, 0x58400040) // L 4,40
-	M.SetMemory(0x44c, 0x58500044) // L 5,44
-	M.SetMemory(0x450, 0x47f00420) // BC F,420 Wait for device
+	mem.SetMemory(0x430, 0x58100040) // L 1,40
+	mem.SetMemory(0x434, 0x58200044) // L 2,44
+	mem.SetMemory(0x438, 0x41300448) // LA 3,448
+	mem.SetMemory(0x43c, 0x5030007c) // ST 3,7c  Adjust address
+	mem.SetMemory(0x440, 0x50300040) // ST 3,78  Overwrite csw
+	mem.SetMemory(0x444, 0x82000410) // Wait some more
+	mem.SetMemory(0x448, 0x58400040) // L 4,40
+	mem.SetMemory(0x44c, 0x58500044) // L 5,44
+	mem.SetMemory(0x450, 0x47f00420) // BC F,420 Wait for device
 
-	M.SetMemory(0x500, 0x03000600) // Set channel words
-	M.SetMemory(0x504, 0x60000001) // NOP
-	M.SetMemory(0x508, 0x13000520) // Chan end without data end NOP
-	M.SetMemory(0x50c, 0x60000001)
-	M.SetMemory(0x510, 0x13000540) // Chan end without data end NOP
-	M.SetMemory(0x514, 0x20000001)
+	mem.SetMemory(0x500, 0x03000600) // Set channel words
+	mem.SetMemory(0x504, 0x60000001) // NOP
+	mem.SetMemory(0x508, 0x13000520) // Chan end without data end NOP
+	mem.SetMemory(0x50c, 0x60000001)
+	mem.SetMemory(0x510, 0x13000540) // Chan end without data end NOP
+	mem.SetMemory(0x514, 0x20000001)
 
 	cpuState.iotestInst(0, 2000)
 
@@ -1964,12 +1964,12 @@ func TestCycleBusy(t *testing.T) {
 		t.Errorf("Start I/O Busy Reg 5 expected %08x got: %08x", 0x04000000, v)
 	}
 
-	v = M.GetMemory(0x40) & HMASK
+	v = mem.GetMemory(0x40) & HMASK
 	if v != 0x00000000 {
 		t.Errorf("Start I/O Busy CSW1 expected %08x got: %08x", 0x00000000, v)
 	}
 
-	v = M.GetMemory(0x44) & HMASK
+	v = mem.GetMemory(0x44) & HMASK
 	if v != 0x04000000 {
 		t.Errorf("Start I/O Busy CSW2 expected %08x got: %08x", 0x04000000, v)
 	}

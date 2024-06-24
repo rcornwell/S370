@@ -1,5 +1,3 @@
-package cpu
-
 /* IBM 370 Standard instruction execution
 
    Copyright (c) 2024, Richard Cornwell
@@ -23,9 +21,11 @@ package cpu
 
 */
 
+package cpu
+
 // Handle an unknown instruction
 func (cpu *cpu) opUnk(step *stepInfo) uint16 {
-	return IRC_OPR
+	return ircOper
 }
 
 // Set program mask
@@ -265,7 +265,7 @@ func (cpu *cpu) opAdd(step *stepInfo) uint16 {
 	if (((carry << 1) ^ carry) & MSIGN) != 0 {
 		cpu.cc = 3
 		if (cpu.progMask & FIXOVER) != 0 {
-			return IRC_FIXOVR
+			return ircFixOver
 		}
 		return 0
 	}
@@ -283,7 +283,7 @@ func (cpu *cpu) opSub(step *stepInfo) uint16 {
 	if (((carry << 1) ^ carry) & MSIGN) != 0 {
 		cpu.cc = 3
 		if (cpu.progMask & FIXOVER) != 0 {
-			return IRC_FIXOVR
+			return ircFixOver
 		}
 		return 0
 	}
@@ -395,7 +395,7 @@ func (cpu *cpu) opCLM(step *stepInfo) uint16 {
 // Multiply register by value, handle RR and RX
 func (cpu *cpu) opMul(step *stepInfo) uint16 {
 	if (step.R1 & 1) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	}
 	src1 := int64(int32(cpu.regs[step.R1|1]))
 	src1 = src1 * int64(int32(step.src2))
@@ -415,10 +415,10 @@ func (cpu *cpu) opMulH(step *stepInfo) uint16 {
 // Divide register by value, handle RR and RX
 func (cpu *cpu) opDiv(step *stepInfo) uint16 {
 	if (step.R1 & 1) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	}
 	if step.src2 == 0 {
-		return IRC_FIXDIV
+		return ircFixDiv
 	}
 	sign := 0
 	srcl := cpu.regs[step.R1]
@@ -453,7 +453,7 @@ func (cpu *cpu) opDiv(step *stepInfo) uint16 {
 	}
 
 	if (result&MSIGN) != 0 && result != MSIGN {
-		return IRC_FIXDIV
+		return ircFixDiv
 	}
 	if (sign & 1) != 0 {
 		result = (result ^ FMASK) + 1
@@ -728,7 +728,7 @@ func (cpu *cpu) opSLA(step *stepInfo) uint16 {
 // Shift Double left logical
 func (cpu *cpu) opSLDL(step *stepInfo) uint16 {
 	if (step.R1 & 1) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	}
 	s := step.address1 & 0x3f
 	v := cpu.loadDouble(step.R1)
@@ -740,7 +740,7 @@ func (cpu *cpu) opSLDL(step *stepInfo) uint16 {
 // Shift Double right logical
 func (cpu *cpu) opSRDL(step *stepInfo) uint16 {
 	if (step.R1 & 1) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	}
 	s := step.address1 & 0x3f
 	v := cpu.loadDouble(step.R1)
@@ -752,7 +752,7 @@ func (cpu *cpu) opSRDL(step *stepInfo) uint16 {
 // Shift Double left arithmatic
 func (cpu *cpu) opSLDA(step *stepInfo) uint16 {
 	if (step.R1 & 1) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	}
 	cpu.cc = 0
 	t := cpu.loadDouble(step.R1)
@@ -776,7 +776,7 @@ func (cpu *cpu) opSLDA(step *stepInfo) uint16 {
 		}
 	} else {
 		if (cpu.progMask & FIXOVER) != 0 {
-			return IRC_FIXOVR
+			return ircFixOver
 		}
 	}
 	return 0
@@ -785,7 +785,7 @@ func (cpu *cpu) opSLDA(step *stepInfo) uint16 {
 // Shift Double Arithmatic right
 func (cpu *cpu) opSRDA(step *stepInfo) uint16 {
 	if (step.R1 & 1) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	}
 	cpu.cc = 0
 	t := cpu.loadDouble(step.R1)
@@ -825,7 +825,7 @@ func (cpu *cpu) opLM(step *stepInfo) uint16 {
 			return err
 		} else {
 			if cpu.checkProtect(pa, false) {
-				return IRC_PROT
+				return ircProt
 			}
 		}
 	}
@@ -1103,12 +1103,12 @@ func (cpu *cpu) opMVCIN(step *stepInfo) uint16 {
 
 // Move Character Long
 func (cpu *cpu) opMVCL(step *stepInfo) uint16 {
-	var err uint16 = 0
+	var err uint16
 	var d uint32
 
 	// Check register alignment
 	if (step.R2&1) != 0 || (step.R1&1) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	}
 
 	err = 0
@@ -1186,7 +1186,7 @@ func (cpu *cpu) opCLCL(step *stepInfo) uint16 {
 
 	// Check register alignment
 	if (step.R2&1) != 0 || (step.R1&1) != 0 {
-		return IRC_SPEC
+		return ircSpec
 	}
 
 	// extract parameters
@@ -1403,7 +1403,7 @@ func (cpu *cpu) opCVB(step *stepInfo) uint16 {
 	}
 	s = t2 & uint32(0xf)
 	if s < 0xa {
-		return IRC_DATA
+		return ircData
 	}
 	v = 0
 
@@ -1411,7 +1411,7 @@ func (cpu *cpu) opCVB(step *stepInfo) uint16 {
 	for i := 28; i >= 0; i -= 4 {
 		d := (t1 >> i) & uint32(0xf)
 		if d >= 0xa {
-			return IRC_DATA
+			return ircData
 		}
 		v = (v * 10) + uint64(d)
 	}
@@ -1420,14 +1420,14 @@ func (cpu *cpu) opCVB(step *stepInfo) uint16 {
 	for i := 28; i >= 0; i -= 4 {
 		d := (t2 >> i) & uint32(0xf)
 		if d >= 0xa {
-			return IRC_DATA
+			return ircData
 		}
 		v = (v * 10) + uint64(d)
 	}
 
 	// Check if too big
 	if (v&OMASKL) != 0 && v != uint64(MSIGN) {
-		return IRC_FIXDIV
+		return ircFixDiv
 	}
 
 	// two's compliment if needed
@@ -1528,7 +1528,7 @@ func (cpu *cpu) opED(step *stepInfo) uint16 {
 				step.address2++
 				// Check if valid
 				if src2 >= 0xa0 {
-					return IRC_DATA
+					return ircData
 				}
 			}
 

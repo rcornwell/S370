@@ -160,7 +160,7 @@ func CycleCPU() int {
 	if irq != sys_channel.NoDev {
 		cpuState.ilc = 0
 		if sys_channel.Loading == sys_channel.NoDev {
-			cpuState.suppress(OIOPSW, irq)
+			cpuState.suppress(oIOPSW, irq)
 		}
 		return mem_cycle
 	}
@@ -171,30 +171,30 @@ func CycleCPU() int {
 			if !cpuState.ecMode || (cpuState.cregs[0]&0x20) != 0 ||
 				(cpuState.cregs[6]&0x40) != 0 {
 				cpuState.extIrq = false
-				cpuState.suppress(OEPSW, 0x40)
+				cpuState.suppress(oEPSW, 0x40)
 				return mem_cycle
 			}
 		}
 
 		if cpuState.intIrq && (cpuState.cregs[0]&0x80) != 0 {
 			cpuState.intIrq = false
-			cpuState.suppress(OEPSW, 0x80)
+			cpuState.suppress(oEPSW, 0x80)
 			return mem_cycle
 		}
 		if cpuState.clkIrq && cpuState.intEnb {
 			cpuState.clkIrq = false
-			cpuState.suppress(OEPSW, 0x1005)
+			cpuState.suppress(oEPSW, 0x1005)
 			return mem_cycle
 		}
 		if cpuState.todIrq && cpuState.todEnb {
 			cpuState.todIrq = false
-			cpuState.suppress(OEPSW, 0x1004)
+			cpuState.suppress(oEPSW, 0x1004)
 			return mem_cycle
 		}
 	}
 
 	/* If we have wait flag or loading, nothing more to do */
-	if sys_channel.Loading != sys_channel.NoDev || (cpuState.flags&WAIT) != 0 {
+	if sys_channel.Loading != sys_channel.NoDev || (cpuState.flags&wait) != 0 {
 		/* CPU IDLE */
 		if !cpuState.irqEnb && !cpuState.extEnb {
 			return mem_cycle
@@ -203,7 +203,7 @@ func CycleCPU() int {
 	}
 
 	if (cpuState.PC & 1) != 0 {
-		cpuState.suppress(OPPSW, IRC_SPEC)
+		cpuState.suppress(oPPSW, ircSpec)
 		return mem_cycle
 	}
 
@@ -218,7 +218,7 @@ func CycleCPU() int {
 	// Fetch the next instruction
 	t, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
 	if err != 0 {
-		cpuState.suppress(OPPSW, err)
+		cpuState.suppress(oPPSW, err)
 		return mem_cycle
 	}
 
@@ -246,7 +246,7 @@ func CycleCPU() int {
 		if (cpuState.PC & 2) == 0 {
 			t, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
 			if err != 0 {
-				cpuState.suppress(OPPSW, err)
+				cpuState.suppress(oPPSW, err)
 				return mem_cycle
 			}
 			step.address1 = (t >> 16)
@@ -261,7 +261,7 @@ func CycleCPU() int {
 			if (cpuState.PC & 2) != 0 {
 				t, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
 				if err != 0 {
-					cpuState.suppress(OPPSW, err)
+					cpuState.suppress(oPPSW, err)
 					return mem_cycle
 				}
 				step.address2 = (t >> 16)
@@ -275,12 +275,12 @@ func CycleCPU() int {
 
 	err = cpuState.execute(&step)
 	if err != 0 {
-		cpuState.suppress(OPPSW, err)
+		cpuState.suppress(oPPSW, err)
 	}
 
 	// See if PER event happened
 	if cpuState.perEnb && cpuState.perCode != 0 {
-		cpuState.suppress(OPPSW, 0)
+		cpuState.suppress(oPPSW, 0)
 	}
 	return mem_cycle
 }
@@ -320,7 +320,7 @@ func (cpu *cpu) execute(step *stepInfo) uint16 {
 	// Check if floating point
 	if (step.opcode & 0xA0) == 0x20 {
 		if (step.R1 & 0x9) != 0 {
-			return IRC_SPEC
+			return ircSpec
 		}
 
 		// Load operands
@@ -350,7 +350,7 @@ func (cpu *cpu) execute(step *stepInfo) uint16 {
 			step.fsrc2 = (uint64(src1) << 32) | uint64(src2)
 		} else {
 			if (step.R2 & 0x9) != 0 {
-				return IRC_SPEC
+				return ircSpec
 			}
 			step.fsrc2 = cpu.fpregs[step.R2]
 			if (step.opcode & 0x10) != 0 {
@@ -487,8 +487,8 @@ func (cpu *cpu) transAddr(va uint32) (pa uint32, error uint16) {
 
 	//* Quick check if TLB correct
 	entry = cpu.tlb[page]
-	if (entry&TLB_VALID) != 0 && ((entry^seg)&TLB_SEG) == 0 {
-		addr = (va & cpu.pageMask) | ((entry & TLB_PHY) << cpu.pageShift)
+	if (entry&tlbValid) != 0 && ((entry^seg)&tlbSeg) == 0 {
+		addr = (va & cpu.pageMask) | ((entry & tlbPhy) << cpu.pageShift)
 		return addr, 0
 	}
 
@@ -507,7 +507,7 @@ func (cpu *cpu) transAddr(va uint32) (pa uint32, error uint16) {
 		_ = memory.PutWord(0x90, va)
 		mem_cycle++
 		cpu.PC = cpu.iPC
-		return 0, IRC_SEG
+		return 0, ircSeg
 	}
 
 	// Compute address of PTE table
@@ -518,29 +518,29 @@ func (cpu *cpu) transAddr(va uint32) (pa uint32, error uint16) {
 	mem_cycle++
 	entry, err = memory.GetWord(addr)
 	if err {
-		return 0, IRC_ADDR
+		return 0, ircAddr
 	}
 
 	// Extract length of Table pointer.
 	addr = (entry >> 28) + 1
 
 	/* Check if entry valid and in correct length */
-	if (entry&PTE_VALID) != 0 || (page>>cpu.pteLenShift) >= addr {
+	if (entry&pteValid) != 0 || (page>>cpu.pteLenShift) >= addr {
 		mem_cycle++
 		memory.SetMemory(0x90, va)
 		cpu.PC = cpu.iPC
-		if (entry & PTE_VALID) != 0 {
-			return 0, IRC_SEG
+		if (entry & pteValid) != 0 {
+			return 0, ircSeg
 		}
-		return 0, IRC_PAGE
+		return 0, ircPage
 	}
 
 	// Now we need to fetch the actual entry
-	addr = ((entry & PTE_ADR) + (page << 1)) & AMASK
+	addr = ((entry & pteAddr) + (page << 1)) & AMASK
 	mem_cycle++
 	entry, err = memory.GetWord(addr)
 	if err {
-		return 0, IRC_ADDR
+		return 0, ircAddr
 	}
 
 	// extract actual PTE entry
@@ -553,7 +553,7 @@ func (cpu *cpu) transAddr(va uint32) (pa uint32, error uint16) {
 		mem_cycle++
 		memory.SetMemory(0x90, va)
 		cpu.PC = cpu.iPC
-		return 0, IRC_SPEC
+		return 0, ircSpec
 	}
 
 	// Check if entry valid and in correct length
@@ -561,17 +561,17 @@ func (cpu *cpu) transAddr(va uint32) (pa uint32, error uint16) {
 		mem_cycle++
 		memory.SetMemory(0x90, va)
 		cpu.PC = cpu.iPC
-		return 0, IRC_PAGE
+		return 0, ircPage
 	}
 
 	// Compute correct entry
 	entry = entry >> cpu.pteShift // Move physical to correct spot
 	page = va >> cpu.pageShift
-	entry = entry | ((page & 0x1f00) << 4) | TLB_VALID
+	entry = entry | ((page & 0x1f00) << 4) | tlbValid
 	// Update TLB with new entry
 	cpu.tlb[page&0xff] = entry
 	// Compute physical address
-	addr = (va & cpu.pageMask) | (((entry & TLB_PHY) << cpu.pageShift) & AMASK)
+	addr = (va & cpu.pageMask) | (((entry & tlbPhy) << cpu.pageShift) & AMASK)
 	return addr, 0
 }
 
@@ -582,8 +582,8 @@ func (cpu *cpu) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 	var word1, word2 uint32
 	irqaddr = vector + 0x40
 
-	if vector == OPPSW && cpu.perEnb && cpu.perCode != 0 {
-		irqcode |= IRC_PER
+	if vector == oPPSW && cpu.perEnb && cpu.perCode != 0 {
+		irqcode |= ircPer
 	}
 	if cpu.ecMode {
 		// Generate first word
@@ -607,20 +607,20 @@ func (cpu *cpu) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 
 		// Save code where 370 expects it to be
 		switch vector {
-		case OEPSW:
+		case oEPSW:
 			mem_cycle++
 			memory.SetMemoryMask(0x84, uint32(irqcode), LMASK)
-		case OSPSW:
+		case oSPSW:
 			mem_cycle++
 			memory.SetMemory(0x88, ((uint32(cpu.ilc) << 17) | uint32(irqcode)))
-		case OPPSW:
+		case oPPSW:
 			mem_cycle++
 			memory.SetMemory(0x8c, ((uint32(cpu.ilc) << 17) | uint32(irqcode)))
-		case OIOPSW:
+		case oIOPSW:
 			mem_cycle++
 			memory.SetMemory(0xb8, uint32(irqcode))
 		}
-		if (irqcode & IRC_PER) != 0 {
+		if (irqcode & ircPer) != 0 {
 			mem_cycle++
 			memory.SetMemory(150, (uint32(cpu.perCode)<<16)|(cpu.perAddr>>16))
 			mem_cycle++
@@ -683,7 +683,7 @@ func (cpu *cpu) testAccess(va uint32, size uint32, write bool) uint16 {
 		return err
 	} else {
 		if cpu.checkProtect(pa, write) {
-			return IRC_PROT
+			return ircProt
 		}
 	}
 
@@ -693,7 +693,7 @@ func (cpu *cpu) testAccess(va uint32, size uint32, write bool) uint16 {
 			return err
 		} else {
 			if cpu.checkProtect(pa, write) {
-				return IRC_PROT
+				return ircProt
 			}
 		}
 	}
@@ -720,14 +720,14 @@ func (cpu *cpu) readFull(addr uint32) (uint32, uint16) {
 	}
 
 	if cpu.checkProtect(pa, false) {
-		return 0, IRC_PROT
+		return 0, ircProt
 	}
 
 	// Read actual data
 	mem_cycle++
 	v, err = memory.GetWord(addr)
 	if err {
-		return 0, IRC_ADDR
+		return 0, ircAddr
 	}
 
 	// Handle unaligned access
@@ -743,13 +743,13 @@ func (cpu *cpu) readFull(addr uint32) (uint32, uint16) {
 			}
 			// Check access protection
 			if cpu.checkProtect(pa2, false) {
-				return 0, IRC_PROT
+				return 0, ircProt
 			}
 		}
 
 		mem_cycle++
 		if t, err := memory.GetWord(pa2); err {
-			return 0, IRC_ADDR
+			return 0, ircAddr
 		} else {
 			v <<= (8 * offset)
 			v |= (t >> (8 * (4 - offset)))
@@ -781,14 +781,14 @@ func (cpu *cpu) readHalf(addr uint32) (uint32, uint16) {
 
 	// Check storage key
 	if cpu.checkProtect(pa, false) {
-		return 0, IRC_PROT
+		return 0, ircProt
 	}
 
 	// Get data
 	mem_cycle++
 	v, err = memory.GetWord(pa)
 	if err {
-		return 0, IRC_ADDR
+		return 0, ircAddr
 	}
 
 	switch offset {
@@ -809,13 +809,13 @@ func (cpu *cpu) readHalf(addr uint32) (uint32, uint16) {
 
 			// Check storage key
 			if cpu.checkProtect(pa2, false) {
-				return 0, IRC_PROT
+				return 0, ircProt
 			}
 		}
 
 		mem_cycle++
 		if v2, err := memory.GetWord(pa2); err {
-			return 0, IRC_ADDR
+			return 0, ircAddr
 		} else {
 			v = (v & 0xff) << 8
 			v |= (v2 >> 24) & 0xff
@@ -850,14 +850,14 @@ func (cpu *cpu) readByte(addr uint32) (uint32, uint16) {
 	}
 
 	if cpu.checkProtect(pa, false) {
-		return 0, IRC_PROT
+		return 0, ircProt
 	}
 
 	// Read actual data
 	mem_cycle++
 	v, err = memory.GetWord(addr)
 	if err {
-		return 0, IRC_ADDR
+		return 0, ircAddr
 	}
 
 	v = (v >> (8 * (3 - offset))) & 0xff
@@ -904,7 +904,7 @@ func (cpu *cpu) writeFull(addr, data uint32) uint16 {
 
 	// Check storage key
 	if cpu.checkProtect(pa, true) {
-		return IRC_PROT
+		return ircProt
 	}
 
 	// Check if in storage area
@@ -924,7 +924,7 @@ func (cpu *cpu) writeFull(addr, data uint32) uint16 {
 
 			// Check against storage key
 			if cpu.checkProtect(pa2, true) {
-				return IRC_PROT
+				return ircProt
 			}
 		}
 
@@ -955,7 +955,7 @@ func (cpu *cpu) writeFull(addr, data uint32) uint16 {
 	}
 
 	if err1 || err2 {
-		e = IRC_ADDR
+		e = ircAddr
 	} else {
 		e = 0
 	}
@@ -982,7 +982,7 @@ func (cpu *cpu) writeHalf(addr, data uint32) uint16 {
 	}
 
 	if cpu.checkProtect(pa, true) {
-		return IRC_PROT
+		return ircProt
 	}
 
 	cpu.perCheck(addr)
@@ -1012,7 +1012,7 @@ func (cpu *cpu) writeHalf(addr, data uint32) uint16 {
 
 			// Check against storage key
 			if cpu.checkProtect(pa2, true) {
-				return IRC_PROT
+				return ircProt
 			}
 		}
 
@@ -1021,11 +1021,11 @@ func (cpu *cpu) writeHalf(addr, data uint32) uint16 {
 		err = memory.PutWordMask(pa, data>>8, 0x000000ff)
 		err2 := memory.PutWordMask(pa2, data<<24, 0xff000000)
 		if err || err2 {
-			return IRC_ADDR
+			return ircAddr
 		}
 	}
 	if err {
-		return IRC_ADDR
+		return ircAddr
 	}
 	return 0
 }
@@ -1047,7 +1047,7 @@ func (cpu *cpu) writeByte(addr, data uint32) uint16 {
 	}
 
 	if cpu.checkProtect(pa, true) {
-		return IRC_PROT
+		return ircProt
 	}
 
 	cpu.perCheck(addr)
@@ -1057,7 +1057,7 @@ func (cpu *cpu) writeByte(addr, data uint32) uint16 {
 	var offset = 8 * (3 - (addr & 0x3))
 	mem_cycle++
 	if err = memory.PutWordMask(pa, data<<offset, mask<<offset); err {
-		return IRC_ADDR
+		return ircAddr
 	}
 	//	sim_debug(DEBUG_DATA, &cpu_dev, "WR A=%08x %02x\n", addr, data)
 	return 0
@@ -1114,7 +1114,7 @@ func (cpu *cpu) lpsw(src1, src2 uint32) {
 	cpu.PC = src2 & AMASK
 	//	sim_debug(DEBUG_INST, &cpu_dev, "PSW=%08x %08x  ", src1, src2)
 	if cpu.ecMode && ((src1&0xb800c0ff) != 0 || (src2&0xff000000) != 0) {
-		cpu.suppress(OPPSW, IRC_SPEC)
+		cpu.suppress(oPPSW, ircSpec)
 	}
 }
 

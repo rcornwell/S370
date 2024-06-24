@@ -1,5 +1,3 @@
-package cpu
-
 /* CPU definitions for IBM 370 simulator definitions
 
    Copyright (c) 2024, Richard Cornwell
@@ -22,6 +20,8 @@ package cpu
    CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 */
+
+package cpu
 
 type stepInfo struct {
 	opcode   uint8  // Current opcode
@@ -100,12 +100,17 @@ type cpu struct {
 }
 
 const (
-	DAT_ENABLE uint8 = 0x01
+	// PSW enable bits in SSM
+	extEnable uint8 = 0x01
+	irqEnable uint8 = 0x02
+	datEnable uint8 = 0x04
+	perEnable uint8 = 0x40
+
 	// Program mask bits.
-	EC_MODE uint8 = 0x08 // PSW is in EC mode
-	MCHECK  uint8 = 0x04 // Machine check flag
-	WAIT    uint8 = 0x02 // Wait state
-	PROBLEM uint8 = 0x01 // Problem state
+	ecMode  uint8 = 0x08 // PSW is in EC mode
+	mCheck  uint8 = 0x04 // Machine check flag
+	wait    uint8 = 0x02 // Wait state
+	problem uint8 = 0x01 // Problem state
 
 	// exception flags.
 	FIXOVER  uint8 = 0x08 // Fixed point overflow
@@ -114,46 +119,55 @@ const (
 	SIGMASK  uint8 = 0x01 // Significance
 
 	// low addresses
-	IPSW     uint32 = 0x00 // IPSW
-	ICCW1    uint32 = 0x08 // ICCW1
-	ICCW2    uint32 = 0x10 // ICCW2
-	OEPSW    uint32 = 0x18 // External old PSW
-	OSPSW    uint32 = 0x20 // Supervisior call old PSW
-	OPPSW    uint32 = 0x28 // Program old PSW
-	OMPSW    uint32 = 0x30 // Machine check PSW
-	OIOPSW   uint32 = 0x38 // IO old PSW
+	iPSW     uint32 = 0x00 // IPSW
+	iccCCW1  uint32 = 0x08 // ICCW1
+	iccCCW2  uint32 = 0x10 // ICCW2
+	oEPSW    uint32 = 0x18 // External old PSW
+	oSPSW    uint32 = 0x20 // Supervisior call old PSW
+	oPPSW    uint32 = 0x28 // Program old PSW
+	oMPSW    uint32 = 0x30 // Machine check PSW
+	oIOPSW   uint32 = 0x38 // IO old PSW
 	CSW      uint32 = 0x40 // CSW
 	CAW      uint32 = 0x48 // CAW
-	TIMER    uint32 = 0x50 // timer
-	NEPSW    uint32 = 0x58 // External new PSW
-	NSPSW    uint32 = 0x60 // SVC new PSW
-	NPPSW    uint32 = 0x68 // Program new PSW
-	NMPSW    uint32 = 0x70 // Machine Check PSW
-	NIOPSW   uint32 = 0x78 // IOPSW
-	DIAGAREA uint32 = 0x80 // Diag scan area.
+	timer    uint32 = 0x50 // timer
+	nEPSW    uint32 = 0x58 // External new PSW
+	nSPSW    uint32 = 0x60 // SVC new PSW
+	nPPSW    uint32 = 0x68 // Program new PSW
+	nMPSW    uint32 = 0x70 // Machine Check PSW
+	nIOPSW   uint32 = 0x78 // IOPSW
+	diagArea uint32 = 0x80 // Diag scan area.
 
 	// Operator trap values.
-	IRC_OPR    uint16 = 0x0001 // Operations exception
-	IRC_PRIV   uint16 = 0x0002 // Privlege violation
-	IRC_EXEC   uint16 = 0x0003 // Execution
-	IRC_PROT   uint16 = 0x0004 // Protection violation
-	IRC_ADDR   uint16 = 0x0005 // Address error
-	IRC_SPEC   uint16 = 0x0006 // Specification error
-	IRC_DATA   uint16 = 0x0007 // Data exception
-	IRC_FIXOVR uint16 = 0x0008 // Fixed point overflow
-	IRC_FIXDIV uint16 = 0x0009 // Fixed point divide
-	IRC_DECOVR uint16 = 0x000a // Decimal overflow
-	IRC_DECDIV uint16 = 0x000b // Decimal divide
-	IRC_EXPOVR uint16 = 0x000c // Exponent overflow
-	IRC_EXPUND uint16 = 0x000d // Exponent underflow
-	IRC_SIGNIF uint16 = 0x000e // Significance error
-	IRC_FPDIV  uint16 = 0x000f // Floating pointer divide
-	IRC_SEG    uint16 = 0x0010 // Segment translation
-	IRC_PAGE   uint16 = 0x0011 // Page translation
-	IRC_TRANS  uint16 = 0x0012 // Translation special
-	IRC_SPOP   uint16 = 0x0013 // Special operation
-	IRC_MCE    uint16 = 0x0040 // Monitor event
-	IRC_PER    uint16 = 0x0080 // Per event
+	ircOper     uint16 = 0x0001 // Operations exception
+	ircPriv     uint16 = 0x0002 // Privlege violation
+	ircExec     uint16 = 0x0003 // Execution
+	ircProt     uint16 = 0x0004 // Protection violation
+	ircAddr     uint16 = 0x0005 // Address error
+	ircSpec     uint16 = 0x0006 // Specification error
+	ircData     uint16 = 0x0007 // Data exception
+	ircFixOver  uint16 = 0x0008 // Fixed point overflow
+	ircFixDiv   uint16 = 0x0009 // Fixed point divide
+	ircDecOver  uint16 = 0x000a // Decimal overflow
+	ircDecDiv   uint16 = 0x000b // Decimal divide
+	ircExpOver  uint16 = 0x000c // Exponent overflow
+	ircExpUnder uint16 = 0x000d // Exponent underflow
+	ircSignif   uint16 = 0x000e // Significance error
+	ircFPDiv    uint16 = 0x000f // Floating pointer divide
+	ircSeg      uint16 = 0x0010 // Segment translation
+	ircPage     uint16 = 0x0011 // Page translation
+	ircTrans    uint16 = 0x0012 // Translation special
+	ircSpecOp   uint16 = 0x0013 // Special operation
+	ircMCE      uint16 = 0x0040 // Monitor event
+	ircPer      uint16 = 0x0080 // Per event
+
+	// DAT masks definitions
+	pteLength uint32 = 0xff000000 // Page table length
+	pteAddr   uint32 = 0x00fffffe // Address of table
+	pteValid  uint32 = 0x00000001 // table valid
+	tlbSeg    uint32 = 0x0001f000 // Segment address
+	tlbValid  uint32 = 0x80000000 // Entry valid
+	tlbPhy    uint32 = 0x00000fff // Physical page
+	segMask   uint32 = 0xfffff000 // Mask segment
 
 	// Mask constants
 	AMASK  uint32 = 0x00ffffff // Mask address bits
@@ -170,15 +184,6 @@ const (
 	SNMASK uint32 = 0x0f000000 // Short normal mask
 	PMASK  uint32 = 0xf0000000 // Storage protection mask
 	HMASK  uint32 = 0xffff0000 // Mask upper half word
-
-	// DAT definitions
-	PTE_LEN   uint32 = 0xff000000 // Page table length
-	PTE_ADR   uint32 = 0x00fffffe // Address of table
-	PTE_VALID uint32 = 0x00000001 // table valid
-	TLB_SEG   uint32 = 0x0001f000 // Segment address
-	TLB_VALID uint32 = 0x80000000 // Entry valid
-	TLB_PHY   uint32 = 0x00000fff // Physical page
-	SEG_MASK  uint32 = 0xfffff000 // Mask segment
 
 	// Long masks
 	HMASKL  uint64 = 0xffffffff00000000 // Upper word

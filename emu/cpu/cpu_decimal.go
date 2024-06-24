@@ -1,5 +1,3 @@
-package cpu
-
 /* IBM 370 Decimal instructions
 
    Copyright (c) 2024, Richard Cornwell
@@ -23,6 +21,8 @@ package cpu
 
 */
 
+package cpu
+
 // Load decimal number into temp storage
 // return error or zero
 func (cpu *cpu) decLoad(data *[32]uint8, addr uint32, len uint8, sign *bool) uint16 {
@@ -44,13 +44,13 @@ func (cpu *cpu) decLoad(data *[32]uint8, addr uint32, len uint8, sign *bool) uin
 		}
 		t2 := uint8(t & 0xf)
 		if j != 0 && t2 > 0x9 {
-			err = IRC_DATA
+			err = ircData
 		}
 		data[j] = t2
 		j++
 		t2 = uint8((t >> 4) & 0xf)
 		if t2 > 0x9 {
-			err = IRC_DATA
+			err = ircData
 		}
 		data[j] = t2
 		j++
@@ -64,7 +64,7 @@ func (cpu *cpu) decLoad(data *[32]uint8, addr uint32, len uint8, sign *bool) uin
 		*sign = false
 	}
 	if data[0] < 0xa {
-		err = IRC_DATA
+		err = ircData
 	}
 	return err
 }
@@ -139,7 +139,7 @@ func (cpu *cpu) opDecAdd(step *stepInfo) uint16 {
 	// CP  = F9    01
 	// AP  = FA    10
 	// SP  = FB    11
-	var err uint16 = 0
+	var err uint16
 	var v1 [32]uint8
 	var v2 [32]uint8
 	var s1, s2 bool
@@ -236,7 +236,7 @@ func (cpu *cpu) opDecAdd(step *stepInfo) uint16 {
 		if ov {
 			cpu.cc = 3
 			if (cpu.progMask & DECOVER) != 0 {
-				err = IRC_DECOVR
+				err = ircDecOver
 			}
 		}
 	}
@@ -245,7 +245,7 @@ func (cpu *cpu) opDecAdd(step *stepInfo) uint16 {
 
 // Handle SRP instruction
 func (cpu *cpu) opSRP(step *stepInfo) uint16 {
-	var err uint16 = 0
+	var err uint16
 	var v1 [32]uint8
 	var s1 bool
 	var cy uint8 = 0
@@ -337,7 +337,7 @@ func (cpu *cpu) opSRP(step *stepInfo) uint16 {
 	if ov {
 		cpu.cc = 3
 		if (cpu.progMask & DECOVER) != 0 {
-			err = IRC_DECOVR
+			err = ircDecOver
 		}
 	}
 	return err
@@ -362,17 +362,17 @@ func dec_mulstep(l int, s1 int, v1 *[32]uint8, v2 *[32]uint8) {
 
 // Decimal multiply
 func (cpu *cpu) opMP(step *stepInfo) uint16 {
-	var err uint16 = 0
+	var err uint16
 	var v1 [32]uint8
 	var v2 [32]uint8
 	var s1, s2 bool
 
 	if step.R2 == step.R1 {
-		return IRC_SPEC
+		return ircSpec
 	}
 
 	if step.R2 > 7 || step.R2 >= step.R1 {
-		return IRC_DATA
+		return ircData
 	}
 	if err = cpu.decLoad(&v2, step.address2, step.R2, &s2); err != 0 {
 		return err
@@ -389,7 +389,7 @@ func (cpu *cpu) opMP(step *stepInfo) uint16 {
 	// Verify that we have l2 zeros at start of v1
 	for i := l1 - l2; i < l1; i++ {
 		if v1[i] != 0 {
-			return IRC_DATA
+			return ircData
 		}
 	}
 
@@ -418,7 +418,7 @@ func (cpu *cpu) opMP(step *stepInfo) uint16 {
 
 // BCD Packed Divide instruction
 func (cpu *cpu) opDP(step *stepInfo) uint16 {
-	var err uint16 = 0
+	var err uint16
 	var v1 [32]uint8
 	var v2 [32]uint8
 	var r [32]uint8
@@ -426,7 +426,7 @@ func (cpu *cpu) opDP(step *stepInfo) uint16 {
 	var cy uint8
 
 	if step.R2 > 7 || step.R2 >= step.R1 {
-		return IRC_DATA
+		return ircData
 	}
 	if err = cpu.decLoad(&v2, step.address2, step.R2, &s2); err != 0 {
 		return err
@@ -481,7 +481,7 @@ func (cpu *cpu) opDP(step *stepInfo) uint16 {
 			if cy == 0 {
 				// It is a no-no to have non-zero digit above size
 				if q > 0 && (i+1) > l1 {
-					return IRC_DECDIV
+					return ircDecDiv
 				}
 				v1[i+1] = q // Save quotient digit
 				for i := j; k > 1; i++ {
@@ -491,7 +491,7 @@ func (cpu *cpu) opDP(step *stepInfo) uint16 {
 				q++
 			}
 			if q > 9 {
-				return IRC_DECDIV
+				return ircDecDiv
 			}
 		}
 	}
