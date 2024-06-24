@@ -135,20 +135,24 @@ func CancelEvent(dev D.Device, cb Callback, iarg int) {
 
 // Advance time by one clock cycle
 func Advance(t int) {
-	evptr := el.head
-	if evptr == nil {
+
+	if el.head == nil {
 		return
 	}
-	evptr.time -= t
-	for evptr != nil && evptr.time <= 0 {
-		evptr.cb(evptr.iarg)
-		el.head = evptr.next
-		evptr = nil
-		evptr = el.head
-		if evptr != nil {
-			evptr.prev = nil
-		} else {
-			el.tail = nil
+	for t > 0 && el.head != nil {
+		evptr := el.head
+		t--
+		evptr.time -= 1
+		for evptr != nil && evptr.time <= 0 {
+			evptr.cb(evptr.iarg)
+			el.head = evptr.next
+			evptr = nil
+			evptr = el.head
+			if evptr != nil {
+				evptr.prev = nil
+			} else {
+				el.tail = nil
+			}
 		}
 	}
 }
