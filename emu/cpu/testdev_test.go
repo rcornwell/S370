@@ -38,6 +38,7 @@ type Test_dev struct {
 	count int        // Pointer to input/output
 	max   int        // Maximum size of date
 	sense uint8      // Current sense byte
+	halt  bool       // Halt I/O requested
 	sms   bool       // Return SMS at end of command
 }
 
@@ -87,7 +88,7 @@ func (d *Test_dev) StartCmd(cmd uint8) uint8 {
 		case 0x0b: // Grab a data byte
 		case 0x13: // Issue channel end
 			r = Ch.SNS_CHNEND
-			Ev.AddEvent(d, d.callback, 50, 1)
+			Ev.AddEvent(d, d.callback, 10, 1)
 		default:
 			d.cmd = 0
 			d.sense = Ch.SNS_CMDREJ
@@ -108,24 +109,19 @@ func (d *Test_dev) StartCmd(cmd uint8) uint8 {
 		d.sense = Ch.SNS_CMDREJ
 	}
 
+	d.halt = false
 	if d.sense != 0 {
 		r = Ch.SNS_CHNEND | Ch.SNS_DEVEND | Ch.SNS_UNITCHK
 	} else if (r & Ch.SNS_CHNEND) == 0 {
-		Ev.AddEvent(d, d.callback, 20, 1)
+		Ev.AddEvent(d, d.callback, 10, 1)
 	}
 	return r
 }
 
 // Handle HIO instruction
 func (d *Test_dev) HaltIO() uint8 {
-	switch d.cmd {
-	case 0x13: // Return channel end
-	case 0x4:
-		break
-	case 0x1, 0x2, 0xc:
-		d.count = d.max + 2
-	}
-	return 0
+	d.halt = true
+	return 1
 }
 
 // Initialize a device.
@@ -155,6 +151,12 @@ func (d *Test_dev) callback(iarg int) {
 			Ch.ChanEnd(d.addr, r)
 			return
 		}
+		if d.halt {
+			Ch.ChanEnd(d.addr, Ch.SNS_CHNEND|Ch.SNS_DEVEND)
+			d.cmd = 0
+			d.halt = false
+			return
+		}
 		v, e = Ch.ChanReadByte(d.addr)
 		if e {
 			d.data[d.count] = v
@@ -166,7 +168,7 @@ func (d *Test_dev) callback(iarg int) {
 		}
 		d.data[d.count] = v
 		d.count++
-		Ev.AddEvent(d, d.callback, 20, 1)
+		Ev.AddEvent(d, d.callback, 10, 1)
 	case 0x02, 0x0c: // Read and Read backwards
 		r := Ch.SNS_CHNEND | Ch.SNS_DEVEND
 		if d.sms {
@@ -178,19 +180,25 @@ func (d *Test_dev) callback(iarg int) {
 			Ch.ChanEnd(d.addr, r)
 			return
 		}
+		if d.halt {
+			Ch.ChanEnd(d.addr, Ch.SNS_CHNEND|Ch.SNS_DEVEND)
+			d.cmd = 0
+			d.halt = false
+			return
+		}
 		if Ch.ChanWriteByte(d.addr, d.data[d.count]) {
 			d.cmd = 0
 			d.sms = false
 			Ch.ChanEnd(d.addr, r)
 		} else {
 			d.count++
-			Ev.AddEvent(d, d.callback, 20, 1)
+			Ev.AddEvent(d, d.callback, 10, 1)
 		}
 	case 0x0b:
 		d.cmd = 0x13
 		d.data[0], _ = Ch.ChanReadByte(d.addr)
 		Ch.ChanEnd(d.addr, Ch.SNS_CHNEND)
-		Ev.AddEvent(d, d.callback, 30, 1)
+		Ev.AddEvent(d, d.callback, 10, 1)
 	case 0x04:
 		d.cmd = 0
 		if Ch.ChanWriteByte(d.addr, d.sense) {

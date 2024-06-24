@@ -37,6 +37,7 @@ type Test_dev struct {
 	count int        // Pointer to input/output
 	max   int        // Maximum size of date
 	sense uint8      // Current sense byte
+	halt  bool       // Halt I/O requested
 	sms   bool       // Return SMS at end of command
 }
 
@@ -107,6 +108,7 @@ func (d *Test_dev) StartCmd(cmd uint8) uint8 {
 		d.sense = SNS_CMDREJ
 	}
 
+	d.halt = false
 	if d.sense != 0 {
 		r = SNS_CHNEND | SNS_DEVEND | SNS_UNITCHK
 	} else if (r & SNS_CHNEND) == 0 {
@@ -117,14 +119,8 @@ func (d *Test_dev) StartCmd(cmd uint8) uint8 {
 
 // Handle HIO instruction
 func (d *Test_dev) HaltIO() uint8 {
-	switch d.cmd {
-	case 0x13: // Return channel end
-	case 0x4:
-		break
-	case 0x1, 0x2, 0xc:
-		d.count = d.max
-	}
-	return 0
+	d.halt = true
+	return 1
 }
 
 // Initialize a device.
@@ -154,6 +150,12 @@ func (d *Test_dev) callback(iarg int) {
 			ChanEnd(d.addr, r)
 			return
 		}
+		if d.halt {
+			ChanEnd(d.addr, SNS_CHNEND|SNS_DEVEND)
+			d.cmd = 0
+			d.halt = false
+			return
+		}
 		v, e = ChanReadByte(d.addr)
 		if e {
 			d.data[d.count] = v
@@ -175,6 +177,12 @@ func (d *Test_dev) callback(iarg int) {
 			d.cmd = 0
 			d.sms = false
 			ChanEnd(d.addr, r)
+			return
+		}
+		if d.halt {
+			ChanEnd(d.addr, SNS_CHNEND|SNS_DEVEND)
+			d.cmd = 0
+			d.halt = false
 			return
 		}
 		if ChanWriteByte(d.addr, d.data[d.count]) {

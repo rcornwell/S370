@@ -35,7 +35,7 @@ import (
 func setup(devNum uint16) *Test_dev {
 	M.SetSize(64)
 	InitializeChannels()
-	AddChannel(0, TYPE_MUX, 192)
+	AddChannel(0, TypeMux, 192)
 	d := &Test_dev{addr: devNum, mask: 0xff}
 	AddDevice(d, devNum)
 	_ = d.InitDev()
@@ -62,9 +62,9 @@ func setMemByte(addr uint32, data uint32) {
 }
 
 func runChannel() uint16 {
-	var d uint16 = NO_DEV
+	var d uint16 = NoDev
 
-	for d == NO_DEV {
+	for d == NoDev {
 		Ev.Advance(1)
 		d = ChanScan(0x8000, true)
 	}
@@ -79,7 +79,7 @@ func TestTestChan(t *testing.T) {
 	if cc != 3 {
 		t.Errorf("Test Channel on non-existing channel failed expected %d got: %d", 3, cc)
 	}
-	AddChannel(0, TYPE_MUX, 192)
+	AddChannel(0, TypeMux, 192)
 	cc = TestChan(0)
 	if cc != 0 {
 		t.Errorf("Test Channel on existing channel failed expected %d got: %d", 0, cc)
@@ -89,7 +89,7 @@ func TestTestChan(t *testing.T) {
 	if cc != 3 {
 		t.Errorf("Test Channel on non-existing channel failed expected %d got: %d", 3, cc)
 	}
-	AddChannel(1, TYPE_SEL, 0)
+	AddChannel(1, TypeSel, 0)
 	cc = TestChan(0x100)
 	if cc != 0 {
 		t.Errorf("Test Channel on existing channel failed expected %d got: %d", 0, cc)
@@ -98,7 +98,7 @@ func TestTestChan(t *testing.T) {
 	if cc != 3 {
 		t.Errorf("Test Channel on non-existing channel failed expected %d got: %d", 3, cc)
 	}
-	AddChannel(2, TYPE_BMUX, 0)
+	AddChannel(2, TypeBMux, 0)
 	cc = TestChan(0x200)
 	if cc != 0 {
 		t.Errorf("Test Channel on existing channel failed expected %d got: %d", 0, cc)
@@ -1459,7 +1459,7 @@ func TestStartIOPCI(t *testing.T) {
 	if dev != 0xf {
 		t.Errorf("Start I/O PCI expected %d got: %d", 0xf, dev)
 	}
-	v = M.GetMemory(0x44) & M.UMASK
+	v = M.GetMemory(0x44) & statusMask
 	if v != 0x00800000 {
 		t.Errorf("Start I/O PCI CSW2 PCI expected %08x got: %08x", 0x00800000, v)
 	}
@@ -1498,8 +1498,8 @@ func TestStartIOHaltIO1(t *testing.T) {
 	_ = TestIO(0x00f)
 	cc := HaltIO(0x00f)
 
-	if cc != 0 {
-		t.Errorf("Start I/O HaltIO expected %d got: %d", 0, cc)
+	if cc != 1 {
+		t.Errorf("Start I/O HaltIO expected %d got: %d", 1, cc)
 	}
 }
 
@@ -1543,17 +1543,24 @@ func TestStartIOHaltIO2(t *testing.T) {
 		t.Errorf("Start I/O Haltio2 expected %d got: %d", 0xf, dev)
 	}
 
-	v = M.GetMemory(0x44) & M.UMASK
+	v = M.GetMemory(0x44) & statusMask
 	if v != 0x00800000 {
 		t.Errorf("Start I/O Haltio2 CSW2 PCI expected %08x got: %08x", 0x00800000, v)
 	}
 
 	cc = HaltIO(0x00f)
-	if cc != 0 {
-		t.Errorf("Start I/O Haltio2 expected %d got: %d", 0, cc)
+	if cc != 1 {
+		t.Errorf("Start I/O Haltio2 expected %d got: %d", 1, cc)
 	}
 
-	dev = runChannel()
+	cc = 3
+
+	for cc != 0 {
+		Ev.Advance(1)
+		_ = ChanScan(0x8000, true)
+		cc = TestIO(0xf)
+	}
+
 	if dev != 0xf {
 		t.Errorf("Start I/O Haltio2 expected %d got: %d", 0xf, dev)
 	}
@@ -1605,7 +1612,7 @@ func TestStartIOTIOBusy(t *testing.T) {
 	if dev != 0xf {
 		t.Errorf("Start I/O TIO Busy expected %d got: %d", 0xf, dev)
 	}
-	v = M.GetMemory(0x44) & M.UMASK
+	v = M.GetMemory(0x44) & statusMask
 	if v != 0x00800000 {
 		t.Errorf("Start I/O TIO Busy CSW2 PCI expected %08x got: %08x", 0x00800000, v)
 	}
@@ -1721,7 +1728,7 @@ func TestStartIOWriteProt(t *testing.T) {
 	if v != 0x20000508 {
 		t.Errorf("Start I/O Write Prot  CSW1 expected %08x got: %08x", 0x20000508, v)
 	}
-	v = M.GetMemory(0x44) & M.UMASK
+	v = M.GetMemory(0x44) & statusMask
 	if v != 0x0c500000 {
 		t.Errorf("Start I/O Write Prot CSW2 expected %08x got: %08x", 0x0c500000, v)
 	}
@@ -1827,7 +1834,7 @@ func TestStartIOWriteProt2(t *testing.T) {
 	if v != 0x30000508 {
 		t.Errorf("Start I/O Write Prot  CSW1 expected %08x got: %08x", 0x30000508, v)
 	}
-	v = M.GetMemory(0x44) & M.UMASK
+	v = M.GetMemory(0x44) & statusMask
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O Write Prot CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}

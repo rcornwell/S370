@@ -157,9 +157,9 @@ func CycleCPU() int {
 
 	// Check if we should see if an IRQ is pending
 	irq := sys_channel.ChanScan(cpuState.sysMask, cpuState.irqEnb)
-	if irq != sys_channel.NO_DEV {
+	if irq != sys_channel.NoDev {
 		cpuState.ilc = 0
-		if sys_channel.Loading == sys_channel.NO_DEV {
+		if sys_channel.Loading == sys_channel.NoDev {
 			cpuState.suppress(OIOPSW, irq)
 		}
 		return mem_cycle
@@ -194,7 +194,7 @@ func CycleCPU() int {
 	}
 
 	/* If we have wait flag or loading, nothing more to do */
-	if sys_channel.Loading != sys_channel.NO_DEV || (cpuState.flags&WAIT) != 0 {
+	if sys_channel.Loading != sys_channel.NoDev || (cpuState.flags&WAIT) != 0 {
 		/* CPU IDLE */
 		if !cpuState.irqEnb && !cpuState.extEnb {
 			return mem_cycle
@@ -609,7 +609,7 @@ func (cpu *cpu) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 		switch vector {
 		case OEPSW:
 			mem_cycle++
-			memory.SetMemoryMask(0x84, uint32(irqcode), memory.HMASK)
+			memory.SetMemoryMask(0x84, uint32(irqcode), LMASK)
 		case OSPSW:
 			mem_cycle++
 			memory.SetMemory(0x88, ((uint32(cpu.ilc) << 17) | uint32(irqcode)))
@@ -624,7 +624,7 @@ func (cpu *cpu) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 			mem_cycle++
 			memory.SetMemory(150, (uint32(cpu.perCode)<<16)|(cpu.perAddr>>16))
 			mem_cycle++
-			memory.SetMemoryMask(154, (cpu.perAddr&0xffff)<<16, memory.UMASK)
+			memory.SetMemoryMask(154, (cpu.perAddr&0xffff)<<16, LMASK)
 		}
 		// Generate second word.
 		word2 = cpu.PC
@@ -823,7 +823,7 @@ func (cpu *cpu) readHalf(addr uint32) (uint32, uint16) {
 	}
 
 	// Sign extend the result
-	v &= HMASK
+	v &= LMASK
 	if (v & 0x8000) != 0 {
 		v |= 0xffff0000
 	}
@@ -996,7 +996,7 @@ func (cpu *cpu) writeHalf(addr, data uint32) uint16 {
 		err = memory.PutWordMask(pa, data<<8, 0x00ffff00)
 	case 2:
 		mem_cycle++
-		err = memory.PutWordMask(pa, data, HMASK)
+		err = memory.PutWordMask(pa, data, LMASK)
 	case 3:
 		addr2 := addr + 1
 		pa2 := pa + 1
@@ -1070,9 +1070,9 @@ func (cpu *cpu) suppress(code uint32, irc uint16) {
 	// For IPL, save device after saving load complete
 	if irqaddr == 0 {
 		mem_cycle++
-		_ = memory.PutWordMask(0, code, HMASK)
+		_ = memory.PutWordMask(0, code, LMASK)
 		mem_cycle++
-		_ = memory.PutWordMask(0xba, code, HMASK)
+		_ = memory.PutWordMask(0xba, code, LMASK)
 	}
 	mem_cycle++
 	src1, _ := memory.GetWord(irqaddr)

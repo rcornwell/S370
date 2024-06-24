@@ -35,10 +35,6 @@ var memory mem
 
 const (
 	AMASK uint32 = 0x00ffffff // Mask address bits
-	HMASK uint32 = 0x0000ffff // Half word mask
-	UMASK uint32 = 0xffff0000 // Upper half word mask
-	PMASK uint32 = 0xf0000000 // Storage protection mask
-	FMASK uint32 = 0xffffffff // Full word mask
 )
 
 // Set size in K

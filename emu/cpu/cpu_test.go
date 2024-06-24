@@ -1348,8 +1348,8 @@ func TestCycleM(t *testing.T) {
 		n1 := rnum.Int31()
 		n2 := rand.Int31()
 		r := int64(n1) * int64(n2)
-		h := uint32((uint64(r) >> 32) & uint64(memory.FMASK))
-		l := uint32(uint64(r) & uint64(memory.FMASK))
+		h := uint32((uint64(r) >> 32) & uint64(FMASK))
+		l := uint32(uint64(r) & uint64(FMASK))
 		cpuState.regs[2] = 0
 		cpuState.regs[3] = uint32(n1)
 		cpuState.regs[4] = uint32(n2)
@@ -1510,7 +1510,7 @@ func TestCycleD(t *testing.T) {
 		r := dividend % int64(divisor)
 
 		cpuState.regs[2] = uint32(dividend >> 32)
-		cpuState.regs[3] = uint32(dividend & int64(memory.FMASK))
+		cpuState.regs[3] = uint32(dividend & int64(FMASK))
 		memory.SetMemory(0x100, uint32(divisor))
 		memory.SetMemory(0x400, 0x5d200100) // D 2,100(0,0)
 		cpuState.testInst(0, 20)
@@ -2409,7 +2409,7 @@ func TestCycleSLA(t *testing.T) {
 		t.Errorf("SLA Register not correct got: %08x wanted: %08x", v, mv)
 	}
 	if cpuState.cc != 2 {
-		t.Errorf("SLA CC ot correct got: %x wanted: %x", cpuState.cc, 2)
+		t.Errorf("SLA C not correct got: %x wanted: %x", cpuState.cc, 2)
 	}
 
 	// Shift left single zero
@@ -2423,7 +2423,7 @@ func TestCycleSLA(t *testing.T) {
 		t.Errorf("SLA Register not correct got: %08x wanted: %08x", v, mv)
 	}
 	if cpuState.cc != 2 {
-		t.Errorf("SLA CC ot correct got: %x wanted: %x", cpuState.cc, 2)
+		t.Errorf("SLA CC not correct got: %x wanted: %x", cpuState.cc, 2)
 	}
 
 	// // Shift left single zero negative
@@ -2437,7 +2437,7 @@ func TestCycleSLA(t *testing.T) {
 		t.Errorf("SLA Register not correct got: %08x wanted: %08x", v, mv)
 	}
 	if cpuState.cc != 1 {
-		t.Errorf("SLA CC ot correct got: %x wanted: %x", cpuState.cc, 1)
+		t.Errorf("SLA CC not correct got: %x wanted: %x", cpuState.cc, 1)
 	}
 
 	// Shift left single  zero, zero value
@@ -2451,7 +2451,7 @@ func TestCycleSLA(t *testing.T) {
 		t.Errorf("SLA Register not correct got: %08x wanted: %08x", v, mv)
 	}
 	if cpuState.cc != 0 {
-		t.Errorf("SLA CC ot correct got: %x wanted: %x", cpuState.cc, 0)
+		t.Errorf("SLA CC not correct got: %x wanted: %x", cpuState.cc, 0)
 	}
 
 	// Shift left single positive overflow
@@ -2466,7 +2466,7 @@ func TestCycleSLA(t *testing.T) {
 		t.Errorf("SLA Register not correct got: %08x wanted: %08x", v, mv)
 	}
 	if cpuState.cc != 2 {
-		t.Errorf("SLA CC ot correct got: %x wanted: %x", cpuState.cc, 2)
+		t.Errorf("SLA CC not correct got: %x wanted: %x", cpuState.cc, 2)
 	}
 
 	cpuState.cc = 3
@@ -2480,7 +2480,7 @@ func TestCycleSLA(t *testing.T) {
 		t.Errorf("SLA Register not correct got: %08x wanted: %08x", v, mv)
 	}
 	if cpuState.cc != 3 {
-		t.Errorf("SLA CC ot correct got: %x wanted: %x", cpuState.cc, 3)
+		t.Errorf("SLA CC not correct got: %x wanted: %x", cpuState.cc, 3)
 	}
 
 	// Shift left single
@@ -2495,7 +2495,7 @@ func TestCycleSLA(t *testing.T) {
 		t.Errorf("SLA Register not correct got: %08x wanted: %08x", v, mv)
 	}
 	if cpuState.cc != 3 {
-		t.Errorf("SLA CC ot correct got: %x wanted: %x", cpuState.cc, 3)
+		t.Errorf("SLA CC not correct got: %x wanted: %x", cpuState.cc, 3)
 	}
 
 	// Shift left single
@@ -2510,7 +2510,7 @@ func TestCycleSLA(t *testing.T) {
 		t.Errorf("SLA Register not correct got: %08x wanted: %08x", v, mv)
 	}
 	if cpuState.cc != 3 {
-		t.Errorf("SLA CC ot correct got: %x wanted: %x", cpuState.cc, 3)
+		t.Errorf("SLA CC not correct got: %x wanted: %x", cpuState.cc, 3)
 	}
 
 	cpuState.cc = 3
@@ -2524,7 +2524,7 @@ func TestCycleSLA(t *testing.T) {
 		t.Errorf("SLA Register not correct got: %08x wanted: %08x", v, mv)
 	}
 	if cpuState.cc != 3 {
-		t.Errorf("SLA CC ot correct got: %x wanted: %x", cpuState.cc, 3)
+		t.Errorf("SLA CC not correct got: %x wanted: %x", cpuState.cc, 3)
 	}
 
 	cpuState.cc = 3
@@ -2538,7 +2538,7 @@ func TestCycleSLA(t *testing.T) {
 		t.Errorf("SLA Register not correct got: %08x wanted: %08x", v, mv)
 	}
 	if cpuState.cc != 3 {
-		t.Errorf("SLA CC ot correct got: %x wanted: %x", cpuState.cc, 3)
+		t.Errorf("SLA CC not correct got: %x wanted: %x", cpuState.cc, 3)
 	}
 
 	cpuState.cc = 3
@@ -2552,7 +2552,7 @@ func TestCycleSLA(t *testing.T) {
 		t.Errorf("SLA Register not correct got: %08x wanted: %08x", v, mv)
 	}
 	if cpuState.cc != 3 {
-		t.Errorf("SLA CC ot correct got: %x wanted: %x", cpuState.cc, 3)
+		t.Errorf("SLA CC not correct got: %x wanted: %x", cpuState.cc, 3)
 	}
 
 	cpuState.cc = 3
@@ -2566,7 +2566,21 @@ func TestCycleSLA(t *testing.T) {
 		t.Errorf("SLA Register not correct got: %08x wanted: %08x", v, mv)
 	}
 	if cpuState.cc != 1 {
-		t.Errorf("SLA CC ot correct got: %x wanted: %x", cpuState.cc, 1)
+		t.Errorf("SLA CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+
+	// From Princ Ops p143
+	cpuState.cc = 3
+	cpuState.regs[2] = 0x007f0a72
+	memory.SetMemory(0x400, 0x8b2f0008) // SLA 2,8(0) // Shift left 8
+	cpuState.testInst(0, 20)
+	v = cpuState.regs[2]
+	mv = uint32(0x7f0a7200)
+	if v != mv {
+		t.Errorf("SLA Register not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("SLA CC not correct got: %x wanted: %x", cpuState.cc, 2)
 	}
 }
 
@@ -2584,7 +2598,289 @@ func TestCycleSLL(t *testing.T) {
 		t.Errorf("SLL Register not correct got: %08x wanted: %08x", v, mv)
 	}
 	if cpuState.cc != 3 {
-		t.Errorf("SLL CC ot correct got: %x wanted: %x", cpuState.cc, 3)
+		t.Errorf("SLL CC not correct got: %x wanted: %x", cpuState.cc, 3)
+	}
+}
+
+// Shift right logical instruction
+func TestCycleSRL(t *testing.T) {
+	setup()
+
+	cpuState.regs[1] = 0x82345678
+	cpuState.regs[2] = 0x12340003       // Shift 3 bits
+	memory.SetMemory(0x400, 0x881f2100) // SRL 1,100(2)
+	cpuState.testInst(0, 20)
+	v := cpuState.regs[1]
+	mv := uint32(0x82345678 >> 3)
+	if v != mv {
+		t.Errorf("SRL Register not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 3 {
+		t.Errorf("SRL CC not correct got: %x wanted: %x", cpuState.cc, 3)
+	}
+}
+
+// Shift right arithmatic instruction
+func TestCycleSRA(t *testing.T) {
+	setup()
+
+	cpuState.regs[2] = 0x11223344
+	memory.SetMemory(0x400, 0x8a2f0105) // SRA 2,105(0) // Shift right 5
+	cpuState.testInst(0, 20)
+	v := cpuState.regs[2]
+	mv := uint32(0x0089119a)
+	if v != mv {
+		t.Errorf("SRA Register not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("SRA CC not correct got: %x wanted: %x", cpuState.cc, 2)
+	}
+}
+
+// Shift right double logical
+func TestCycleSRDL(t *testing.T) {
+	setup()
+
+	cpuState.regs[4] = 0x12345678
+	cpuState.regs[5] = 0xaabbccdd
+	memory.SetMemory(0x400, 0x8c4f0118) // SRDL 4,118(0) // Shift right 24 (x18)
+	cpuState.testInst(0, 20)
+	v := cpuState.regs[4]
+	mv := uint32(0x00000012)
+	if v != mv {
+		t.Errorf("SRDL Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[5]
+	mv = uint32(0x345678aa)
+	if v != mv {
+		t.Errorf("SRDL Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 3 {
+		t.Errorf("SRDL CC not correct got: %x wanted: %x", cpuState.cc, 3)
+	}
+}
+
+// Shift left double logical
+func TestCycleSLDL(t *testing.T) {
+	setup()
+
+	cpuState.regs[4] = 0x12345678
+	cpuState.regs[5] = 0xaabbccdd
+	cpuState.regs[6] = 8
+	memory.SetMemory(0x400, 0x8d4f6100) // SLDL 4,100(6)  // Shift left 8
+	cpuState.testInst(0, 20)
+	v := cpuState.regs[4]
+	mv := uint32(0x345678aa)
+	if v != mv {
+		t.Errorf("SLDL Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[5]
+	mv = uint32(0xbbccdd00)
+	if v != mv {
+		t.Errorf("SLDL Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 3 {
+		t.Errorf("SLDL CC not correct got: %x wanted: %x", cpuState.cc, 3)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[4] = 0x12345678
+	cpuState.regs[5] = 0x00010001
+	memory.SetMemory(0x400, 0x8d4f051b) // SLDL 4,51b(0) // Shift left 27
+	cpuState.testInst(0, 20)
+	v = cpuState.regs[4]
+	mv = uint32(0xc0000800)
+	if v != mv {
+		t.Errorf("SLDL Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[5]
+	mv = uint32(0x08000000)
+	if v != mv {
+		t.Errorf("SLDL Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 3 {
+		t.Errorf("SLDL CC not correct got: %x wanted: %x", cpuState.cc, 3)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[4] = 0x12345678
+	cpuState.regs[5] = 0x00010001
+	memory.SetMemory(0x400, 0x8d1f2100) // SLDL 1,100(2)
+	cpuState.testInst(0, 20)
+	if !trap_flag {
+		t.Error("SLDL did not trap")
+	}
+	v = cpuState.regs[4]
+	mv = uint32(0x12345678)
+	if v != mv {
+		t.Errorf("SLDL Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[5]
+	mv = uint32(0x00010001)
+	if v != mv {
+		t.Errorf("SLDL Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Shift double right arithmatic
+func TestCycleSRDA(t *testing.T) {
+	setup()
+
+	cpuState.regs[4] = 0x12345678
+	cpuState.regs[5] = 0xaabbccdd
+	cpuState.regs[6] = 8
+	memory.SetMemory(0x400, 0x8e4f0118) // SRDA 4,118(0) // Shift right 24 (x18)
+	cpuState.testInst(0, 20)
+	v := cpuState.regs[4]
+	mv := uint32(0x00000012)
+	if v != mv {
+		t.Errorf("SRDA Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[5]
+	mv = uint32(0x345678aa)
+	if v != mv {
+		t.Errorf("SRDA Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("SRDA CC not correct got: %x wanted: %x", cpuState.cc, 2)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[4] = 0x02345678
+	cpuState.regs[5] = 0xaabbccdd
+	memory.SetMemory(0x400, 0x8e4f013c) // SRDA 4,13c(0) //  Shift right 60 (x3c)
+	cpuState.testInst(0, 20)
+	v = cpuState.regs[4]
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("SRDA Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[5]
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("SRDA Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 0 {
+		t.Errorf("SRDA CC not correct got: %x wanted: %x", cpuState.cc, 0)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[4] = 0x92345678
+	cpuState.regs[5] = 0xaabbccdd
+	memory.SetMemory(0x400, 0x8e4f0118) // SRDA 4,118(0) // Shift right 24 (x18)
+	cpuState.testInst(0, 20)
+	v = cpuState.regs[4]
+	mv = uint32(0xffffff92)
+	if v != mv {
+		t.Errorf("SRDA Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[5]
+	mv = uint32(0x345678aa)
+	if v != mv {
+		t.Errorf("SRDA Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("SRDA CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+
+}
+
+// // Shift double left arithmatic
+func TestCycleSLDA(t *testing.T) {
+	setup()
+
+	cpuState.regs[2] = 0x007f0a72
+	cpuState.regs[3] = 0xfedcba98
+	memory.SetMemory(0x400, 0x8f2f001f) // SLDA 2,1f(0)
+	cpuState.testInst(0, 20)
+	v := cpuState.regs[2]
+	mv := uint32(0x7f6e5d4c)
+	if v != mv {
+		t.Errorf("SLDA Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[3]
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("SLDA Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 3 {
+		t.Errorf("SLDA CC not correct got: %x wanted: %x", cpuState.cc, 3)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[2] = 0xffffffff
+	cpuState.regs[3] = 0xffffe070
+	memory.SetMemory(0x400, 0x8f2f0030) // SLDA 2,30(0)
+	cpuState.testInst(0, 20)
+	v = cpuState.regs[2]
+	mv = uint32(0xe0700000)
+	if v != mv {
+		t.Errorf("SLDA Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[3]
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("SLDA Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("SLDA CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[2] = 0x92345678
+	cpuState.regs[3] = 0xc0506070
+	memory.SetMemory(0x400, 0x8f2f0020) // SLDA 2,20(0)
+	cpuState.testInst(0, 20)
+	v = cpuState.regs[2]
+	mv = uint32(0xc0506070)
+	if v != mv {
+		t.Errorf("SLDA Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[3]
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("SLDA Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 3 {
+		t.Errorf("SLDA CC not correct got: %x wanted: %x", cpuState.cc, 3)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[2] = 0xff902030
+	cpuState.regs[3] = 0x40506070
+	memory.SetMemory(0x400, 0x8f2f0008) // SLDA 2,8(0)
+	cpuState.testInst(0, 20)
+	v = cpuState.regs[2]
+	mv = uint32(0x90203040)
+	if v != mv {
+		t.Errorf("SLDA Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[3]
+	mv = uint32(0x50607000)
+	if v != mv {
+		t.Errorf("SLDA Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("SLDA CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[2] = 0x00000000
+	cpuState.regs[3] = 0x000076f7
+	memory.SetMemory(0x400, 0x8f2f0030) // SLDA 2,30(0)
+	cpuState.testInst(0, 20)
+	v = cpuState.regs[2]
+	mv = uint32(0x76f70000)
+	if v != mv {
+		t.Errorf("SLDA Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[3]
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("SLDA Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("SLDA CC not correct got: %x wanted: %x", cpuState.cc, 2)
 	}
 }
 

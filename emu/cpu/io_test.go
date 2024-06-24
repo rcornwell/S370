@@ -36,7 +36,7 @@ import (
 func ioSetup(devNum uint16) *Test_dev {
 	setup()
 	Ch.InitializeChannels()
-	Ch.AddChannel(0, Ch.TYPE_MUX, 192)
+	Ch.AddChannel(0, Ch.TypeMux, 192)
 	d := &Test_dev{addr: devNum, mask: 0xff}
 	Ch.AddDevice(d, devNum)
 	_ = d.InitDev()
@@ -1512,7 +1512,7 @@ func TestCyclePCI(t *testing.T) {
 		t.Errorf("Start I/O PCI CSW1 PCI expected 0x0000051x got: %08x", v)
 	}
 
-	v = cpuState.regs[1] & M.UMASK
+	v = cpuState.regs[1] & HMASK
 	if v != 0x00800000 {
 		t.Errorf("Start I/O PCI CSW2 PCI expected %08x got: %08x", 0x00800000, v)
 	}
@@ -1607,11 +1607,7 @@ func TestCycleHaltIO2(t *testing.T) {
 
 	cpuState.iotestInst(0, 2000)
 
-	v = cpuState.regs[0]
-	if v != 0x00800000 {
-		t.Errorf("Start I/O Haltio2 CSW2 PCI expected %08x got: %08x", 0x00800000, v)
-	}
-	v = cpuState.regs[1] & M.UMASK
+	v = cpuState.regs[1] & HMASK
 	if v != 0x00800000 {
 		t.Errorf("Start I/O Haltio2 CSW2 PCI expected %08x got: %08x", 0x00800000, v)
 	}
@@ -1786,7 +1782,7 @@ func TestCycleWriteProt(t *testing.T) {
 	if v != 0x20000508 {
 		t.Errorf("Start I/O Write Prot  CSW1 expected %08x got: %08x", 0x20000508, v)
 	}
-	v = M.GetMemory(0x44) & M.UMASK
+	v = M.GetMemory(0x44) & HMASK
 	if v != 0x0c500000 {
 		t.Errorf("Start I/O Write Prot CSW2 expected %08x got: %08x", 0x0c500000, v)
 	}
@@ -1897,7 +1893,7 @@ func TestCycleWriteProt2(t *testing.T) {
 	if v != 0x30000508 {
 		t.Errorf("Start I/O Write Prot  CSW1 expected %08x got: %08x", 0x30000508, v)
 	}
-	v = M.GetMemory(0x44) & M.UMASK
+	v = M.GetMemory(0x44) & HMASK
 	if v != 0x0c000000 {
 		t.Errorf("Start I/O Write Prot CSW2 expected %08x got: %08x", 0x0c000000, v)
 	}
@@ -1968,12 +1964,12 @@ func TestCycleBusy(t *testing.T) {
 		t.Errorf("Start I/O Busy Reg 5 expected %08x got: %08x", 0x04000000, v)
 	}
 
-	v = M.GetMemory(0x40) & M.UMASK
+	v = M.GetMemory(0x40) & HMASK
 	if v != 0x00000000 {
 		t.Errorf("Start I/O Busy CSW1 expected %08x got: %08x", 0x00000000, v)
 	}
 
-	v = M.GetMemory(0x44) & M.UMASK
+	v = M.GetMemory(0x44) & HMASK
 	if v != 0x04000000 {
 		t.Errorf("Start I/O Busy CSW2 expected %08x got: %08x", 0x04000000, v)
 	}

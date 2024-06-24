@@ -157,7 +157,7 @@ const (
 
 	// Mask constants
 	AMASK  uint32 = 0x00ffffff // Mask address bits
-	HMASK  uint32 = 0x0000ffff // Half word maske
+	LMASK  uint32 = 0x0000ffff // Lower Half word maske
 	SPMASK uint32 = 0x00fff800 // Mask off storage boundry
 	WMASK  uint32 = 0x00fffffc // Mask address to word boundry
 	MSIGN  uint32 = 0x80000000 // Minus sign
@@ -169,6 +169,7 @@ const (
 	NMASK  uint32 = 0x00f00000 // Normalize mask
 	SNMASK uint32 = 0x0f000000 // Short normal mask
 	PMASK  uint32 = 0xf0000000 // Storage protection mask
+	HMASK  uint32 = 0xffff0000 // Mask upper half word
 
 	// DAT definitions
 	PTE_LEN   uint32 = 0xff000000 // Page table length

@@ -763,12 +763,12 @@ func (cpu *cpu) opSLDA(step *stepInfo) uint16 {
 			cpu.cc = 3
 		}
 	}
-	t &= MSIGNL
+	t &= ^MSIGNL
 	t |= si
 	cpu.storeDouble(step.R1, t)
 	if cpu.cc != 3 {
 		if t != 0 {
-			if (t & MSIGNL) != 0 {
+			if si != 0 {
 				cpu.cc = 1
 			} else {
 				cpu.cc = 2

@@ -44,11 +44,11 @@ func GetType(devNum uint16) int {
 	ch := (devNum >> 8)
 	// Check if over max supported channels
 	if ch > MAX_CHAN {
-		return TYPE_UNA
+		return TypeUNA
 	}
 	cu := &chanUnit[ch&0xf]
 	if !cu.enabled {
-		return TYPE_UNA
+		return TypeUNA
 	}
 	return cu.chanType
 }
@@ -82,7 +82,7 @@ func StartIO(devNum uint16) uint8 {
 	}
 
 	// If channel is active return cc = 2
-	if sc.ccwCmd != 0 || (sc.ccwFlags&(FLAG_CC|FLAG_CD)) != 0 || sc.chanStatus != 0 {
+	if sc.ccwCmd != 0 || (sc.ccwFlags&(chainCmd|chainData)) != 0 || sc.chanStatus != 0 {
 		return 2
 	}
 
@@ -101,55 +101,55 @@ func StartIO(devNum uint16) uint8 {
 	}
 
 	status := uint16(cu.devTab[d].StartIO()) << 8
-	if (status & STATUS_BUSY) != 0 {
+	if (status & statusBusy) != 0 {
 		return 2
 	}
 	if status != 0 {
-		M.PutWordMask(0x44, uint32(status)<<16, M.UMASK)
+		M.PutWordMask(0x44, uint32(status)<<16, statusMask)
 		return 1
 	}
 
 	// All ok, get caw address
 	sc.chanStatus = 0
 	sc.caw = M.GetMemory(0x48)
-	sc.ccwKey = uint8(((sc.caw & M.PMASK) >> 24) & 0xff)
-	sc.caw &= M.AMASK
+	sc.ccwKey = uint8(((sc.caw & keyMask) >> 24) & 0xff)
+	sc.caw &= addrMask
 	sc.devAddr = devNum
 	sc.dev = cu.devTab[d]
 	cu.devStatus[d] = 0
 
 	if loadCCW(cu, sc, false) {
-		M.SetMemoryMask(0x44, uint32(sc.chanStatus)<<16, M.UMASK)
+		M.SetMemoryMask(0x44, uint32(sc.chanStatus)<<16, statusMask)
 		sc.chanStatus = 0
 		sc.ccwCmd = 0
-		sc.devAddr = NO_DEV
+		sc.devAddr = NoDev
 		sc.dev = nil
 		cu.devStatus[d] = 0
 		return 1
 	}
 
 	// If channel returned busy save CSW and return CC = 1
-	if (sc.chanStatus & STATUS_BUSY) != 0 {
-		M.SetMemoryMask(0x44, uint32(sc.chanStatus)<<16, M.UMASK)
+	if (sc.chanStatus & statusBusy) != 0 {
+		M.SetMemoryMask(0x44, uint32(sc.chanStatus)<<16, statusMask)
 		sc.chanStatus = 0
 		sc.ccwCmd = 0
-		sc.devAddr = NO_DEV
+		sc.devAddr = NoDev
 		sc.dev = nil
 		cu.devStatus[d] = 0
 		return 1
 	}
 
 	// If immediate command and not command chainting
-	if (sc.chanStatus&STATUS_CEND) != 0 && (sc.ccwFlags&FLAG_CC) == 0 {
+	if (sc.chanStatus&statusChnEnd) != 0 && (sc.ccwFlags&chainCmd) == 0 {
 		// If we also have data end write out fill CSW and mark subchannel free
 
-		if (sc.chanStatus & STATUS_DEND) != 0 {
+		if (sc.chanStatus & statusDevEnd) != 0 {
 			storeCSW(sc)
 		} else {
-			M.SetMemoryMask(0x44, uint32(sc.chanStatus)<<16, M.UMASK)
+			M.SetMemoryMask(0x44, uint32(sc.chanStatus)<<16, statusMask)
 		}
 		sc.ccwCmd = 0
-		sc.devAddr = NO_DEV
+		sc.devAddr = NoDev
 		sc.dev = nil
 		cu.devStatus[d] = 0
 		sc.chanStatus = 0
@@ -158,8 +158,8 @@ func StartIO(devNum uint16) uint8 {
 	}
 
 	// If immediate command and chaining report status, but don't clear things
-	if (sc.chanStatus&(STATUS_CEND|STATUS_DEND)) == STATUS_CEND && (sc.ccwFlags&FLAG_CC) != 0 {
-		M.SetMemoryMask(0x44, uint32(sc.chanStatus)<<16, M.UMASK)
+	if (sc.chanStatus&(statusChnEnd|statusDevEnd)) == statusChnEnd && (sc.ccwFlags&chainCmd) != 0 {
+		M.SetMemoryMask(0x44, uint32(sc.chanStatus)<<16, statusMask)
 		return 1
 	}
 
@@ -188,20 +188,20 @@ func TestIO(devNum uint16) uint8 {
 	}
 
 	// If any error pending save csw and return cc=1
-	if (sch.chanStatus & ERROR_STATUS) != 0 {
+	if (sch.chanStatus & errorStatus) != 0 {
 		storeCSW(sch)
 		return 1
 	}
 
 	// If channel active, return cc=2
-	if sch.ccwCmd != 0 || (sch.ccwFlags&(FLAG_CC|FLAG_CD)) != 0 {
+	if sch.ccwCmd != 0 || (sch.ccwFlags&(chainCmd|chainData)) != 0 {
 		return 2
 	}
 
 	// Device finished and channel status pending return it and cc=1
 	if sch.ccwCmd == 0 && sch.chanStatus != 0 {
 		storeCSW(sch)
-		sch.devAddr = NO_DEV
+		sch.devAddr = NoDev
 		return 1
 	}
 
@@ -232,13 +232,13 @@ func TestIO(devNum uint16) uint8 {
 	status := uint16(cu.devTab[d].StartCmd(0)) << 8
 
 	// If we get a error, save csw and return cc = 1
-	if (status & ERROR_STATUS) != 0 {
-		M.SetMemoryMask(0x44, uint32(status)<<16, M.UMASK)
+	if (status & errorStatus) != 0 {
+		M.SetMemoryMask(0x44, uint32(status)<<16, statusMask)
 		return 1
 	}
 
 	// Check if device BUSY
-	if (status & STATUS_BUSY) != 0 {
+	if (status & statusBusy) != 0 {
 		return 2
 	}
 
@@ -269,21 +269,21 @@ func HaltIO(devNum uint16) uint8 {
 
 	// Generic halt I/O, tell device to stop end
 	// If any error pending save csw and return cc = 1
-	if (sch.chanStatus & ERROR_STATUS) != 0 {
+	if (sch.chanStatus & errorStatus) != 0 {
 		return 1
 	}
 
 	// If channel active, tell it to terminate
 	if sch.ccwCmd != 0 {
-		sch.chanByte = BUFF_CHNEND
-		sch.ccwFlags &= ^(FLAG_CC | FLAG_CD)
+		sch.chanByte = bufEmpty
+		sch.ccwFlags &= ^(chainCmd | chainData)
 	}
 
 	// Executing a command, issue halt if available
 	// Let device try to halt
 	cc := cu.devTab[d].HaltIO()
 	if cc == 1 {
-		M.SetMemoryMask(0x44, (uint32(sch.chanStatus) << 16), M.UMASK)
+		M.SetMemoryMask(0x44, (uint32(sch.chanStatus) << 16), statusMask)
 
 	}
 	return cc
@@ -324,18 +324,18 @@ func TestChan(devNum uint16) uint8 {
 	}
 
 	// Multiplexer channel always returns available
-	if cu.chanType == TYPE_MUX {
+	if cu.chanType == TypeMux {
 		return 0
 	}
 
 	// If Block Multiplexer channel operating in select mode
-	if cu.chanType == TYPE_BMUX && bmuxEnable {
+	if cu.chanType == TypeBMux && bmuxEnable {
 		return 0
 	}
 
 	ch := &cu.subChans[0]
 	// If channel is executing a command, return cc = 2
-	if ch.ccwCmd != 0 || (ch.ccwFlags&(FLAG_CC|FLAG_CD)) != 0 {
+	if ch.ccwCmd != 0 || (ch.ccwFlags&(chainCmd|chainData)) != 0 {
 		return 2
 	}
 
@@ -364,7 +364,7 @@ func ChanReadByte(devNum uint16) (uint8, bool) {
 		return 0, true
 	}
 	// Check if transfer is finished
-	if sc.chanByte == BUFF_CHNEND {
+	if sc.chanByte == bufEnd {
 		return 0, true
 	}
 
@@ -373,9 +373,9 @@ func ChanReadByte(devNum uint16) (uint8, bool) {
 	if sc.ccwCount == 0 {
 		// If not data chaining, let device know there will be no
 		// more data to come
-		if (sc.ccwFlags & FLAG_CD) == 0 {
-			sc.chanStatus |= STATUS_CEND
-			sc.chanByte = BUFF_CHNEND
+		if (sc.ccwFlags & chainData) == 0 {
+			sc.chanStatus |= statusChnEnd
+			sc.chanByte = bufEnd
 			return 0, true
 		} else {
 			// If chaining try and start next CCW
@@ -386,7 +386,7 @@ func ChanReadByte(devNum uint16) (uint8, bool) {
 	}
 
 	// Read in next word if buffer is in empty status
-	if sc.chanByte == BUFF_EMPTY {
+	if sc.chanByte == bufEmpty {
 		if readBuffer(cu, sc) {
 			return 0, true
 		}
@@ -400,7 +400,7 @@ func ChanReadByte(devNum uint16) (uint8, bool) {
 	byte := uint8(sc.chanBuffer >> (8 * (3 - (sc.chanByte & 3))) & 0xff)
 	sc.chanByte++
 	// If count is zero and chaining load in new CCW
-	if sc.ccwCount == 0 && (sc.ccwFlags&FLAG_CD) != 0 {
+	if sc.ccwCount == 0 && (sc.ccwFlags&chainData) != 0 {
 		// If chaining try and start next CCW
 		if loadCCW(cu, sc, true) {
 			// Return that this is last byte device will get
@@ -427,9 +427,9 @@ func ChanWriteByte(devNum uint16, data uint8) bool {
 		return true
 	}
 	// Check if transfer is finished
-	if sc.chanByte == BUFF_CHNEND {
-		if (sc.ccwFlags & FLAG_SLI) == 0 {
-			sc.chanStatus |= STATUS_LENGTH
+	if sc.chanByte == bufEnd {
+		if (sc.ccwFlags & flagSLI) == 0 {
+			sc.chanStatus |= statusLength
 		}
 		return true
 	}
@@ -443,10 +443,10 @@ func ChanWriteByte(devNum uint16, data uint8) bool {
 		}
 		// If not data chaining, let device know there will be no
 		// more data to come
-		if (sc.ccwFlags & FLAG_CD) == 0 {
-			sc.chanByte = BUFF_CHNEND
-			if (sc.ccwFlags & FLAG_SLI) == 0 {
-				sc.chanStatus |= STATUS_LENGTH
+		if (sc.ccwFlags & chainData) == 0 {
+			sc.chanByte = bufEnd
+			if (sc.ccwFlags & flagSLI) == 0 {
+				sc.chanStatus |= statusLength
 			}
 			return true
 		}
@@ -457,23 +457,23 @@ func ChanWriteByte(devNum uint16, data uint8) bool {
 	}
 
 	// If we are skipping, just adjust count
-	if (sc.ccwFlags & FLAG_SKIP) != 0 {
+	if (sc.ccwFlags & flagSkip) != 0 {
 		sc.ccwCount--
-		sc.chanByte = BUFF_EMPTY
+		sc.chanByte = bufEmpty
 		return nextAddress(cu, sc)
 	}
 
 	// Check if we need to save what we have
-	if sc.chanByte == BUFF_EMPTY && sc.chanDirty {
+	if sc.chanByte == bufEmpty && sc.chanDirty {
 		if writeBuffer(cu, sc) {
 			return true
 		}
 		if nextAddress(cu, sc) {
 			return true
 		}
-		sc.chanByte = BUFF_EMPTY
+		sc.chanByte = bufEmpty
 	}
-	if sc.chanByte == BUFF_EMPTY {
+	if sc.chanByte == bufEmpty {
 		if readBuffer(cu, sc) {
 			return true
 		}
@@ -490,14 +490,14 @@ func ChanWriteByte(devNum uint16, data uint8) bool {
 		if (sc.chanByte & 3) != 0 {
 			sc.chanByte--
 		} else {
-			sc.chanByte = BUFF_EMPTY
+			sc.chanByte = bufEmpty
 		}
 	} else {
 		sc.chanByte++
 	}
 	sc.chanDirty = true
 	// If count is zero and chaining load in new CCW
-	if sc.ccwCount == 0 && (sc.ccwFlags&FLAG_CD) != 0 {
+	if sc.ccwCount == 0 && (sc.ccwFlags&chainData) != 0 {
 		// Flush buffer
 		if sc.chanDirty && writeBuffer(cu, sc) {
 			return true
@@ -513,7 +513,7 @@ func ChanWriteByte(devNum uint16, data uint8) bool {
 
 // Compute address of next byte to read/write
 func nextAddress(cu *chanDev, sc *chanCtl) bool {
-	if (sc.ccwFlags & FLAG_IDA) != 0 {
+	if (sc.ccwFlags & flagIDA) != 0 {
 		if (sc.ccwCmd & 0xf) == CMD_RDBWD {
 			sc.ccwIAddr--
 			if (sc.ccwIAddr & 0x7ff) == 0x7ff {
@@ -560,19 +560,19 @@ func ChanEnd(devNum uint16, flags uint8) {
 	if sc.chanDirty {
 		_ = writeBuffer(cu, sc)
 	}
-	sc.chanStatus |= STATUS_CEND
+	sc.chanStatus |= statusChnEnd
 	sc.chanStatus |= uint16(flags) << 8
 	sc.ccwCmd = 0
 
 	// If count not zero and not suppressing length, report error
-	if sc.ccwCount != 0 && (sc.ccwFlags&FLAG_SLI) == 0 {
-		sc.chanStatus |= STATUS_LENGTH
+	if sc.ccwCount != 0 && (sc.ccwFlags&flagSLI) == 0 {
+		sc.chanStatus |= statusLength
 		sc.ccwFlags = 0
 	}
 
 	// If count not zero and not suppressing length, report error
-	if sc.ccwCount != 0 && (sc.ccwFlags&(FLAG_CD|FLAG_SLI)) == (FLAG_CD|FLAG_SLI) {
-		sc.chanStatus |= STATUS_LENGTH
+	if sc.ccwCount != 0 && (sc.ccwFlags&(chainData|flagSLI)) == (chainData|flagSLI) {
+		sc.chanStatus |= statusLength
 	}
 
 	if (flags & (SNS_ATTN | SNS_UNITCHK | SNS_UNITEXP)) != 0 {
@@ -580,7 +580,7 @@ func ChanEnd(devNum uint16, flags uint8) {
 	}
 
 	if (flags & SNS_DEVEND) != 0 {
-		sc.ccwFlags &= ^(FLAG_CD | FLAG_SLI)
+		sc.ccwFlags &= ^(chainData | flagSLI)
 	}
 
 	cu.irqPending = true
@@ -599,11 +599,10 @@ func SetDevAttn(devNum uint16, flags uint8) {
 	// Check if chain being held
 	if ch.devAddr == devNum && ch.chainFlg && (flags&SNS_DEVEND) != 0 {
 		ch.chanStatus |= uint16(flags) << 8
-		ch.ccwCmd = 0
 	} else {
 		// Check if Device is currently on channel
 		if ch.devAddr == devNum && (flags&SNS_DEVEND) != 0 &&
-			((ch.chanStatus&STATUS_CEND) != 0 || ch.ccwCmd != 0) {
+			((ch.chanStatus&statusChnEnd) != 0 || ch.ccwCmd != 0) {
 			ch.chanStatus |= uint16(flags) << 8
 			ch.ccwCmd = 0
 		} else { // Device reporting status change
@@ -623,12 +622,12 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 	sc = nil
 	// Quick exit if no pending IRQ's
 	if !IrqPending {
-		return NO_DEV
+		return NoDev
 	}
 
 	// Clear pending flag
 	IrqPending = false
-	pendDev := NO_DEV // Device with Pending interrupt
+	pendDev := NoDev // Device with Pending interrupt
 	// Start with channel 0 and work through all channels
 	for i := range MAX_CHAN {
 		cu = &chanUnit[i]
@@ -639,46 +638,45 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 		// Mask for this channel
 		imask = 0x8000 >> i
 		nchan := 1
-		if cu.chanType == TYPE_BMUX && bmuxEnable {
+		if cu.chanType == TypeBMux && bmuxEnable {
 			nchan = 32
 		}
-		if cu.chanType == TYPE_MUX {
+		if cu.chanType == TypeMux {
 			nchan = cu.numSubChan
 		}
 		// Scan all subchannels on this channel
 		for j := range nchan {
 			sc = &cu.subChans[j]
-			if sc.devAddr == NO_DEV {
+			if sc.devAddr == NoDev {
 				continue
 			}
 
 			// Check if PCI pending
-			if irqEnb && (sc.chanStatus&STATUS_PCI) != 0 {
-				if (imask & mask) != 0 {
-					pendDev = sc.devAddr
-					break
-				}
-			}
-
-			// If device has hard error, store CSW and end.
-			if (sc.chanStatus & 0xff) != 0 {
+			if irqEnb && (imask&mask) != 0 && (sc.chanStatus&statusPCI) != 0 {
 				pendDev = sc.devAddr
 				break
 			}
+
+			// If device has hard error, store CSW and end.
+			if irqEnb && (imask&mask) != 0 && (sc.chanStatus&0xff) != 0 {
+				pendDev = sc.devAddr
+				break
+			}
+
 			// If chaining and device end continue
-			if sc.chainFlg && (sc.chanStatus&STATUS_DEND) != 0 {
+			if sc.chainFlg && (sc.chanStatus&statusDevEnd) != 0 {
 				// Restart command that was flagged as an issue
 				_ = loadCCW(cu, sc, true)
 			}
 
-			if (sc.chanStatus & STATUS_DEND) != 0 {
+			if (sc.chanStatus & statusChnEnd) != 0 {
 				// Grab another command if command chaining in effect
-				if (sc.ccwFlags & FLAG_CC) != 0 {
+				if (sc.ccwFlags & chainCmd) != 0 {
 					// If channel end, check if we should continue
 					_ = loadCCW(cu, sc, true)
-				} else if irqEnb || Loading != NO_DEV {
+				} else if irqEnb || Loading != NoDev {
 					// Disconnect from device
-					if (imask&mask) != 0 || Loading != NO_DEV {
+					if (imask&mask) != 0 || Loading != NoDev {
 						pendDev = sc.devAddr
 						break
 					}
@@ -688,12 +686,12 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 	}
 
 	// Only return loading unit on loading
-	if Loading != NO_DEV && Loading != pendDev {
-		return NO_DEV
+	if Loading != NoDev && Loading != pendDev {
+		return NoDev
 	}
 
 	// See if we can post an IRQ
-	if pendDev != NO_DEV {
+	if pendDev != NoDev {
 		// Set to scan next time
 		IrqPending = true
 		sc = findSubChannel(pendDev)
@@ -702,7 +700,7 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 			cu.devStatus[pendDev&0xff] = 0
 			return pendDev
 		}
-		if Loading == NO_DEV {
+		if Loading == NoDev {
 			storeCSW(sc)
 			cu.devStatus[pendDev&0xff] = 0
 			return pendDev
@@ -734,7 +732,7 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 		}
 	}
 	// No pending device
-	return NO_DEV
+	return NoDev
 }
 
 // IPL a device.
@@ -768,16 +766,16 @@ func BootDevice(dev_num uint16) bool {
 	sc.caw = 0x8
 	sc.devAddr = dev_num
 	sc.ccwCount = 24
-	sc.ccwFlags = FLAG_CC | FLAG_SLI
+	sc.ccwFlags = chainCmd | flagSLI
 	sc.ccwAddr = 0
 	sc.ccwKey = 0
-	sc.chanByte = BUFF_EMPTY
+	sc.chanByte = bufEmpty
 	sc.chanDirty = false
 
 	sc.chanStatus |= uint16(sc.dev.StartCmd(sc.ccwCmd)) << 8
 
 	// Check if any errors from initial command
-	if (sc.chanStatus & (STATUS_ATTN | STATUS_CHECK | STATUS_EXPT)) != 0 {
+	if (sc.chanStatus & (statusAttn | statusCheck | statusExcept)) != 0 {
 		sc.ccwCmd = 0
 		sc.ccwFlags = 0
 		return true
@@ -824,13 +822,13 @@ func AddChannel(chan_num uint16, ty int, subchan int) {
 		cu.enabled = true
 		cu.chanType = ty
 		switch ty {
-		case TYPE_DIS:
+		case TypeDis:
 			cu.enabled = false
-		case TYPE_SEL:
+		case TypeSel:
 			cu.numSubChan = 1
-		case TYPE_MUX:
+		case TypeMux:
 			cu.numSubChan = subchan
-		case TYPE_BMUX:
+		case TypeBMux:
 			cu.numSubChan = 32
 		}
 	}
@@ -848,7 +846,7 @@ func InitializeChannels() {
 		for j := range 256 {
 			cu.devTab[j] = nullDev
 			cu.devStatus[j] = 0
-			cu.subChans[j].devAddr = NO_DEV
+			cu.subChans[j].devAddr = NoDev
 		}
 	}
 }
@@ -868,15 +866,15 @@ func findSubChannel(devNum uint16) *chanCtl {
 	}
 	device := int(devNum & 0xff)
 	switch chanUnit[ch].chanType {
-	case TYPE_SEL:
+	case TypeSel:
 		return &chanUnit[ch].subChans[0]
-	case TYPE_BMUX:
+	case TypeBMux:
 		if bmuxEnable {
 			d := (devNum >> 3) & 0x1f
 			return &chanUnit[ch].subChans[d]
 		}
 		return &chanUnit[ch].subChans[0]
-	case TYPE_MUX:
+	case TypeMux:
 		if device >= chanUnit[ch].numSubChan {
 			if device < 128 { // All shared devices over subchannels
 				return nil
@@ -892,12 +890,12 @@ func findSubChannel(devNum uint16) *chanCtl {
 func storeCSW(ch *chanCtl) {
 	M.SetMemory(0x40, (uint32(ch.ccwKey)<<24)|ch.caw)
 	M.SetMemory(0x44, uint32(ch.ccwCount)|(uint32(ch.chanStatus)<<16))
-	if (ch.chanStatus & STATUS_PCI) != 0 {
-		ch.chanStatus &= ^STATUS_PCI
+	if (ch.chanStatus & statusPCI) != 0 {
+		ch.chanStatus &= ^statusPCI
 	} else {
 		ch.chanStatus = 0
 	}
-	ch.ccwFlags &= ^FLAG_PCI
+	ch.ccwFlags &= ^flagPCI
 }
 
 // Load in the next CCW, return true if failure, false if success.
@@ -905,11 +903,11 @@ func loadCCW(cu *chanDev, sc *chanCtl, ticOk bool) bool {
 	var word uint32
 	var err bool
 	var cmdFlag bool = false
-	var chain bool = false
+	var chain bool
 
 loop:
 	// If last chain, start command
-	if sc.chainFlg && (sc.ccwFlags&FLAG_CD) == 0 {
+	if sc.chainFlg && (sc.ccwFlags&chainData) == 0 {
 		chain = true
 		sc.chainFlg = false
 		cmdFlag = true
@@ -917,7 +915,7 @@ loop:
 
 		// Abort if ccw not on double word boundry
 		if (sc.caw & 0x7) != 0 {
-			sc.chanStatus = STATUS_PCHK
+			sc.chanStatus = statusPCHK
 			return true
 		}
 
@@ -927,13 +925,13 @@ loop:
 		}
 
 		// Remember if we were chainging
-		chain = (sc.ccwFlags & FLAG_CC) != 0
+		chain = (sc.ccwFlags & chainCmd) != 0
 
 		// Check if we have status modifier set
-		if (sc.chanStatus & STATUS_SMS) != 0 {
+		if (sc.chanStatus & statusSMS) != 0 {
 			sc.caw += 8
-			sc.caw &= M.AMASK
-			sc.chanStatus &= ^STATUS_SMS
+			sc.caw &= addrMask
+			sc.chanStatus &= ^statusSMS
 		}
 
 		// Read in next CCW
@@ -944,53 +942,53 @@ loop:
 
 		// Next word
 		sc.caw += 4
-		sc.caw &= M.AMASK
+		sc.caw &= addrMask
 
 		// TIC can't follow TIC nor bt first in chain
-		cmd := uint8((word >> 24) & 0xff)
+		cmd := uint8((word & cmdMask) >> 24)
 		if cmd == CMD_TIC {
 			// Pretend to fetch next word.
 			sc.caw += 4
-			sc.caw &= M.AMASK
+			sc.caw &= addrMask
 			sc.ccwCmd = 0
 			sc.ccwFlags = 0
 			if ticOk {
-				sc.caw = word & M.AMASK
+				sc.caw = word & addrMask
 				ticOk = false
 				goto loop
 			}
-			sc.chanStatus = STATUS_PCHK
+			sc.chanStatus = statusPCHK
 			cu.irqPending = true
 			IrqPending = true
 			return true
 		}
 
 		// Check if not chaining data
-		if (sc.ccwFlags & FLAG_CD) == 0 {
+		if (sc.ccwFlags & chainData) == 0 {
 			sc.ccwCmd = cmd
 			cmdFlag = true
 		}
 
 		// Set up for this command
-		sc.ccwAddr = word & M.AMASK
+		sc.ccwAddr = word & addrMask
 		word, err = readFullWord(cu, sc, sc.caw)
 		if err {
 			return true
 		}
 		sc.caw += 4
-		sc.caw &= M.AMASK
-		sc.ccwCount = uint16(word & M.HMASK)
+		sc.caw &= addrMask
+		sc.ccwCount = uint16(word & countMask)
 
 		// Copy SLI indicator in CD command
-		if (sc.ccwFlags & (FLAG_CD | FLAG_SLI)) == (FLAG_CD | FLAG_SLI) {
-			word |= uint32(FLAG_SLI) << 16
+		if (sc.ccwFlags & (chainData | flagSLI)) == (chainData | flagSLI) {
+			word |= uint32(flagSLI) << 16
 		}
 		sc.ccwFlags = uint16(word>>16) & 0xff00
-		sc.chanByte = BUFF_EMPTY
+		sc.chanByte = bufEmpty
 
 		// Check if invalid count
 		if sc.ccwCount == 0 {
-			sc.chanStatus = STATUS_PCHK
+			sc.chanStatus = statusPCHK
 			sc.ccwCmd = 0
 			cu.irqPending = true
 			IrqPending = true
@@ -998,12 +996,12 @@ loop:
 		}
 
 		// Handle IDA
-		if (sc.ccwFlags & FLAG_IDA) != 0 {
+		if (sc.ccwFlags & flagIDA) != 0 {
 			word, err = readFullWord(cu, sc, sc.ccwAddr)
 			if err {
 				return true
 			}
-			sc.ccwIAddr = word & M.AMASK
+			sc.ccwIAddr = word & addrMask
 		}
 	}
 
@@ -1011,7 +1009,7 @@ loop:
 	if cmdFlag {
 		// Check if invalid command
 		if (sc.ccwCmd & 0xf) == 0 {
-			sc.chanStatus |= STATUS_PCHK
+			sc.chanStatus |= statusPCHK
 			sc.ccwCmd = 0
 			cu.irqPending = true
 			IrqPending = true
@@ -1022,20 +1020,20 @@ loop:
 			return true
 		}
 
-		sc.chanByte = BUFF_EMPTY
-		sc.chanStatus &= 0xff
-		sc.chanStatus |= uint16(sc.dev.StartCmd(sc.ccwCmd)) << 8
+		sc.chanByte = bufEmpty
+		status := uint16(sc.dev.StartCmd(sc.ccwCmd)) << 8
 
 		// If device is busy, check if last was CC, then mark pending
-		if (sc.chanStatus & STATUS_BUSY) != 0 {
+		if (status & statusBusy) != 0 {
 			if chain {
 				sc.chainFlg = true
 			}
 			return false
 		}
-
+		sc.chanStatus &= 0xff
+		sc.chanStatus |= status
 		// Check if any errors from initial command
-		if (sc.chanStatus & (STATUS_ATTN | STATUS_CHECK | STATUS_EXPT)) != 0 {
+		if (sc.chanStatus & (statusAttn | statusCheck | statusExcept)) != 0 {
 			sc.ccwCmd = 0
 			sc.ccwFlags = 0
 			cu.devStatus[sc.devAddr&0xff] = uint8((sc.chanStatus >> 8) & 0xff)
@@ -1045,9 +1043,9 @@ loop:
 		}
 
 		// Check if immediate channel end
-		if (sc.chanStatus & STATUS_CEND) != 0 {
-			sc.ccwFlags |= FLAG_SLI // Force SLI for immediate command
-			if (sc.chanStatus & STATUS_DEND) != 0 {
+		if (sc.chanStatus & statusChnEnd) != 0 {
+			sc.ccwFlags |= flagSLI // Force SLI for immediate command
+			if (sc.chanStatus & statusChnEnd) != 0 {
 				sc.ccwCmd = 0
 				cu.irqPending = true
 				IrqPending = true
@@ -1055,8 +1053,8 @@ loop:
 		}
 	}
 
-	if (sc.ccwFlags & FLAG_PCI) != 0 {
-		sc.chanStatus |= STATUS_PCI
+	if (sc.ccwFlags & flagPCI) != 0 {
+		sc.chanStatus |= statusPCI
 		cu.irqPending = true
 		IrqPending = true
 	}
@@ -1067,7 +1065,7 @@ loop:
 // Return true if fail and false if success
 func readFullWord(cu *chanDev, sc *chanCtl, addr uint32) (uint32, bool) {
 	if !M.CheckAddr(addr) {
-		sc.chanStatus |= STATUS_PCHK
+		sc.chanStatus |= statusPCHK
 		cu.irqPending = true
 		IrqPending = true
 		return 0, true
@@ -1075,7 +1073,7 @@ func readFullWord(cu *chanDev, sc *chanCtl, addr uint32) (uint32, bool) {
 	if sc.ccwKey != 0 {
 		k := M.GetKey(addr)
 		if (k&0x8) != 0 && (k&0xf0) != sc.ccwKey {
-			sc.chanStatus |= STATUS_PROT
+			sc.chanStatus |= statusProt
 			cu.irqPending = true
 			IrqPending = true
 			return 0, true
@@ -1090,13 +1088,13 @@ func readFullWord(cu *chanDev, sc *chanCtl, addr uint32) (uint32, bool) {
 func readBuffer(cu *chanDev, sc *chanCtl) bool {
 	var addr uint32
 
-	if (sc.ccwFlags & FLAG_IDA) != 0 {
+	if (sc.ccwFlags & flagIDA) != 0 {
 		addr = sc.ccwIAddr
 	} else {
 		addr = sc.ccwAddr
 	}
 	if word, err := readFullWord(cu, sc, addr); err {
-		sc.chanByte = BUFF_CHNEND
+		sc.chanByte = bufEnd
 		return err
 	} else {
 		sc.chanBuffer = word
@@ -1110,7 +1108,7 @@ func readBuffer(cu *chanDev, sc *chanCtl) bool {
 func writeBuffer(cu *chanDev, sc *chanCtl) bool {
 	var addr uint32
 
-	if (sc.ccwFlags & FLAG_IDA) != 0 {
+	if (sc.ccwFlags & flagIDA) != 0 {
 		addr = sc.ccwIAddr
 	} else {
 		addr = sc.ccwAddr
@@ -1119,8 +1117,8 @@ func writeBuffer(cu *chanDev, sc *chanCtl) bool {
 	// Check if address valid
 	addr &= M.AMASK
 	if !M.CheckAddr(addr) {
-		sc.chanStatus |= STATUS_PCHK
-		sc.chanByte = BUFF_CHNEND
+		sc.chanStatus |= statusPCHK
+		sc.chanByte = bufEnd
 		sc.chanDirty = false
 		cu.irqPending = true
 		IrqPending = true
@@ -1131,8 +1129,8 @@ func writeBuffer(cu *chanDev, sc *chanCtl) bool {
 	if sc.ccwKey != 0 {
 		k := M.GetKey(addr)
 		if (k & 0xf0) != sc.ccwKey {
-			sc.chanStatus |= STATUS_PROT
-			sc.chanByte = BUFF_CHNEND
+			sc.chanStatus |= statusProt
+			sc.chanByte = bufEnd
 			sc.chanDirty = false
 			cu.irqPending = true
 			IrqPending = true
@@ -1142,7 +1140,7 @@ func writeBuffer(cu *chanDev, sc *chanCtl) bool {
 
 	// Write memory
 	err := M.PutWord(addr, sc.chanBuffer)
-	sc.chanByte = BUFF_EMPTY
+	sc.chanByte = bufEmpty
 	sc.chanDirty = false
 	return err
 }

@@ -1,5 +1,7 @@
 package sys_channel
 
+import D "github.com/rcornwell/S370/emu/device"
+
 /*
  * S370 - Channel Channel definitions
  *
@@ -25,10 +27,15 @@ package sys_channel
  *
  */
 
-import (
-	D "github.com/rcornwell/S370/emu/device"
-)
+// Interface for devices to handle commands
+type Device interface {
+	StartIO() uint8
+	StartCmd(cmd uint8) uint8
+	HaltIO() uint8
+	InitDev() uint8
+}
 
+// Holds individual subchannel control information
 type chanCtl struct { // Channel control structure
 	dev        D.Device // Pointer to device interface
 	caw        uint32   // Channel command address word
@@ -39,14 +46,14 @@ type chanCtl struct { // Channel control structure
 	ccwKey     uint8    // Channel key
 	ccwFlags   uint16   // Channel control flags
 	chanBuffer uint32   // Channel data buffer
-
-	chanStatus uint16 // Channel status
-	chanDirty  bool   // Buffer has been modified
-	devAddr    uint16 // Device on channel
-	chanByte   uint8  // Current byte, dirty/full
-	chainFlg   bool   // Holding on chain
+	chanStatus uint16   // Channel status
+	chanDirty  bool     // Buffer has been modified
+	devAddr    uint16   // Device on channel
+	chanByte   uint8    // Current byte, dirty/full
+	chainFlg   bool     // Holding on chain
 }
 
+// Holds channel information
 type chanDev struct { // Channel information
 	devTab     [256]D.Device // Pointer to device interfaces
 	devStatus  [256]uint8    // Status from each device
@@ -58,41 +65,37 @@ type chanDev struct { // Channel information
 }
 
 var IrqPending bool
-var Loading uint16 = NO_DEV
+var Loading uint16 = NoDev
 
 const (
-	MAX_CHAN  uint16 = 12 // Max number of channels
-	TYPE_DIS  int    = 0  // Channel disabled
-	TYPE_SEL  int    = 1  // Selector channel
-	TYPE_MUX  int    = 2  // Mulitplexer channel
-	TYPE_BMUX int    = 3  // Block multiplexer channel
-	TYPE_UNA  int    = 4  // Channel unavailable
+	MAX_CHAN uint16 = 12 // Max number of channels
+	TypeDis  int    = 0  // Channel disabled
+	TypeSel  int    = 1  // Selector channel
+	TypeMux  int    = 2  // Mulitplexer channel
+	TypeBMux int    = 3  // Block multiplexer channel
+	TypeUNA  int    = 4  // Channel unavailable
 
-	CCMDMSK  uint32 = 0xff000000 // Mask for command
-	CDADRMSK uint32 = 0x00ffffff // Mask for data address
-	CCNTMSK  uint32 = 0x0000ffff // Mask for data count
-	CD       uint32 = 0x80000000 // Chain data
-	CC       uint32 = 0x40000000 // Chain command
-	SLI      uint32 = 0x20000000 // Suppress length indication
-	SKIP     uint32 = 0x10000000 // Skip flag
-	PCI      uint32 = 0x08000000 // Program controlled interuption
-	IDA      uint32 = 0x04000000 // Indirect Channel addressing
+	cmdMask    uint32 = 0xff000000 // Mask for command
+	keyMask    uint32 = 0xf0000000 // Channel key mask
+	addrMask   uint32 = 0x00ffffff // Mask for data address
+	countMask  uint32 = 0x0000ffff // Mask for data count
+	flagMask   uint32 = 0xfc000000 // Mask for flags
+	statusMask uint32 = 0xffff0000 // Mask for status bits
 
-	ERROR_STATUS uint16 = (STATUS_ATTN | STATUS_PCI | STATUS_EXPT | STATUS_CHECK |
-		STATUS_PROT | STATUS_CDATA | STATUS_CCNTL | STATUS_INTER |
-		STATUS_CHAIN)
+	errorStatus uint16 = (statusAttn | statusPCI | statusExcept | statusCheck |
+		statusProt | statusCDChk | statusCCChk | statusCIChk | statusChain)
 
-	FLAG_CD   uint16 = 0x8000 // Chain data
-	FLAG_CC   uint16 = 0x4000 // Chain command
-	FLAG_SLI  uint16 = 0x2000 // Suppress length indicator
-	FLAG_SKIP uint16 = 0x1000 // Suppress memory write
-	FLAG_PCI  uint16 = 0x0800 // Program controled interrupt
-	FLAG_IDA  uint16 = 0x0400 // Channel indirect
+	chainData uint16 = 0x8000 // Chain data
+	chainCmd  uint16 = 0x4000 // Chain command
+	flagSLI   uint16 = 0x2000 // Suppress length indicator
+	flagSkip  uint16 = 0x1000 // Suppress memory write
+	flagPCI   uint16 = 0x0800 // Program controled interrupt
+	flagIDA   uint16 = 0x0400 // Channel indirect
 
-	BUFF_EMPTY  uint8 = 0x04 // Buffer is empty
-	BUFF_CHNEND uint8 = 0x10 // Channel end
+	bufEmpty uint8 = 0x04 // Buffer is empty
+	bufEnd   uint8 = 0x10 // Device has returned channel end, no more data
 
-	// Channel sense bytes
+	// Common Channel sense bytes
 	SNS_ATTN    uint8 = 0x80 // Unit attention
 	SNS_SMS     uint8 = 0x40 // Status modifier
 	SNS_CTLEND  uint8 = 0x20 // Control unit end
@@ -112,24 +115,25 @@ const (
 	CMD_TIC   uint8 = 0x8 // Transfer in channel
 	CMD_RDBWD uint8 = 0xc // Read backward
 
-	STATUS_ATTN   uint16 = 0x8000 // Device raised attention
-	STATUS_SMS    uint16 = 0x4000 // Status modifier
-	STATUS_CTLEND uint16 = 0x2000 // Control end
-	STATUS_BUSY   uint16 = 0x1000 // Device busy
-	STATUS_CEND   uint16 = 0x0800 // Channel end
-	STATUS_DEND   uint16 = 0x0400 // Device end
-	STATUS_CHECK  uint16 = 0x0200 // Unit check
-	STATUS_EXPT   uint16 = 0x0100 // Unit excpetion
-	STATUS_PCI    uint16 = 0x0080 // Program interupt
-	STATUS_LENGTH uint16 = 0x0040 // Incorrect lenght
-	STATUS_PCHK   uint16 = 0x0020 // Program check
-	STATUS_PROT   uint16 = 0x0010 // Protection check
-	STATUS_CDATA  uint16 = 0x0008 // Channel data check
-	STATUS_CCNTL  uint16 = 0x0004 // Channel control check
-	STATUS_INTER  uint16 = 0x0002 // Channel interface check
-	STATUS_CHAIN  uint16 = 0x0001 // Channel chain check
+	// Channel status information
+	statusAttn   uint16 = 0x8000 // Device raised attention
+	statusSMS    uint16 = 0x4000 // Status modifier
+	statusCtlEnd uint16 = 0x2000 // Control end
+	statusBusy   uint16 = 0x1000 // Device busy
+	statusChnEnd uint16 = 0x0800 // Channel end
+	statusDevEnd uint16 = 0x0400 // Device end
+	statusCheck  uint16 = 0x0200 // Unit check
+	statusExcept uint16 = 0x0100 // Unit excpetion
+	statusPCI    uint16 = 0x0080 // Program interupt
+	statusLength uint16 = 0x0040 // Incorrect length
+	statusPCHK   uint16 = 0x0020 // Program check
+	statusProt   uint16 = 0x0010 // Protection check
+	statusCDChk  uint16 = 0x0008 // Channel data check
+	statusCCChk  uint16 = 0x0004 // Channel control check
+	statusCIChk  uint16 = 0x0002 // Channel interface check
+	statusChain  uint16 = 0x0001 // Channel chain check
 
-	NO_DEV uint16 = 0xffff // Code for no device
+	NoDev uint16 = 0xffff // Code for no device
 
 	// Basic sense information
 	SNS_CMDREJ  uint8 = 0x80 // Command reject

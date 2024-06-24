@@ -372,7 +372,7 @@ func (cpu *cpu) opMC(step *stepInfo) uint16 {
 	}
 	if (cpu.cregs[8] & (1 << step.reg)) != 0 {
 		mem_cycle++
-		memory.SetMemoryMask(0x94, uint32(step.reg)<<16, memory.UMASK)
+		memory.SetMemoryMask(0x94, uint32(step.reg)<<16, HMASK)
 		return IRC_MCE
 	}
 	return 0
@@ -621,15 +621,15 @@ func (cpu *cpu) opB2(step *stepInfo) uint16 {
 		return cpu.writeFull(step.address1+4, t2)
 	case 0x03: // STIDC
 		// Store channel id
-		c := uint16(step.address1 & memory.HMASK)
+		c := uint16(step.address1 & HMASK)
 		r := uint32(0)
 		switch sys_channel.GetType(c) {
-		case sys_channel.TYPE_UNA:
+		case sys_channel.TypeUNA:
 			cpu.cc = 3
 			return 0
-		case sys_channel.TYPE_MUX:
+		case sys_channel.TypeMux:
 			r = uint32(0x10000000)
-		case sys_channel.TYPE_BMUX:
+		case sys_channel.TypeBMux:
 			r = uint32(0x20000000)
 		default:
 			// Nop
