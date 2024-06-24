@@ -1,5 +1,3 @@
-package sys_channel
-
 /* ibm370 IBM 370 Channel functions.
 
    Copyright (c) 2024, Richard Cornwell
@@ -22,6 +20,8 @@ package sys_channel
    CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 */
+
+package sys_channel
 
 import (
 	D "github.com/rcornwell/S370/emu/device"
@@ -785,7 +785,7 @@ func BootDevice(dev_num uint16) bool {
 }
 
 // Add a device at given address
-func AddDevice(dev D.Device, dev_num uint16) bool {
+func AddDevice(dev Device, dev_num uint16) bool {
 	ch := (dev_num >> 8)
 	if ch > MAX_CHAN {
 		return true

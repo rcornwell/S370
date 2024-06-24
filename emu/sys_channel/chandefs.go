@@ -1,7 +1,3 @@
-package sys_channel
-
-import D "github.com/rcornwell/S370/emu/device"
-
 /*
  * S370 - Channel Channel definitions
  *
@@ -26,6 +22,12 @@ import D "github.com/rcornwell/S370/emu/device"
  * SOFTWARE.
  *
  */
+
+package sys_channel
+
+import (
+	D "github.com/rcornwell/S370/emu/device"
+)
 
 // Interface for devices to handle commands
 type Device interface {
