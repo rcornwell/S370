@@ -121,6 +121,11 @@ var emptyCard Card
     or card format binary.
 */
 
+// Return if attached to a file
+func (ctx *CardContext) Attached() bool {
+	return ctx.file != nil
+}
+
 // Attach a context to a file
 func (ctx *CardContext) Attach(fileName string, mode int, write bool, eof bool) error {
 	var err error
@@ -266,7 +271,7 @@ func cmpCard(buf *cardBuffer, s string) bool {
 // Check output type, if auto or text, try and convert record to bcd first
 // If failed and text report error and dump what we have
 // Else if binary or not convertable, dump as image
-func (ctx *CardContext) PunchCard(img Card) {
+func (ctx *CardContext) PunchCard(img Card) int {
 	mode := ctx.mode
 
 	// Fix mode if in auto mode
@@ -404,6 +409,7 @@ func (ctx *CardContext) PunchCard(img Card) {
 	}
 	ctx.hopperPos++
 	_, _ = ctx.file.Write(out)
+	return CARD_OK
 }
 
 // Empty hopper of cards
