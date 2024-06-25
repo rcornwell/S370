@@ -27,6 +27,7 @@ package card
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -35,32 +36,32 @@ import (
 )
 
 const (
-	MODE_AUTO int = iota + 1
-	MODE_TEXT
-	MODE_EBCDIC
-	MODE_BIN
-	MODE_OCTAL
-	MODE_BCD
-	MODE_CBN
+	ModeAuto int = iota + 1
+	ModeText
+	ModeEBCDIC
+	ModeBIN
+	ModeOctal
+	ModeBCD
+	ModeCBN
 )
 
 const (
-	CARD_OK int = iota + 1
-	CARD_EOF
-	CARD_EMPTY
-	CARD_ERROR
+	CardOK int = iota + 1
+	CardEOF
+	CardEmpty
+	CardError
 )
 
 const (
-	TYPE_029 int = iota + 1
-	TYPE_026
-	TYPE_ASCII
+	Type029 int = iota + 1
+	Type026
+	TypeASCII
 )
 
 const (
-	flag_eof uint16 = 0x1000
-	flag_err uint16 = 0x2000
-	flag_dat uint16 = 0x8000
+	flagEOF  uint16 = 0x1000
+	flagERR  uint16 = 0x2000
+	flagDATA uint16 = 0x8000
 )
 
 type Card struct {
@@ -121,12 +122,12 @@ var emptyCard Card
     or card format binary.
 */
 
-// Return if attached to a file
+// Return if attached to a file.
 func (ctx *CardContext) Attached() bool {
 	return ctx.file != nil
 }
 
-// Attach a context to a file
+// Attach a context to a file.
 func (ctx *CardContext) Attach(fileName string, mode int, write bool, eof bool) error {
 	var err error
 
@@ -149,7 +150,7 @@ func (ctx *CardContext) Attach(fileName string, mode int, write bool, eof bool) 
 	return err
 }
 
-// Detach from file
+// Detach from file.
 func (ctx *CardContext) Detach() {
 	if ctx.file != nil {
 		ctx.file.Close()
@@ -159,33 +160,32 @@ func (ctx *CardContext) Detach() {
 	ctx.hopperPos = 0
 }
 
-// Initialize back translation tables
+// Initialize back translation tables.
 func init() {
 	for i := range 4096 {
-		holToEbcdicTable[i] = 0x100
-		holToAsciiTable26[i] = 0xff
-		holToAsciiTable29[i] = 0xff
+		holToEBCDICTable[i] = 0x100
+		holToASCIITable26[i] = 0xff
+		holToASCIITable29[i] = 0xff
 	}
 
 	// Initialize back translation from Hollerith to Ebcdic
 	for i, t := range ebcdicToHolTable {
-		if holToEbcdicTable[t] != 0x100 {
-			s := fmt.Sprintf("Translation error EBCDIC %02x is %03x and %03x", i, t, holToEbcdicTable[t])
+		if holToEBCDICTable[t] != 0x100 {
+			s := fmt.Sprintf("Translation error EBCDIC %02x is %03x and %03x", i, t, holToEBCDICTable[t])
 			panic(s)
-		} else {
-			holToEbcdicTable[t] = uint16(i)
 		}
+		holToEBCDICTable[t] = uint16(i)
 	}
 
 	// Initialize back translation from Hollerith to ascii
 	for i, t := range asciiToHol29 {
 		if (t & 0xf000) == 0 {
-			holToAsciiTable29[t] = uint8(i)
+			holToASCIITable29[t] = uint8(i)
 		}
 	}
 	for i, t := range asciiToHol26 {
 		if (t & 0xf000) == 0 {
-			holToAsciiTable26[t] = uint8(i)
+			holToASCIITable26[t] = uint8(i)
 		}
 	}
 }
@@ -203,7 +203,7 @@ func (ctx *CardContext) CardEOF() bool {
 		return true
 	}
 	c := ctx.deck[ctx.hopperPos]
-	return (c.Image[0] & flag_eof) != 0
+	return (c.Image[0] & flagEOF) != 0
 }
 
 func (ctx *CardContext) FileName() string {
@@ -213,41 +213,40 @@ func (ctx *CardContext) FileName() string {
 	return ctx.file.Name()
 }
 
-// Set end of file flag on last card in deck
+// Set end of file flag on last card in deck.
 func (ctx *CardContext) SetEOF() {
 	if ctx.hopperCards != 0 {
-		ctx.deck[ctx.hopperCards-1].Image[0] |= flag_eof
+		ctx.deck[ctx.hopperCards-1].Image[0] |= flagEOF
 	}
 }
 
 func (ctx *CardContext) ReadCard() (Card, int) {
-
 	if ctx.eofPending {
 		ctx.eofPending = false
-		return emptyCard, CARD_EOF
+		return emptyCard, CardEOF
 	}
 	if ctx.hopperPos >= ctx.hopperCards {
-		return emptyCard, CARD_EMPTY
+		return emptyCard, CardEmpty
 	}
 	c := ctx.deck[ctx.hopperPos]
 	ctx.hopperPos++
 
-	if (c.Image[0] & flag_eof) != 0 {
-		if (c.Image[0] & flag_dat) != 0 {
+	if (c.Image[0] & flagEOF) != 0 {
+		if (c.Image[0] & flagDATA) != 0 {
 			ctx.eofPending = true
-			c.Image[0] &= 07777
-			return c, CARD_OK
+			c.Image[0] &= 0o7777
+			return c, CardOK
 		}
-		return emptyCard, CARD_EOF
+		return emptyCard, CardEOF
 	}
-	if (c.Image[0] & flag_err) != 0 {
-		return emptyCard, CARD_ERROR
+	if (c.Image[0] & flagERR) != 0 {
+		return emptyCard, CardError
 	}
 	c.Image[0] &= 07777
-	return c, CARD_OK
+	return c, CardOK
 }
 
-// Helper function to look for special cards
+// Helper function to look for special cards.
 func cmpCard(buf *cardBuffer, s string) bool {
 	if buf.buffer[0] != '~' {
 		return false
@@ -270,23 +269,23 @@ func cmpCard(buf *cardBuffer, s string) bool {
 // Convert word record into column image
 // Check output type, if auto or text, try and convert record to bcd first
 // If failed and text report error and dump what we have
-// Else if binary or not convertable, dump as image
+// Else if binary or not convertable, dump as image.
 func (ctx *CardContext) PunchCard(img Card) int {
 	mode := ctx.mode
 
 	// Fix mode if in auto mode
-	if mode == MODE_AUTO {
-		mode = MODE_TEXT
+	if mode == ModeAuto {
+		mode = ModeText
 		ok := true
 		// Try to convert each column to ascii
 		for i := range 80 {
 			var ch uint8
 			c := img.Image[i]
 			switch ctx.table {
-			case TYPE_029, TYPE_ASCII:
-				ch = holToAsciiTable29[c]
-			case TYPE_026:
-				ch = holToAsciiTable26[c]
+			case Type029, TypeASCII:
+				ch = holToASCIITable29[c]
+			case Type026:
+				ch = holToASCIITable26[c]
 			}
 			if ch == 0xff {
 				ok = false
@@ -294,7 +293,7 @@ func (ctx *CardContext) PunchCard(img Card) int {
 			}
 		}
 		if !ok {
-			mode = MODE_OCTAL
+			mode = ModeOctal
 		}
 	}
 
@@ -303,17 +302,17 @@ func (ctx *CardContext) PunchCard(img Card) int {
 	switch mode {
 	default:
 		fallthrough
-	case MODE_TEXT:
+	case ModeText:
 		// Scan each column
 		// Try to convert each column to ascii
 		for i := range 80 {
 			var ch uint8
 			c := img.Image[i]
 			switch ctx.table {
-			case TYPE_029, TYPE_ASCII:
-				ch = holToAsciiTable29[c]
-			case TYPE_026:
-				ch = holToAsciiTable26[c]
+			case Type029, TypeASCII:
+				ch = holToASCIITable29[c]
+			case Type026:
+				ch = holToASCIITable26[c]
 			}
 			if ch == 0xff {
 				ch = '?'
@@ -329,7 +328,7 @@ func (ctx *CardContext) PunchCard(img Card) int {
 		}
 		out = out[0 : l+2]
 		out[l+1] = '\n'
-	case MODE_OCTAL:
+	case ModeOctal:
 		out = out[0:321]
 
 		var i int
@@ -345,15 +344,15 @@ func (ctx *CardContext) PunchCard(img Card) int {
 		if i == 0 {
 			out[1] = 'e'
 			out[2] = 'o'
-			if img.Image[0] == 07 {
+			if img.Image[0] == 0o7 {
 				out[3] = 'r'
 				goto fin
 			}
-			if img.Image[0] == 015 {
+			if img.Image[0] == 0o15 {
 				out[3] = 'f'
 				goto fin
 			}
-			if img.Image[0] == 017 {
+			if img.Image[0] == 0o17 {
 				out[3] = 'i'
 				goto fin
 			}
@@ -373,46 +372,46 @@ func (ctx *CardContext) PunchCard(img Card) int {
 		out[o] = '\n'
 		o++
 		out = out[0:o]
-	case MODE_BIN:
+	case ModeBIN:
 		out = out[0:160]
 		for i := range 80 {
 			out[i*2] = byte((img.Image[i] & 0x00f) << 4)
 			out[(i*2)+1] = byte((img.Image[i] & 0xff0) >> 4)
 		}
-	case MODE_CBN:
+	case ModeCBN:
 		out = out[0:160]
 		for i := range 80 {
-			out[i*2] = byte(img.Image[i]>>6) & 077
-			out[(i*2)+1] = byte(img.Image[i] & 077)
+			out[i*2] = byte(img.Image[i]>>6) & 0o77
+			out[(i*2)+1] = byte(img.Image[i] & 0o77)
 		}
 		// Set parity
 		for i := range 160 {
-			out[i] |= 0100 ^ xlat.ParityTable[out[i]]
+			out[i] |= 0o100 ^ xlat.ParityTable[out[i]]
 		}
-		out[0] |= 0200
-	case MODE_BCD:
+		out[0] |= 0o200
+	case ModeBCD:
 		out = out[0:80]
 		for i := range 80 {
 			out[i] = HolToBcd(img.Image[i])
 			if out[i] != 0x7f {
 				out[i] |= xlat.ParityTable[out[i]]
 			} else {
-				out[i] = 077
+				out[i] = 0o77
 			}
 		}
 		out[0] |= 0200
-	case MODE_EBCDIC:
+	case ModeEBCDIC:
 		out = out[0:80]
 		for i := range 80 {
-			out[i] = byte(HolToEbcdic(img.Image[i]))
+			out[i] = byte(HolToEBCDIC(img.Image[i]))
 		}
 	}
 	ctx.hopperPos++
 	_, _ = ctx.file.Write(out)
-	return CARD_OK
+	return CardOK
 }
 
-// Empty hopper of cards
+// Empty hopper of cards.
 func (ctx *CardContext) EmptyDeck() {
 	ctx.deck = ctx.deck[0:0]
 	ctx.hopperPos = 0
@@ -437,15 +436,14 @@ func (ctx *CardContext) SetTable(table int) {
 func NewCardContext(mode int) *CardContext {
 	ctx := new(CardContext)
 	ctx.mode = mode
-	ctx.table = TYPE_029
+	ctx.table = Type029
 	return ctx
 }
 
-// Read file into hopper
+// Read file into hopper.
 func (ctx *CardContext) readDeck(fileName string) error {
 	var buffer cardBuffer
-	var eof bool = false
-
+	eof := false
 	buffer.len = 0
 	buffer.buffer[0] = 0 // Initialize buffer to empty
 	ctx.file = nil
@@ -464,7 +462,7 @@ func (ctx *CardContext) readDeck(fileName string) error {
 			var n int
 			n, err = ctx.file.Read(buffer.buffer[buffer.len:len(buffer.buffer)])
 			if err != nil {
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					err = nil
 					eof = true
 				} else {
@@ -487,20 +485,20 @@ func (ctx *CardContext) readDeck(fileName string) error {
 // Convert head of buffer to a card image.
 func (ctx *CardContext) parseCard(buf *cardBuffer) {
 	var ch byte
-	var mode int = MODE_TEXT
 	c := Card{}
-	var p int = 0
-	var col int = 0
-	if ctx.mode == MODE_AUTO {
+	var p int
+	var col int
+	mode := ModeText
+	if ctx.mode == ModeAuto {
 		// Check to see if binary card in it
-		var t uint16 = 0
+		var t uint16
 		var i int
 		for i = 0; i < 160 && i < buf.len; i += 2 {
 			t |= uint16(buf.buffer[i] & 0xff)
 		}
 		// Check if every other char < 16 & full buffer
 		if (t&0xf) == 0 && i == 160 {
-			mode = MODE_BIN // Possibly binary
+			mode = ModeBIN // Possibly binary
 		}
 		// Check if maybe BCD or CBN
 		if (buf.buffer[0] & 0x80) != 0 {
@@ -517,21 +515,20 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 				}
 				// Check if we hit end of record.
 				if even == 0 && odd == 160 {
-					mode = MODE_CBN
+					mode = ModeCBN
 					break
 				}
 				if odd == 0 && even == 80 {
-					mode = MODE_BCD
+					mode = ModeBCD
 					break
 				}
 				if (buf.buffer[i+1] & 0x80) != 0 {
 					break
 				}
 			}
-
 		}
-		if ctx.mode != MODE_AUTO && ctx.mode != mode {
-			c.Image[0] = flag_err
+		if ctx.mode != ModeAuto && ctx.mode != mode {
+			c.Image[0] = flagERR
 			goto card_done
 		}
 	} else {
@@ -540,10 +537,10 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 
 	// scan card.
 	switch mode {
-	case MODE_TEXT:
+	case ModeText:
 		// Check for special codes
 		if buf.buffer[0] == '~' {
-			var f bool = true
+			f := true
 			col = 1
 			for i := 1; col < 80 && f && i < buf.len; i++ {
 				ch = buf.buffer[i]
@@ -558,11 +555,11 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 				}
 			}
 			if f {
-				c.Image[0] = flag_eof
+				c.Image[0] = flagEOF
 				goto endCard
 			}
 			if cmpCard(buf, "RAW") {
-				var j int = 0
+				var j int
 				col = 0
 				for i := 4; col < 80 && i < buf.len; i++ {
 					ch = buf.buffer[i]
@@ -573,7 +570,7 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 					} else if ch == '\n' || ch == '\r' {
 						break
 					} else {
-						c.Image[0] = flag_err
+						c.Image[0] = flagERR
 					}
 					if j == 4 {
 						col++
@@ -581,15 +578,14 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 					}
 				}
 			} else if cmpCard(buf, "EOR") {
-				c.Image[0] = 07 // 7/8/9 punch
+				c.Image[0] = 0o7 // 7/8/9 punch
 				p = 4
 			} else if cmpCard(buf, "EOF") {
-				c.Image[0] = 015 // 6/7/9 punch
+				c.Image[0] = 0o15 // 6/7/9 punch
 				p = 4
 			} else if cmpCard(buf, "EOI") {
-				c.Image[0] = 017 // 6/7/8/9 punch
+				c.Image[0] = 0o17 // 6/7/8/9 punch
 				p = 4
-
 			}
 			goto endCard
 		}
@@ -607,11 +603,11 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 				var t uint16
 
 				switch ctx.table {
-				case TYPE_029:
+				case Type029:
 					t = asciiToHol29[ch]
-				case TYPE_026:
+				case Type026:
 					t = asciiToHol26[ch]
-				case TYPE_ASCII:
+				case TypeASCII:
 					t = asciiToHolEbcdic[ch]
 				}
 				if (t & 0xf000) != 0 {
@@ -632,10 +628,10 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 		if buf.buffer[p] == '\n' {
 			p++
 		}
-	case MODE_BIN:
+	case ModeBIN:
 		t := uint16(0)
 		if buf.len < 160 {
-			c.Image[0] = flag_err
+			c.Image[0] = flagERR
 			goto card_done
 		}
 		// Move data to buffer
@@ -647,13 +643,13 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 			p += 2
 		}
 		if (t & 0xf) != 0 {
-			c.Image[0] = flag_err
+			c.Image[0] = flagERR
 		}
-	case MODE_CBN:
+	case ModeCBN:
 		// Check if first character is a tape mark
-		if buf.buffer[0] == 0217 && (buf.len == 1 || (buf.buffer[1]&0200) != 0) {
+		if buf.buffer[0] == 0o217 && (buf.len == 1 || (buf.buffer[1]&0o200) != 0) {
 			p = 1
-			c.Image[0] = flag_eof
+			c.Image[0] = flagEOF
 			break
 		}
 
@@ -662,15 +658,15 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 
 		// Convert card and check for errors
 		col = 0
-		error := false
+		err := false
 		for p = 0; p < buf.len && col < 80; {
 			ch = buf.buffer[p]
 			if (ch & 0x80) != 0 {
 				break
 			}
-			ch &= 077
-			if xlat.ParityTable[ch] == (buf.buffer[p] & 0100) {
-				error = true
+			ch &= 0o77
+			if xlat.ParityTable[ch] == (buf.buffer[p] & 0o100) {
+				err = true
 			}
 			c.Image[col] = uint16(ch) << 6
 			p++
@@ -678,18 +674,18 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 			if (ch & 0x80) != 0 {
 				break
 			}
-			ch &= 077
-			if xlat.ParityTable[ch] == (buf.buffer[p] & 0100) {
-				error = true
+			ch &= 0o77
+			if xlat.ParityTable[ch] == (buf.buffer[p] & 0o100) {
+				err = true
 			}
 			c.Image[col] |= uint16(ch)
 			col++
 			p++
 		}
 
-		if ctx.mode != MODE_AUTO {
+		if ctx.mode != ModeAuto {
 			if p < buf.len && col >= 80 && (buf.buffer[p]&0x80) == 0 {
-				error = true
+				err = true
 				for (buf.buffer[p] & 0x80) == 0 {
 					if p > buf.len {
 						break
@@ -698,38 +694,38 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 				}
 			}
 		}
-		if error {
-			c.Image[0] = flag_err
+		if err {
+			c.Image[0] = flagERR
 		}
-	case MODE_BCD:
+	case ModeBCD:
 		// Check if first character is a tape mark
-		if buf.buffer[0] == 0217 && (buf.len == 1 || (buf.buffer[1]&0200) != 0) {
+		if buf.buffer[0] == 0o217 && (buf.len == 1 || (buf.buffer[1]&0o200) != 0) {
 			p = 1
-			c.Image[0] = flag_eof
+			c.Image[0] = flagEOF
 			break
 		}
 
 		buf.buffer[0] &= 0x7f
 		// Convert text line into card image
 		col = 0
-		error := false
+		err := false
 		for p = 0; col < 80 && p < buf.len; p++ {
 			ch = buf.buffer[p]
 			if (ch & 0x80) != 0 {
 				break
 			}
-			ch &= 077
-			if xlat.ParityTable[ch] != (buf.buffer[p] & 0100) {
-				error = true
+			ch &= 0o77
+			if xlat.ParityTable[ch] != (buf.buffer[p] & 0o100) {
+				err = true
 			}
 			c.Image[col] = BcdToHol(ch)
 			col++
 		}
 
 		// Record over length of card, skip until next
-		if ctx.mode != MODE_AUTO {
+		if ctx.mode != ModeAuto {
 			if p < buf.len && col >= 80 && (buf.buffer[p]&0x80) == 0 {
-				error = true
+				err = true
 				for (buf.buffer[p] & 0x80) != 0 {
 					if p > buf.len {
 						break
@@ -746,10 +742,10 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 		}
 
 		// Set error flage if something wrong
-		if error {
-			c.Image[0] = flag_err
+		if err {
+			c.Image[0] = flagERR
 		}
-	case MODE_EBCDIC:
+	case ModeEBCDIC:
 		// Move data to buffere
 		for p = 0; p < 80 && p < buf.len; p++ {
 			c.Image[p] = ebcdicToHolTable[buf.buffer[p]]
@@ -760,14 +756,14 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 	}
 
 card_done:
-	if (c.Image[0] & (flag_eof | flag_err)) == 0 {
-		c.Image[0] |= flag_dat
+	if (c.Image[0] & (flagEOF | flagERR)) == 0 {
+		c.Image[0] |= flagDATA
 	}
 	ctx.deck = append(ctx.deck, c)
 	ctx.hopperCards++
 	l := buf.len - p
 	j := p
-	for i := 0; i < l; i++ {
+	for i := range l {
 		buf.buffer[i] = buf.buffer[j]
 		j++
 	}

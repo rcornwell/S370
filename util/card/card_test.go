@@ -41,11 +41,13 @@ func createCardFile(file *os.File, cards int) {
 	file.Close()
 }
 
-var deck1 string
-var deck2 string
-var deck3 string
-var deck4 string
-var ctx *CardContext
+var (
+	deck1 string
+	deck2 string
+	deck3 string
+	deck4 string
+	ctx   *CardContext
+)
 
 func numToHol(v int) uint16 {
 	//	h := uint16(0)
@@ -104,7 +106,7 @@ func deleteTempFile() {
 	freeCtx()
 }
 
-// Check that we can read a deck
+// Check that we can read a deck.
 func TestReadDeck(t *testing.T) {
 	e := setupCardTest()
 	defer deleteTempFile()
@@ -112,7 +114,7 @@ func TestReadDeck(t *testing.T) {
 		t.Error(e)
 		return
 	}
-	ctx = NewCardContext(MODE_TEXT)
+	ctx = NewCardContext(ModeText)
 
 	e = ctx.readDeck(deck1)
 	if e != nil {
@@ -125,7 +127,7 @@ func TestReadDeck(t *testing.T) {
 	}
 }
 
-// Check that emoty_cards will remove all cards in hopper
+// Check that emoty_cards will remove all cards in hopper.
 func TestEmptyDeck(t *testing.T) {
 	e := setupCardTest()
 	defer deleteTempFile()
@@ -133,7 +135,7 @@ func TestEmptyDeck(t *testing.T) {
 		t.Error(e)
 		return
 	}
-	ctx = NewCardContext(MODE_TEXT)
+	ctx = NewCardContext(ModeText)
 	e = ctx.readDeck(deck1)
 	if e != nil {
 		t.Error(e)
@@ -151,7 +153,7 @@ func TestEmptyDeck(t *testing.T) {
 	}
 }
 
-// Check that we can stack read a deck
+// Check that we can stack read a deck.
 func TestReadDeckStack(t *testing.T) {
 	e := setupCardTest()
 	defer deleteTempFile()
@@ -159,7 +161,7 @@ func TestReadDeckStack(t *testing.T) {
 		t.Error(e)
 		return
 	}
-	ctx = NewCardContext(MODE_TEXT)
+	ctx = NewCardContext(ModeText)
 
 	e = ctx.readDeck(deck1)
 	if e != nil {
@@ -199,7 +201,7 @@ func TestReadDeckStack(t *testing.T) {
 	}
 }
 
-// Check that emoty_cards will remove all cards in hopper
+// Check that emoty_cards will remove all cards in hopper.
 func TestReadCard(t *testing.T) {
 	e := setupCardTest()
 	defer deleteTempFile()
@@ -207,7 +209,7 @@ func TestReadCard(t *testing.T) {
 		t.Error(e)
 		return
 	}
-	ctx = NewCardContext(MODE_TEXT)
+	ctx = NewCardContext(ModeText)
 	e = ctx.readDeck(deck1)
 	if e != nil {
 		t.Error(e)
@@ -221,13 +223,13 @@ func TestReadCard(t *testing.T) {
 	var err int
 	for {
 		_, err = ctx.ReadCard()
-		if err != CARD_OK {
+		if err != CardOK {
 			break
 		}
 		count++
 	}
 
-	if err != CARD_EMPTY {
+	if err != CardEmpty {
 		t.Error("ReadCard did not return Empty Card")
 	}
 
@@ -257,7 +259,7 @@ var testImage = [80]uint16{
 	0x200, 0x100, 0x080, 0x040, 0x020, 0x010, 0x008, 0x004, 0x002, 0x001,
 }
 
-// Verify that cards match hollerith values
+// Verify that cards match hollerith values.
 func TestReadCardMatch(t *testing.T) {
 	e := setupCardTest()
 	defer deleteTempFile()
@@ -265,7 +267,7 @@ func TestReadCardMatch(t *testing.T) {
 		t.Error(e)
 		return
 	}
-	ctx = NewCardContext(MODE_TEXT)
+	ctx = NewCardContext(ModeText)
 	e = ctx.readDeck(deck1)
 	if e != nil {
 		t.Error(e)
@@ -279,7 +281,7 @@ func TestReadCardMatch(t *testing.T) {
 	for i := range 10 {
 		var c Card
 		c, err = ctx.ReadCard()
-		if err != CARD_OK {
+		if err != CardOK {
 			break
 		}
 
@@ -305,7 +307,7 @@ func TestReadCardMatch(t *testing.T) {
 
 	_, err = ctx.ReadCard()
 
-	if err != CARD_EMPTY {
+	if err != CardEmpty {
 		t.Error("ReadCard did not return Empty Card")
 	}
 
@@ -317,7 +319,7 @@ func TestReadCardMatch(t *testing.T) {
 
 // Test that blank cards creates requested number of blank cards
 func TestReadBlankDeck(t *testing.T) {
-	ctx = NewCardContext(MODE_TEXT)
+	ctx = NewCardContext(ModeText)
 	defer freeCtx()
 	ctx.BlankDeck(10)
 
@@ -329,13 +331,12 @@ func TestReadBlankDeck(t *testing.T) {
 	for i := range 10 {
 		var c Card
 		c, err = ctx.ReadCard()
-		if err != CARD_OK {
+		if err != CardOK {
 			break
 		}
 
 		for j := range 80 {
 			if c.Image[j] != 0 {
-
 				t.Errorf("Blank card not blank %d", i)
 				break
 			}
@@ -343,7 +344,7 @@ func TestReadBlankDeck(t *testing.T) {
 	}
 	_, err = ctx.ReadCard()
 
-	if err != CARD_EMPTY {
+	if err != CardEmpty {
 		t.Error("ReadCard did not return Empty Card")
 	}
 
@@ -353,9 +354,9 @@ func TestReadBlankDeck(t *testing.T) {
 	}
 }
 
-// Test punch of a blank deck
+// Test punch of a blank deck.
 func TestPunchCardBlank(t *testing.T) {
-	ctx = NewCardContext(MODE_TEXT)
+	ctx = NewCardContext(ModeText)
 	defer freeCtx()
 
 	// Create blank card
@@ -372,7 +373,7 @@ func TestPunchCardBlank(t *testing.T) {
 	f.Close()
 	defer os.Remove(name)
 
-	err = ctx.Attach(name, MODE_TEXT, true, false)
+	err = ctx.Attach(name, ModeText, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -409,7 +410,7 @@ func TestPunchCardBlank(t *testing.T) {
 }
 
 func TestPunchCardDeck(t *testing.T) {
-	ctx = NewCardContext(MODE_TEXT)
+	ctx = NewCardContext(ModeText)
 	defer freeCtx()
 
 	// Create test card
@@ -430,7 +431,7 @@ func TestPunchCardDeck(t *testing.T) {
 	f.Close()
 	defer os.Remove(name)
 
-	err = ctx.Attach(name, MODE_TEXT, true, false)
+	err = ctx.Attach(name, ModeText, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -479,7 +480,7 @@ var ebcdicString = [80]uint8{
 
 // Try to punch an EBCDIC deck
 func TestPunchCardEBCDIC(t *testing.T) {
-	ctx = NewCardContext(MODE_TEXT)
+	ctx = NewCardContext(ModeText)
 	defer freeCtx()
 
 	// Create test card
@@ -502,7 +503,7 @@ func TestPunchCardEBCDIC(t *testing.T) {
 	f.Close()
 	defer os.Remove(name)
 
-	err = ctx.Attach(name, MODE_EBCDIC, true, false)
+	err = ctx.Attach(name, ModeEBCDIC, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -543,9 +544,9 @@ func TestPunchCardEBCDIC(t *testing.T) {
 	}
 }
 
-// Try to read an EBCDIC deck
+// Try to read an EBCDIC deck.
 func TestReadDeckEBCDIC(t *testing.T) {
-	ctx = NewCardContext(MODE_TEXT)
+	ctx = NewCardContext(ModeText)
 	defer freeCtx()
 
 	f, err := os.CreateTemp("", "deck")
@@ -555,7 +556,7 @@ func TestReadDeckEBCDIC(t *testing.T) {
 	}
 	name := f.Name()
 	defer os.Remove(name)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		// Create test card
 		ebcdicString[3] = 0xf0 + uint8(i/10)
 		ebcdicString[4] = 0xf0 + uint8(i%10)
@@ -566,11 +567,11 @@ func TestReadDeckEBCDIC(t *testing.T) {
 			t.Error("Unable to create file")
 			break
 		}
-
 	}
 	f.Close()
 
-	err = ctx.Attach(name, MODE_EBCDIC, false, false)
+	// Attach to card deck just created.
+	err = ctx.Attach(name, ModeEBCDIC, false, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -580,10 +581,10 @@ func TestReadDeckEBCDIC(t *testing.T) {
 		var c Card
 		var e int
 		c, e = ctx.ReadCard()
-		if e == CARD_EMPTY {
+		if e == CardEmpty {
 			break
 		}
-		if e != CARD_OK {
+		if e != CardOK {
 			t.Error("Card not ok")
 			break
 		}
@@ -615,9 +616,9 @@ func TestReadDeckEBCDIC(t *testing.T) {
 	}
 }
 
-// Try to punch an binary deck
+// Try to punch an binary deck.
 func TestPunchCardBinary(t *testing.T) {
-	ctx = NewCardContext(MODE_BIN)
+	ctx = NewCardContext(ModeBIN)
 	defer freeCtx()
 
 	// Create test card
@@ -633,7 +634,7 @@ func TestPunchCardBinary(t *testing.T) {
 	f.Close()
 	defer os.Remove(name)
 
-	err = ctx.Attach(name, MODE_BIN, true, false)
+	err = ctx.Attach(name, ModeBIN, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -688,9 +689,9 @@ func TestPunchCardBinary(t *testing.T) {
 	}
 }
 
-// Try to read an Binary deck
+// Try to read an Binary deck.
 func TestReadDeckBinary(t *testing.T) {
-	ctx = NewCardContext(MODE_TEXT)
+	ctx = NewCardContext(ModeText)
 	defer freeCtx()
 
 	f, err := os.CreateTemp("", "deck")
@@ -721,7 +722,6 @@ func TestReadDeckBinary(t *testing.T) {
 	}
 	for i := range 50 {
 		var buf [160]byte
-
 		// Create test card image
 		testImage[4] = numToHol(i % 10)
 		testImage[3] = numToHol(i / 10)
@@ -729,20 +729,17 @@ func TestReadDeckBinary(t *testing.T) {
 		for j := range 80 {
 			buf[j*2] = byte((testImage[j] & 0x00f) << 4)
 			buf[(j*2)+1] = byte((testImage[j] & 0xff0) >> 4)
-
 		}
 
 		n, e := f.Write(buf[:])
-
 		if e != nil || n != len(buf) {
 			t.Error("Unable to create file")
 			break
 		}
-
 	}
 	f.Close()
 
-	err = ctx.Attach(name, MODE_BIN, false, false)
+	err = ctx.Attach(name, ModeBIN, false, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -752,10 +749,10 @@ func TestReadDeckBinary(t *testing.T) {
 		var c Card
 		var e int
 		c, e = ctx.ReadCard()
-		if e == CARD_EMPTY {
+		if e == CardEmpty {
 			break
 		}
-		if e != CARD_OK {
+		if e != CardOK {
 			t.Error("Card not ok")
 			break
 		}
@@ -776,9 +773,9 @@ func TestReadDeckBinary(t *testing.T) {
 	}
 }
 
-// Try to punch an CBN deck
+// Try to punch an CBN deck.
 func TestPunchCardCBN(t *testing.T) {
-	ctx = NewCardContext(MODE_CBN)
+	ctx = NewCardContext(ModeCBN)
 	defer freeCtx()
 
 	// Create test card
@@ -794,7 +791,7 @@ func TestPunchCardCBN(t *testing.T) {
 	f.Close()
 	defer os.Remove(name)
 
-	err = ctx.Attach(name, MODE_CBN, true, false)
+	err = ctx.Attach(name, ModeCBN, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -845,11 +842,11 @@ func TestPunchCardCBN(t *testing.T) {
 				}
 				buf[j] &= 0x7f
 			}
-			l := byte((testImage[j] >> 6) & 077)
-			h := byte(testImage[j] & 077)
+			l := byte((testImage[j] >> 6) & 0o77)
+			h := byte(testImage[j] & 0o77)
 			// Or in correct parity
-			l |= xlat.ParityTable[l&077] ^ 0100
-			h |= xlat.ParityTable[h&077] ^ 0100
+			l |= xlat.ParityTable[l&0o77] ^ 0o100
+			h |= xlat.ParityTable[h&0o77] ^ 0o100
 
 			if l != buf[j*2] || h != buf[(j*2)+1] {
 				t.Errorf(" Card %d failed to match %d %02x %02x != %03x", count, j, buf[j*2], buf[(j*2)+1], testImage[j])
@@ -862,9 +859,9 @@ func TestPunchCardCBN(t *testing.T) {
 	}
 }
 
-// Try to read an CBN deck
+// Try to read an CBN deck.
 func TestReadDeckCBN(t *testing.T) {
-	ctx = NewCardContext(MODE_CBN)
+	ctx = NewCardContext(ModeCBN)
 	defer freeCtx()
 
 	f, err := os.CreateTemp("", "deck")
@@ -886,24 +883,24 @@ func TestReadDeckCBN(t *testing.T) {
 		testImage[3] = numToHol(i / 10)
 
 		for j := range 80 {
-			l := byte((testImage[j] >> 6) & 077)
-			h := byte(testImage[j] & 077)
-			buf[j*2] = (xlat.ParityTable[l&077] ^ 0100) | l
-			buf[(j*2)+1] = (xlat.ParityTable[h&077] ^ 0100) | h
+			l := byte((testImage[j] >> 6) & 0o77)
+			h := byte(testImage[j] & 0o77)
+			buf[j*2] = (xlat.ParityTable[l&0o77] ^ 0o100) | l
+			buf[(j*2)+1] = (xlat.ParityTable[h&0o77] ^ 0o100) | h
 		}
 
-		buf[0] |= 0200 // Record mark
+		buf[0] |= 0o200 // Record mark
 		n, e := f.Write(buf[:])
 
 		if e != nil || n != len(buf) {
 			t.Error("Unable to create file")
 			break
 		}
-
 	}
 	f.Close()
 
-	err = ctx.Attach(name, MODE_CBN, false, false)
+	// Attach to deck just created.
+	err = ctx.Attach(name, ModeCBN, false, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -913,10 +910,10 @@ func TestReadDeckCBN(t *testing.T) {
 		var c Card
 		var e int
 		c, e = ctx.ReadCard()
-		if e == CARD_EMPTY {
+		if e == CardEmpty {
 			break
 		}
-		if e != CARD_OK {
+		if e != CardOK {
 			t.Error("Card not ok")
 			break
 		}
@@ -937,9 +934,9 @@ func TestReadDeckCBN(t *testing.T) {
 	}
 }
 
-// Try to punch an BCD deck
+// Try to punch an BCD deck.
 func TestPunchCardBCD(t *testing.T) {
-	ctx = NewCardContext(MODE_BCD)
+	ctx = NewCardContext(ModeBCD)
 	defer freeCtx()
 
 	// Create test card
@@ -955,7 +952,7 @@ func TestPunchCardBCD(t *testing.T) {
 	f.Close()
 	defer os.Remove(name)
 
-	err = ctx.Attach(name, MODE_BCD, true, false)
+	err = ctx.Attach(name, ModeBCD, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1022,7 +1019,7 @@ func TestPunchCardBCD(t *testing.T) {
 			}
 			ch := HolToBcd(testImage[j])
 			// Or in correct parity
-			ch |= xlat.ParityTable[ch&077]
+			ch |= xlat.ParityTable[ch&0o77]
 
 			if ch != buf[j] {
 				t.Errorf(" Card %d failed to match %d %02x != %02x", count, j, buf[j], ch)
@@ -1035,9 +1032,9 @@ func TestPunchCardBCD(t *testing.T) {
 	}
 }
 
-// Try to read an BCD deck
+// Try to read an BCD deck.
 func TestReadDeckBCD(t *testing.T) {
-	ctx = NewCardContext(MODE_BCD)
+	ctx = NewCardContext(ModeBCD)
 	defer freeCtx()
 
 	f, err := os.CreateTemp("", "deck")
@@ -1061,23 +1058,23 @@ func TestReadDeckBCD(t *testing.T) {
 		for j := range len(testImage) {
 			ch := HolToBcd(testImage[j])
 			if ch == 0 { // Translate space to space
-				ch = 020
+				ch = 0o20
 			}
-			buf[j] = xlat.ParityTable[ch&077] | ch
+			buf[j] = xlat.ParityTable[ch&0o77] | ch
 		}
 
-		buf[0] |= 0200 // Record mark
+		buf[0] |= 0o200 // Record mark
 		n, e := f.Write(buf[:])
 
 		if e != nil || n != len(buf) {
 			t.Error("Unable to create file")
 			break
 		}
-
 	}
 	f.Close()
 
-	err = ctx.Attach(name, MODE_BCD, false, false)
+	// Attach to deck just created.
+	err = ctx.Attach(name, ModeBCD, false, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1087,10 +1084,10 @@ func TestReadDeckBCD(t *testing.T) {
 		var c Card
 		var e int
 		c, e = ctx.ReadCard()
-		if e == CARD_EMPTY {
+		if e == CardEmpty {
 			break
 		}
-		if e != CARD_OK {
+		if e != CardOK {
 			t.Error("Card not ok")
 			break
 		}
@@ -1111,9 +1108,9 @@ func TestReadDeckBCD(t *testing.T) {
 	}
 }
 
-// Try to punch an octal deck
+// Try to punch an octal deck.
 func TestPunchCardOctal(t *testing.T) {
-	ctx = NewCardContext(MODE_OCTAL)
+	ctx = NewCardContext(ModeOctal)
 	defer freeCtx()
 
 	// Create test card
@@ -1129,7 +1126,7 @@ func TestPunchCardOctal(t *testing.T) {
 	f.Close()
 	defer os.Remove(name)
 
-	err = ctx.Attach(name, MODE_OCTAL, true, false)
+	err = ctx.Attach(name, ModeOctal, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1192,10 +1189,10 @@ func TestPunchCardOctal(t *testing.T) {
 		p := 4
 		for j := range l {
 			col := testImage[j]
-			buf[p] = byte((col>>9)&07) + '0'
-			buf[p+1] = byte((col>>6)&07) + '0'
-			buf[p+2] = byte((col>>3)&07) + '0'
-			buf[p+3] = byte((col>>0)&07) + '0'
+			buf[p] = byte((col>>9)&0o7) + '0'
+			buf[p+1] = byte((col>>6)&0o7) + '0'
+			buf[p+2] = byte((col>>3)&0o7) + '0'
+			buf[p+3] = byte((col>>0)&0o7) + '0'
 			p += 4
 		}
 		buf[p] = '\n'
@@ -1214,9 +1211,9 @@ func TestPunchCardOctal(t *testing.T) {
 	}
 }
 
-// Try to read an octal deck
+// Try to read an octal deck.
 func TestReadDeckOctal(t *testing.T) {
-	ctx = NewCardContext(MODE_TEXT)
+	ctx = NewCardContext(ModeText)
 	defer freeCtx()
 
 	f, err := os.CreateTemp("", "deck")
@@ -1244,10 +1241,10 @@ func TestReadDeckOctal(t *testing.T) {
 		p := 4
 		for j := range len(testImage) {
 			col := testImage[j]
-			buf[p] = byte((col>>9)&07) + '0'
-			buf[p+1] = byte((col>>6)&07) + '0'
-			buf[p+2] = byte((col>>3)&07) + '0'
-			buf[p+3] = byte((col>>0)&07) + '0'
+			buf[p] = byte((col>>9)&0o7) + '0'
+			buf[p+1] = byte((col>>6)&0o7) + '0'
+			buf[p+2] = byte((col>>3)&0o7) + '0'
+			buf[p+3] = byte((col>>0)&0o7) + '0'
 			p += 4
 		}
 		buf[p] = '\n'
@@ -1259,11 +1256,10 @@ func TestReadDeckOctal(t *testing.T) {
 			t.Error("Unable to create file")
 			break
 		}
-
 	}
 	f.Close()
 
-	err = ctx.Attach(name, MODE_TEXT, false, false)
+	err = ctx.Attach(name, ModeText, false, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1273,10 +1269,10 @@ func TestReadDeckOctal(t *testing.T) {
 		var c Card
 		var e int
 		c, e = ctx.ReadCard()
-		if e == CARD_EMPTY {
+		if e == CardEmpty {
 			break
 		}
-		if e != CARD_OK {
+		if e != CardOK {
 			t.Error("Card not ok")
 			break
 		}
@@ -1298,7 +1294,7 @@ func TestReadDeckOctal(t *testing.T) {
 }
 
 func TestReadDeckAuto(t *testing.T) {
-	ctx = NewCardContext(MODE_AUTO)
+	ctx = NewCardContext(ModeAuto)
 	defer freeCtx()
 
 	f, err := os.CreateTemp("", "deck")
@@ -1315,7 +1311,7 @@ func TestReadDeckAuto(t *testing.T) {
 		testImage[i] = 0x200
 	}
 
-	err = ctx.Attach(name, MODE_TEXT, true, false)
+	err = ctx.Attach(name, ModeText, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1332,21 +1328,20 @@ func TestReadDeckAuto(t *testing.T) {
 		ctx.PunchCard(c)
 		switch i {
 		case 10:
-			ctx.mode = MODE_BCD
+			ctx.mode = ModeBCD
 		case 20:
-			ctx.mode = MODE_BIN
+			ctx.mode = ModeBIN
 		case 30:
-			ctx.mode = MODE_OCTAL
+			ctx.mode = ModeOctal
 		case 40:
-			ctx.mode = MODE_CBN
+			ctx.mode = ModeCBN
 		case 50:
-			ctx.mode = MODE_TEXT
+			ctx.mode = ModeText
 		}
-
 	}
 	ctx.Detach()
 
-	err = ctx.Attach(name, MODE_AUTO, false, false)
+	err = ctx.Attach(name, ModeAuto, false, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1361,10 +1356,10 @@ func TestReadDeckAuto(t *testing.T) {
 		var c Card
 		var e int
 		c, e = ctx.ReadCard()
-		if e == CARD_EMPTY {
+		if e == CardEmpty {
 			break
 		}
-		if e != CARD_OK {
+		if e != CardOK {
 			t.Error("Card not ok")
 			break
 		}
@@ -1391,9 +1386,9 @@ func TestReadDeckAuto(t *testing.T) {
 	}
 }
 
-// Test special cards and EOF
+// Test special cards and EOF.
 func TestReadDeckSpecial(t *testing.T) {
-	ctx = NewCardContext(MODE_AUTO)
+	ctx = NewCardContext(ModeAuto)
 	defer freeCtx()
 
 	f, err := os.CreateTemp("", "deck")
@@ -1411,7 +1406,7 @@ func TestReadDeckSpecial(t *testing.T) {
 	fmt.Fprintf(f, "%05d ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\n", 0) // 6
 	f.Close()
 
-	err = ctx.Attach(name, MODE_AUTO, false, true)
+	err = ctx.Attach(name, ModeAuto, false, true)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1424,11 +1419,11 @@ func TestReadDeckSpecial(t *testing.T) {
 	var c Card
 	var e int
 	c, e = ctx.ReadCard()
-	if e == CARD_EMPTY {
+	if e == CardEmpty {
 		t.Error("Card 1 empty")
 		goto card2
 	}
-	if e != CARD_OK {
+	if e != CardOK {
 		t.Error("Card 1 not ok")
 		goto card2
 	}
@@ -1445,51 +1440,48 @@ card2:
 		match[i] = 0
 	}
 	c, e = ctx.ReadCard()
-	if e == CARD_EMPTY {
+	if e == CardEmpty {
 		t.Error("Card 2 empty")
 		goto card3
 	}
-	if e != CARD_OK {
+	if e != CardOK {
 		t.Error("Card 2 not ok")
 		goto card3
 	}
-	match[0] = 07
+	match[0] = 0o7
 	for j := range 80 {
-
 		if match[j] != c.Image[j] {
 			t.Errorf(" Card %d failed to match %d %03x != %03x", 2, j, c.Image[j], match[j])
 		}
 	}
 card3:
 	c, e = ctx.ReadCard()
-	if e == CARD_EMPTY {
+	if e == CardEmpty {
 		t.Error("Card 3 empty")
 		goto card4
 	}
-	if e != CARD_OK {
+	if e != CardOK {
 		t.Error("Card 3 not ok")
 		goto card4
 	}
-	match[0] = 015
+	match[0] = 0o15
 	for j := range 80 {
-
 		if match[j] != c.Image[j] {
 			t.Errorf(" Card %d failed to match %d %03x != %03x", 3, j, c.Image[j], match[j])
 		}
 	}
 card4:
 	c, e = ctx.ReadCard()
-	if e == CARD_EMPTY {
+	if e == CardEmpty {
 		t.Error("Card 4 empty")
 		goto card5
 	}
-	if e != CARD_OK {
+	if e != CardOK {
 		t.Error("Card 4 not ok")
 		goto card5
 	}
-	match[0] = 017
+	match[0] = 0o17
 	for j := range 80 {
-
 		if match[j] != c.Image[j] {
 			t.Errorf(" Card %d failed to match %d %03x != %03x", 4, j, c.Image[j], match[j])
 		}
@@ -1497,21 +1489,21 @@ card4:
 card5:
 	_, e = ctx.ReadCard()
 	switch e {
-	case CARD_EMPTY:
+	case CardEmpty:
 		t.Error("Card 5 empty")
-	case CARD_EOF:
-	case CARD_OK:
+	case CardEOF:
+	case CardOK:
 		t.Error("Card 5 not ok")
-	case CARD_ERROR:
+	case CardError:
 		t.Error("Card 5 in error")
 	}
 
 	c, e = ctx.ReadCard()
-	if e == CARD_EMPTY {
+	if e == CardEmpty {
 		t.Error("Card 6 empty")
 		goto card7
 	}
-	if e != CARD_OK {
+	if e != CardOK {
 		t.Error("Card 6 not ok")
 		goto card7
 	}
@@ -1524,24 +1516,23 @@ card5:
 card7:
 	_, e = ctx.ReadCard()
 	switch e {
-	case CARD_EMPTY:
+	case CardEmpty:
 		t.Error("Card 7 empty")
-	case CARD_EOF:
-	case CARD_OK:
+	case CardEOF:
+	case CardOK:
 		t.Error("Card 7 not ok")
-	case CARD_ERROR:
+	case CardError:
 		t.Error("Card 7 in error")
 	}
 	_, e = ctx.ReadCard()
 	switch e {
-	case CARD_EMPTY:
-	case CARD_EOF:
+	case CardEmpty:
+	case CardEOF:
 		t.Error("Card 8 EOF")
-	case CARD_OK:
+	case CardOK:
 		t.Error("Card 8 not ok")
-	case CARD_ERROR:
+	case CardError:
 		t.Error("Card 8 in error")
 	}
 	ctx.Detach()
-
 }

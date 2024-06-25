@@ -33,11 +33,11 @@ import (
 	ch "github.com/rcornwell/S370/emu/sys_channel"
 )
 
-func ioSetup(devNum uint16) *Test_dev {
+func ioSetup(devNum uint16) *TestDev {
 	setup()
 	ch.InitializeChannels()
 	ch.AddChannel(0, ch.TypeMux, 192)
-	d := &Test_dev{Addr: devNum, Mask: 0xff}
+	d := &TestDev{Addr: devNum, Mask: 0xff}
 	ch.AddDevice(d, devNum)
 	_ = d.InitDev()
 	for i := range 0x10 {
@@ -47,14 +47,14 @@ func ioSetup(devNum uint16) *Test_dev {
 	return d
 }
 
-/* Read byte from main memory */
+// Read byte from main memory.
 func getMemByte(addr uint32) uint8 {
 	v := mem.GetMemory(addr)
 	b := uint8((v >> (8 * (3 - (addr & 3))) & 0xff))
 	return b
 }
 
-/* write byte to main memory */
+// write byte to main memory.
 func setMemByte(addr uint32, data uint32) {
 	off := 8 * (3 - (addr & 3))
 	m := uint32(0xff << off)
@@ -62,6 +62,7 @@ func setMemByte(addr uint32, data uint32) {
 	mem.SetMemoryMask(addr, d, m)
 }
 
+// Run a test of an I/O instruction.
 func (cpu *cpu) iotestInst(mask uint8, steps int) {
 	cpu.PC = 0x400
 	cpu.progMask = mask & 0xf
@@ -69,14 +70,14 @@ func (cpu *cpu) iotestInst(mask uint8, steps int) {
 	cpu.irqEnb = true
 	mem.SetMemory(0x68, 0)
 	mem.SetMemory(0x6c, 0x800)
-	trap_flag = false
+	trapFlag = false
 	cy := 0
 	for range steps {
 		cy++
 		c := CycleCPU()
 
 		if cpu.PC == 0x800 {
-			trap_flag = true
+			trapFlag = true
 		}
 		// Stop it next opcode = 0
 		w := mem.GetMemory(cpu.PC)
@@ -970,7 +971,6 @@ func TestCycleReadCDASkip(t *testing.T) {
 			if vb != uint8(0x10+i) {
 				t.Errorf("Start I/O Read Skip CDA expected %02x got: %02x at: %08x", 0x10+i, vb, 0x600+i+1)
 			}
-
 		} else {
 			vb = getMemByte(uint32(0x600 + i))
 			if vb != 0x55 {
@@ -1201,7 +1201,7 @@ func TestCycleCChainNop(t *testing.T) {
 	}
 }
 
-// Test TIC
+// Test TIC.
 func TestStartIOTic(t *testing.T) {
 	var v uint32
 
@@ -1267,7 +1267,7 @@ func TestStartIOTic(t *testing.T) {
 	}
 }
 
-// Test TIC to another TIC
+// Test TIC to another TIC.
 func TestCycleTicTic(t *testing.T) {
 	var v uint32
 
@@ -1312,28 +1312,28 @@ func TestCycleTicTic(t *testing.T) {
 
 	v = mem.GetMemory(0x40)
 	if v != 0x00000520 {
-		t.Errorf("Start I/O Tic Tic CSW1 expected %08x got: %08x", 0x00000520, v)
+		t.Errorf("Start I/O Tic to Tic CSW1 expected %08x got: %08x", 0x00000520, v)
 	}
 	v = mem.GetMemory(0x44)
 	if v != 0x00200000 {
-		t.Errorf("Start I/O Tic Tic CSW2 expected %08x got: %08x", 0x00200000, v)
+		t.Errorf("Start I/O Tic to Tic CSW2 expected %08x got: %08x", 0x00200000, v)
 	}
 
 	v = mem.GetMemory(0x700)
 	if v != 0xffffffff {
-		t.Errorf("Start I/O Tic Tic Sense Data expected %08x got: %08x", 0xfffffff, v)
+		t.Errorf("Start I/O Tic to Tic Sense Data expected %08x got: %08x", 0xfffffff, v)
 	}
 
 	for i := range 0x10 {
 		vb := d.Data[i]
 		mb := uint8(0xf + (i << 4))
 		if vb != mb {
-			t.Errorf("Start I/O Tic Tic Data expected %02x got: %02x at: %02x", mb, vb, i)
+			t.Errorf("Start I/O Tic to Tic Data expected %02x got: %02x at: %02x", mb, vb, i)
 		}
 	}
 }
 
-// Test TIC as first command
+// Test TIC as first command.
 func TestCycleTicError(t *testing.T) {
 	var v uint32
 
@@ -1380,10 +1380,9 @@ func TestCycleTicError(t *testing.T) {
 	if v != 0xffffffff {
 		t.Errorf("Start I/O Tic Error Sense Data expected %08x got: %08x", 0xfffffff, v)
 	}
-
 }
 
-// Test TIC
+// Test TIC.
 func TestCycleSMSTic(t *testing.T) {
 	var v uint32
 
@@ -1455,7 +1454,7 @@ func TestCycleSMSTic(t *testing.T) {
 	}
 }
 
-// Test if PCI interrupts work
+// Test if PCI interrupts work.
 func TestCyclePCI(t *testing.T) {
 	var v uint32
 
@@ -1624,7 +1623,6 @@ func TestCycleHaltIO2(t *testing.T) {
 	if v != 0xffffffff {
 		t.Errorf("Start I/O Haltio2 Memory expected %08x got: %08x", 0xffffffff, v)
 	}
-
 }
 
 func TestCycleTIOBusy(t *testing.T) {
@@ -1685,7 +1683,7 @@ func TestCycleTIOBusy(t *testing.T) {
 	}
 }
 
-// Read Protection check
+// Read Protection check.
 func TestCycleReadProt(t *testing.T) {
 	var v uint32
 
@@ -1796,7 +1794,7 @@ func TestCycleWriteProt(t *testing.T) {
 	mem.PutKey(0x4000, 0x0)
 }
 
-// Read Protection check
+// Read Protection check.
 func TestCycleReadProt2(t *testing.T) {
 	var v uint32
 

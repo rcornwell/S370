@@ -57,7 +57,7 @@ type cpu struct {
 	//  uint8        tod_en;                    // Enable TOD compare irq's
 	//  uint8        intval_en;                 // Enable interval irq's
 
-	//  uint16       irqcode;                   // Interupt code
+	//  uint16       irqcode;                   // Interrupt code
 
 	pageShift uint32 // Amount to shift for page
 	pageMask  uint32 // Mask of bits in page address
@@ -67,7 +67,7 @@ type cpu struct {
 	segLen    uint32 // Length of segment table
 
 	segAddr     uint32    // Address of segment table
-	pteLenShift uint32    // Shift to Check if out out page table
+	pteLenShift uint32    // Shift to Check if out of page table
 	pteAvail    uint32    // Mask of available bit in PTE
 	pteMBZ      uint32    // Bits that must be zero in PTE
 	pteShift    uint32    // Bits to shift a PTE entry
@@ -75,7 +75,7 @@ type cpu struct {
 	perRegMod   uint32    // Module modification mask
 	perCode     uint16    // Code for PER
 	perAddr     uint32    // Address of last reference
-	perBranch   bool      // Trap on sucessful branch
+	perBranch   bool      // Trap on successful branch
 	perFetch    bool      // Trap Fetch of instructions
 	perStore    bool      // Trap on storage modify
 	perReg      bool      // Trap on register modify
@@ -100,7 +100,7 @@ type cpu struct {
 }
 
 const (
-	// PSW enable bits in SSM
+	// PSW enable bits in SSM.
 	extEnable uint8 = 0x01
 	irqEnable uint8 = 0x02
 	datEnable uint8 = 0x04
@@ -118,12 +118,12 @@ const (
 	EXPUNDER uint8 = 0x02 // Exponent overflow.
 	SIGMASK  uint8 = 0x01 // Significance
 
-	// low addresses
+	// low addresses.
 	iPSW     uint32 = 0x00 // IPSW
 	iccCCW1  uint32 = 0x08 // ICCW1
 	iccCCW2  uint32 = 0x10 // ICCW2
 	oEPSW    uint32 = 0x18 // External old PSW
-	oSPSW    uint32 = 0x20 // Supervisior call old PSW
+	oSPSW    uint32 = 0x20 // Supervisor call old PSW
 	oPPSW    uint32 = 0x28 // Program old PSW
 	oMPSW    uint32 = 0x30 // Machine check PSW
 	oIOPSW   uint32 = 0x38 // IO old PSW
@@ -160,7 +160,7 @@ const (
 	ircMCE      uint16 = 0x0040 // Monitor event
 	ircPer      uint16 = 0x0080 // Per event
 
-	// DAT masks definitions
+	// DAT masks definitions.
 	pteLength uint32 = 0xff000000 // Page table length
 	pteAddr   uint32 = 0x00fffffe // Address of table
 	pteValid  uint32 = 0x00000001 // table valid
@@ -169,11 +169,11 @@ const (
 	tlbPhy    uint32 = 0x00000fff // Physical page
 	segMask   uint32 = 0xfffff000 // Mask segment
 
-	// Mask constants
+	// Mask constants.
 	AMASK  uint32 = 0x00ffffff // Mask address bits
 	LMASK  uint32 = 0x0000ffff // Lower Half word maske
-	SPMASK uint32 = 0x00fff800 // Mask off storage boundry
-	WMASK  uint32 = 0x00fffffc // Mask address to word boundry
+	SPMASK uint32 = 0x00fff800 // Mask off storage boundary
+	WMASK  uint32 = 0x00fffffc // Mask address to word boundary
 	MSIGN  uint32 = 0x80000000 // Minus sign
 	MMASK  uint32 = 0x00ffffff // Mantissa mask
 	EMASK  uint32 = 0x7f000000 // Exponent mask
@@ -185,7 +185,7 @@ const (
 	PMASK  uint32 = 0xf0000000 // Storage protection mask
 	HMASK  uint32 = 0xffff0000 // Mask upper half word
 
-	// Long masks
+	// Long masks.
 	HMASKL  uint64 = 0xffffffff00000000 // Upper word
 	LMASKL  uint64 = 0x00000000ffffffff // Lower word
 	MSIGNL  uint64 = 0x8000000000000000 // Sign up long floating point
@@ -201,174 +201,174 @@ const (
 )
 
 const (
-	// Opcode definitions
-	OP_SPM   = 0x04 // src1 = R1, src2 = R2
-	OP_BALR  = 0x05 // src1 = R1, src2 = R2
-	OP_BCTR  = 0x06 // src1 = R1, src2 = R2
-	OP_BCR   = 0x07 // src1 = R1, src2 = R2
-	OP_SSK   = 0x08 // src1 = R1, src2 = R2
-	OP_ISK   = 0x09 // src1 = R1, src2 = R2
-	OP_SVC   = 0x0A // src1 = R1, src2 = R2
-	OP_BASR  = 0x0D // src1 = R1, src2 = R2
-	OP_MVCL  = 0x0E // 370 Move long
-	OP_CLCL  = 0x0F // 370 Compare logical long
-	OP_LPR   = 0x10 // src1 = R1, src2 = R2
-	OP_LNR   = 0x11 // src1 = R1, src2 = R2
-	OP_LTR   = 0x12 // src1 = R1, src2 = R2
-	OP_LCR   = 0x13 // src1 = R1, src2 = R2
-	OP_NR    = 0x14 // src1 = R1, src2 = R2
-	OP_CLR   = 0x15 // src1 = R1, src2 = R2
-	OP_OR    = 0x16 // src1 = R1, src2 = R2
-	OP_XR    = 0x17 // src1 = R1, src2 = R2
-	OP_CR    = 0x19 // src1 = R1, src2 = R2
-	OP_LR    = 0x18 // src1 = R1, src2 = R2
-	OP_AR    = 0x1A // src1 = R1, src2 = R2
-	OP_SR    = 0x1B // src1 = R1, src2 = R2
-	OP_MR    = 0x1C // src1 = R1, src2 = R2
-	OP_DR    = 0x1D // src1 = R1, src2 = R2
-	OP_ALR   = 0x1E // src1 = R1, src2 = R2
-	OP_SLR   = 0x1F // src1 = R1, src2 = R2
-	OP_LPDR  = 0x20
-	OP_LNDR  = 0x21
-	OP_LTDR  = 0x22
-	OP_LCDR  = 0x23
-	OP_HDR   = 0x24
-	OP_LRDR  = 0x25
-	OP_MXR   = 0x26
-	OP_MXDR  = 0x27
-	OP_LDR   = 0x28
-	OP_CDR   = 0x29
-	OP_ADR   = 0x2A
-	OP_SDR   = 0x2B
-	OP_MDR   = 0x2C
-	OP_DDR   = 0x2D
-	OP_AWR   = 0x2E
-	OP_SWR   = 0x2F
-	OP_LPER  = 0x30
-	OP_LNER  = 0x31
-	OP_LTER  = 0x32
-	OP_LCER  = 0x33
-	OP_HER   = 0x34
-	OP_LRER  = 0x35
-	OP_AXR   = 0x36
-	OP_SXR   = 0x37
-	OP_LER   = 0x38
-	OP_CER   = 0x39
-	OP_AER   = 0x3A
-	OP_SER   = 0x3B
-	OP_MER   = 0x3C
-	OP_DER   = 0x3D
-	OP_AUR   = 0x3E
-	OP_SUR   = 0x3F
-	OP_STH   = 0x40 // src1 = R1, src2= A1
-	OP_LA    = 0x41 // src1 = R1, src2= A1
-	OP_STC   = 0x42 // src1 = R1, src2= A1
-	OP_IC    = 0x43 // src1 = R1, src2= A1
-	OP_EX    = 0x44 // src1 = R1, src2= A1
-	OP_BAL   = 0x45 // src1 = R1, src2= A1
-	OP_BCT   = 0x46 // src1 = R1, src2= A1
-	OP_BC    = 0x47 // src1 = R1, src2= A1
-	OP_LH    = 0x48 // src1 = R1, src2= MH
-	OP_CH    = 0x49 // src1 = R1, src2= MH
-	OP_AH    = 0x4A // src1 = R1, src2= MH
-	OP_SH    = 0x4B // src1 = R1, src2= MH
-	OP_MH    = 0x4C // src1 = R1, src2= MH
-	OP_BAS   = 0x4D // src1 = R1, src2= A1
-	OP_CVD   = 0x4E // src1 = R1, src2= A1
-	OP_CVB   = 0x4F // src1 = R1, src2= A1
-	OP_ST    = 0x50 // src1 = R1, src2= A1
-	OP_N     = 0x54 // src1 = R1, src2= M
-	OP_CL    = 0x55 // src1 = R1, src2= M
-	OP_O     = 0x56 // src1 = R1, src2= M
-	OP_X     = 0x57 // src1 = R1, src2= M
-	OP_L     = 0x58 // src1 = R1, src2= M
-	OP_C     = 0x59 // src1 = R1, src2= M
-	OP_A     = 0x5A // src1 = R1, src2= M
-	OP_S     = 0x5B // src1 = R1, src2= M
-	OP_M     = 0x5C // src1 = R1, src2= M
-	OP_D     = 0x5D // src1 = R1, src2= M
-	OP_AL    = 0x5E // src1 = R1, src2= M
-	OP_SL    = 0x5F // src1 = R1, src2= M
-	OP_STD   = 0x60
-	OP_MXD   = 0x67
-	OP_LD    = 0x68
-	OP_CD    = 0x69
-	OP_AD    = 0x6A
-	OP_SD    = 0x6B
-	OP_MD    = 0x6C
-	OP_DD    = 0x6D
-	OP_AW    = 0x6E
-	OP_SW    = 0x6F
-	OP_STE   = 0x70
-	OP_LE    = 0x78
-	OP_CE    = 0x79
-	OP_AE    = 0x7A
-	OP_SE    = 0x7B
-	OP_ME    = 0x7C
-	OP_DE    = 0x7D
-	OP_AU    = 0x7E
-	OP_SU    = 0x7F
-	OP_SSM   = 0x80
-	OP_LPSW  = 0x82
-	OP_DIAG  = 0x83
-	OP_BXH   = 0x86
-	OP_BXLE  = 0x87
-	OP_SRL   = 0x88
-	OP_SLL   = 0x89
-	OP_SRA   = 0x8A
-	OP_SLA   = 0x8B
-	OP_SRDL  = 0x8C
-	OP_SLDL  = 0x8D
-	OP_SRDA  = 0x8E
-	OP_SLDA  = 0x8F
-	OP_STM   = 0x90
-	OP_TM    = 0x91
-	OP_MVI   = 0x92
-	OP_TS    = 0x93
-	OP_NI    = 0x94
-	OP_CLI   = 0x95
-	OP_OI    = 0x96
-	OP_XI    = 0x97
-	OP_LM    = 0x98
-	OP_SIO   = 0x9C
-	OP_TIO   = 0x9D
-	OP_HIO   = 0x9E
-	OP_TCH   = 0x9F
-	OP_STNSM = 0xAC // 370 Store then and system mask
-	OP_STOSM = 0xAD // 370 Store then or system mask
-	OP_SIGP  = 0xAE // 370 Signal processor
-	OP_MC    = 0xAF // 370 Monitor call
-	OP_STMC  = 0xB0 // 360/67 Store control
-	OP_LRA   = 0xB1
-	OP_370   = 0xB2 // Misc 370 system instructions
-	OP_STCTL = 0xB6 // 370 Store control
-	OP_LCTL  = 0xB7 // 370 Load control
-	OP_LMC   = 0xB8 // 360/67 Load Control
-	OP_CS    = 0xBA // 370 Compare and swap
-	OP_CDS   = 0xBB // 370 Compare double and swap
-	OP_CLM   = 0xBD // 370 Compare character under mask
-	OP_STCM  = 0xBE // 370 Store character under mask
-	OP_ICM   = 0xBF // 370 Insert character under mask
-	OP_MVN   = 0xD1
-	OP_MVC   = 0xD2
-	OP_MVZ   = 0xD3
-	OP_NC    = 0xD4
-	OP_CLC   = 0xD5
-	OP_OC    = 0xD6
-	OP_XC    = 0xD7
-	OP_TR    = 0xDC
-	OP_TRT   = 0xDD
-	OP_ED    = 0xDE
-	OP_EDMK  = 0xDF
-	OP_MVCIN = 0xE8 // 370 Move inverse
-	OP_SRP   = 0xF0 // 370 Shift and round decimal
-	OP_MVO   = 0xF1
-	OP_PACK  = 0xF2
-	OP_UNPK  = 0xF3
-	OP_ZAP   = 0xF8
-	OP_CP    = 0xF9
-	OP_AP    = 0xFA
-	OP_SP    = 0xFB
-	OP_MP    = 0xFC
-	OP_DP    = 0xFD
+	// Opcode definitions.
+	OpSPM   = 0x04 // src1 = R1, src2 = R2
+	OpBALR  = 0x05 // src1 = R1, src2 = R2
+	OpBCTR  = 0x06 // src1 = R1, src2 = R2
+	OpBCR   = 0x07 // src1 = R1, src2 = R2
+	OpSSK   = 0x08 // src1 = R1, src2 = R2
+	OpISK   = 0x09 // src1 = R1, src2 = R2
+	OpSVC   = 0x0A // src1 = R1, src2 = R2
+	OpBASR  = 0x0D // src1 = R1, src2 = R2
+	OpMVCL  = 0x0E // 370 Move long
+	OpCLCL  = 0x0F // 370 Compare logical long
+	OpLPR   = 0x10 // src1 = R1, src2 = R2
+	OpLNR   = 0x11 // src1 = R1, src2 = R2
+	OpLTR   = 0x12 // src1 = R1, src2 = R2
+	OpLCR   = 0x13 // src1 = R1, src2 = R2
+	OpNR    = 0x14 // src1 = R1, src2 = R2
+	OpCLR   = 0x15 // src1 = R1, src2 = R2
+	OpOR    = 0x16 // src1 = R1, src2 = R2
+	OpXR    = 0x17 // src1 = R1, src2 = R2
+	OpCR    = 0x19 // src1 = R1, src2 = R2
+	OpLR    = 0x18 // src1 = R1, src2 = R2
+	OpAR    = 0x1A // src1 = R1, src2 = R2
+	OpSR    = 0x1B // src1 = R1, src2 = R2
+	OpMR    = 0x1C // src1 = R1, src2 = R2
+	OpDR    = 0x1D // src1 = R1, src2 = R2
+	OpALR   = 0x1E // src1 = R1, src2 = R2
+	OpSLR   = 0x1F // src1 = R1, src2 = R2
+	OpLPDR  = 0x20
+	OpLNDR  = 0x21
+	OpLTDR  = 0x22
+	OpLCDR  = 0x23
+	OpHDR   = 0x24
+	OpLRDR  = 0x25
+	OpMXR   = 0x26
+	OpMXDR  = 0x27
+	OpLDR   = 0x28
+	OpCDR   = 0x29
+	OpADR   = 0x2A
+	OpSDR   = 0x2B
+	OpMDR   = 0x2C
+	OpDDR   = 0x2D
+	OpAWR   = 0x2E
+	OpSWR   = 0x2F
+	OpLPER  = 0x30
+	OpLNER  = 0x31
+	OpLTER  = 0x32
+	OpLCER  = 0x33
+	OpHER   = 0x34
+	OpLRER  = 0x35
+	OpAXR   = 0x36
+	OpSXR   = 0x37
+	OpLER   = 0x38
+	OpCER   = 0x39
+	OpAER   = 0x3A
+	OpSER   = 0x3B
+	OpMER   = 0x3C
+	OpDER   = 0x3D
+	OpAUR   = 0x3E
+	OpSUR   = 0x3F
+	OpSTH   = 0x40 // src1 = R1, src2= A1
+	OpLA    = 0x41 // src1 = R1, src2= A1
+	OpSTC   = 0x42 // src1 = R1, src2= A1
+	OpIC    = 0x43 // src1 = R1, src2= A1
+	OpEX    = 0x44 // src1 = R1, src2= A1
+	OpBAL   = 0x45 // src1 = R1, src2= A1
+	OpBCT   = 0x46 // src1 = R1, src2= A1
+	OpBC    = 0x47 // src1 = R1, src2= A1
+	OpLH    = 0x48 // src1 = R1, src2= MH
+	OpCH    = 0x49 // src1 = R1, src2= MH
+	OpAH    = 0x4A // src1 = R1, src2= MH
+	OpSH    = 0x4B // src1 = R1, src2= MH
+	OpMH    = 0x4C // src1 = R1, src2= MH
+	OpBAS   = 0x4D // src1 = R1, src2= A1
+	OpCVD   = 0x4E // src1 = R1, src2= A1
+	OpCVB   = 0x4F // src1 = R1, src2= A1
+	OpST    = 0x50 // src1 = R1, src2= A1
+	OpN     = 0x54 // src1 = R1, src2= M
+	OpCL    = 0x55 // src1 = R1, src2= M
+	OpO     = 0x56 // src1 = R1, src2= M
+	OpX     = 0x57 // src1 = R1, src2= M
+	OpL     = 0x58 // src1 = R1, src2= M
+	OpC     = 0x59 // src1 = R1, src2= M
+	OpA     = 0x5A // src1 = R1, src2= M
+	OpS     = 0x5B // src1 = R1, src2= M
+	OpM     = 0x5C // src1 = R1, src2= M
+	OpD     = 0x5D // src1 = R1, src2= M
+	OpAL    = 0x5E // src1 = R1, src2= M
+	OpSL    = 0x5F // src1 = R1, src2= M
+	OpSTD   = 0x60
+	OpMXD   = 0x67
+	OpLD    = 0x68
+	OpCD    = 0x69
+	OpAD    = 0x6A
+	OpSD    = 0x6B
+	OpMD    = 0x6C
+	OpDD    = 0x6D
+	OpAW    = 0x6E
+	OpSW    = 0x6F
+	OpSTE   = 0x70
+	OpLE    = 0x78
+	OpCE    = 0x79
+	OpAE    = 0x7A
+	OpSE    = 0x7B
+	OpME    = 0x7C
+	OpDE    = 0x7D
+	OpAU    = 0x7E
+	OpSU    = 0x7F
+	OpSSM   = 0x80
+	OpLPSW  = 0x82
+	OpDIAG  = 0x83
+	OpBXH   = 0x86
+	OpBXLE  = 0x87
+	OpSRL   = 0x88
+	OpSLL   = 0x89
+	OpSRA   = 0x8A
+	OpSLA   = 0x8B
+	OpSRDL  = 0x8C
+	OpSLDL  = 0x8D
+	OpSRDA  = 0x8E
+	OpSLDA  = 0x8F
+	OpSTM   = 0x90
+	OpTM    = 0x91
+	OpMVI   = 0x92
+	OpTS    = 0x93
+	OpNI    = 0x94
+	OpCLI   = 0x95
+	OpOI    = 0x96
+	OpXI    = 0x97
+	OpLM    = 0x98
+	OpSIO   = 0x9C
+	OpTIO   = 0x9D
+	OpHIO   = 0x9E
+	OpTCH   = 0x9F
+	OpSTNSM = 0xAC // 370 Store then and system mask
+	OpSTOSM = 0xAD // 370 Store then or system mask
+	OpSIGP  = 0xAE // 370 Signal processor
+	OpMC    = 0xAF // 370 Monitor call
+	OpSTMC  = 0xB0 // 360/67 Store control
+	OpLRA   = 0xB1
+	Op370   = 0xB2 // Misc 370 system instructions
+	OpSTCTL = 0xB6 // 370 Store control
+	OpLCTL  = 0xB7 // 370 Load control
+	OpLMC   = 0xB8 // 360/67 Load Control
+	OpCS    = 0xBA // 370 Compare and swap
+	OpCDS   = 0xBB // 370 Compare double and swap
+	OpCLM   = 0xBD // 370 Compare character under mask
+	OpSTCM  = 0xBE // 370 Store character under mask
+	OpICM   = 0xBF // 370 Insert character under mask
+	OpMVN   = 0xD1
+	OpMVC   = 0xD2
+	OpMVZ   = 0xD3
+	OpNC    = 0xD4
+	OpCLC   = 0xD5
+	OpOC    = 0xD6
+	OpXC    = 0xD7
+	OpTR    = 0xDC
+	OpTRT   = 0xDD
+	OpED    = 0xDE
+	OpEDMK  = 0xDF
+	OpMVCIN = 0xE8 // 370 Move inverse
+	OpSRP   = 0xF0 // 370 Shift and round decimal
+	OpMVO   = 0xF1
+	OpPACK  = 0xF2
+	OpUNPK  = 0xF3
+	OpZAP   = 0xF8
+	OpCP    = 0xF9
+	OpAP    = 0xFA
+	OpSP    = 0xFB
+	OpMP    = 0xFC
+	OpDP    = 0xFD
 )

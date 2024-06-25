@@ -21,29 +21,29 @@
 
 */
 
-package sys_channel
+package syschannel
 
 import (
 	D "github.com/rcornwell/S370/emu/device"
 	M "github.com/rcornwell/S370/emu/memory"
 )
 
-var chanUnit [MAX_CHAN]chanDev // Hold infomation about channels
+var chanUnit [MaxChan]chanDev // Hold information about channels
 
 var bmuxEnable bool
 
 var nullDev D.Device
 
-// Set whether Block multiplexer is enabled or not
+// Set whether Block multiplexer is enabled or not.
 func SetBMUXenable(enable bool) {
 	bmuxEnable = enable
 }
 
-// Return type of channel
+// Return type of channel.
 func GetType(devNum uint16) int {
 	ch := (devNum >> 8)
 	// Check if over max supported channels
-	if ch > MAX_CHAN {
+	if ch > MaxChan {
 		return TypeUNA
 	}
 	cu := &chanUnit[ch&0xf]
@@ -53,10 +53,10 @@ func GetType(devNum uint16) int {
 	return cu.chanType
 }
 
-// Process SIO instruction
+// Process SIO instruction.
 func StartIO(devNum uint16) uint8 {
 	ch := (devNum >> 8)
-	if ch > MAX_CHAN {
+	if ch > MaxChan {
 		return 3
 	}
 	ch &= 0xf
@@ -166,10 +166,10 @@ func StartIO(devNum uint16) uint8 {
 	return 0
 }
 
-// Handle TIO instruction
+// Handle TIO instruction.
 func TestIO(devNum uint16) uint8 {
 	ch := (devNum >> 8)
-	if ch > MAX_CHAN {
+	if ch > MaxChan {
 		return 3
 	}
 	ch &= 0xf
@@ -246,10 +246,10 @@ func TestIO(devNum uint16) uint8 {
 	return 0
 }
 
-// Handle HIO instruction
+// Handle HIO instruction.
 func HaltIO(devNum uint16) uint8 {
 	ch := (devNum >> 8)
-	if ch > MAX_CHAN {
+	if ch > MaxChan {
 		return 3
 	}
 	ch &= 0xf
@@ -284,19 +284,18 @@ func HaltIO(devNum uint16) uint8 {
 	cc := cu.devTab[d].HaltIO()
 	if cc == 1 {
 		M.SetMemoryMask(0x44, (uint32(sch.chanStatus) << 16), statusMask)
-
 	}
 	return cc
 }
 
-// Handle TCH instruction
+// Handle TCH instruction.
 func TestChan(devNum uint16) uint8 {
 	/* 360 Principles of Operation says, "Bit positions 21-23 of the
 	   sum formed by the addition of the content of register B1 and the
 	   content of the D1 field identify the channel to which the
 	   instruction applies. Bit positions 24-31 of the address are ignored.
 	   /67 Functional Characteristics do not mention any changes in basic or
-	   extended control mode of the TCH instruction behaviour.
+	   extended control mode of the TCH instruction behavior.
 	   However, historic /67 code for MTS suggests that bits 19-20 of the
 	   address indicate the channel controller which should be used to query
 	   the channel.
@@ -313,7 +312,7 @@ func TestChan(devNum uint16) uint8 {
 	   attached.  Channels 0, 4, 8 (0 on CC 1) & 12 (4 on CC 1) are multiplexer
 	   channels. */
 	c := (devNum >> 8) & 0xf
-	if c > MAX_CHAN {
+	if c > MaxChan {
 		return 3
 	}
 
@@ -347,7 +346,7 @@ func TestChan(devNum uint16) uint8 {
 	return 0
 }
 
-// Read a byte from memory
+// Read a byte from memory.
 func ChanReadByte(devNum uint16) (uint8, bool) {
 	var sc *chanCtl
 
@@ -377,11 +376,10 @@ func ChanReadByte(devNum uint16) (uint8, bool) {
 			sc.chanStatus |= statusChnEnd
 			sc.chanByte = bufEnd
 			return 0, true
-		} else {
-			// If chaining try and start next CCW
-			if loadCCW(cu, sc, true) {
-				return 0, true
-			}
+		}
+		// If chaining try and start next CCW
+		if loadCCW(cu, sc, true) {
+			return 0, true
 		}
 	}
 
@@ -397,20 +395,20 @@ func ChanReadByte(devNum uint16) (uint8, bool) {
 
 	// Return current byte
 	sc.ccwCount--
-	byte := uint8(sc.chanBuffer >> (8 * (3 - (sc.chanByte & 3))) & 0xff)
+	data := uint8(sc.chanBuffer >> (8 * (3 - (sc.chanByte & 3))) & 0xff)
 	sc.chanByte++
 	// If count is zero and chaining load in new CCW
 	if sc.ccwCount == 0 && (sc.ccwFlags&chainData) != 0 {
 		// If chaining try and start next CCW
 		if loadCCW(cu, sc, true) {
 			// Return that this is last byte device will get
-			return byte, true
+			return data, true
 		}
 	}
-	return byte, false
+	return data, false
 }
 
-// Write a byte to memory
+// Write a byte to memory.
 func ChanWriteByte(devNum uint16, data uint8) bool {
 	var sc *chanCtl
 
@@ -477,7 +475,6 @@ func ChanWriteByte(devNum uint16, data uint8) bool {
 		if readBuffer(cu, sc) {
 			return true
 		}
-
 	}
 
 	// Store it in buffer and adjust pointer
@@ -511,28 +508,28 @@ func ChanWriteByte(devNum uint16, data uint8) bool {
 	return false
 }
 
-// Compute address of next byte to read/write
+// Compute address of next byte to read/write.
 func nextAddress(cu *chanDev, sc *chanCtl) bool {
 	if (sc.ccwFlags & flagIDA) != 0 {
 		if (sc.ccwCmd & 0xf) == CmdRDBWD {
 			sc.ccwIAddr--
 			if (sc.ccwIAddr & 0x7ff) == 0x7ff {
 				sc.ccwAddr += 4
-				if t, err := readFullWord(cu, sc, sc.ccwAddr); err {
+				t, err := readFullWord(cu, sc, sc.ccwAddr)
+				if err {
 					return true
-				} else {
-					sc.ccwIAddr = t & M.AMASK
 				}
+				sc.ccwIAddr = t & M.AMASK
 			}
 		} else {
 			sc.ccwIAddr++
 			if (sc.ccwIAddr & 0x7ff) == 0x000 {
 				sc.ccwAddr += 4
-				if t, err := readFullWord(cu, sc, sc.ccwAddr); err {
+				t, err := readFullWord(cu, sc, sc.ccwAddr)
+				if err {
 					return true
-				} else {
-					sc.ccwIAddr = t & M.AMASK
 				}
+				sc.ccwIAddr = t & M.AMASK
 			}
 		}
 		sc.chanByte = uint8(sc.ccwIAddr & 3)
@@ -547,7 +544,7 @@ func nextAddress(cu *chanDev, sc *chanCtl) bool {
 	return false
 }
 
-// Signal end of transfer by device
+// Signal end of transfer by device.
 func ChanEnd(devNum uint16, flags uint8) {
 	var sc *chanCtl
 
@@ -585,7 +582,6 @@ func ChanEnd(devNum uint16, flags uint8) {
 
 	cu.irqPending = true
 	IrqPending = true
-
 }
 
 // A device wishes to inform the CPU it needs some service.
@@ -613,7 +609,7 @@ func SetDevAttn(devNum uint16, flags uint8) {
 	IrqPending = true
 }
 
-// Scan all channels and see if one is ready to start or has interrupt pending
+// Scan all channels and see if one is ready to start or has interrupt pending.
 func ChanScan(mask uint16, irqEnb bool) uint16 {
 	var sc *chanCtl
 	var cu *chanDev
@@ -629,10 +625,10 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 	IrqPending = false
 	pendDev := NoDev // Device with Pending interrupt
 	// Start with channel 0 and work through all channels
-	for i := range MAX_CHAN {
+	for i := range MaxChan {
 		cu = &chanUnit[i]
 
-		if !cu.enabled { //&& !cu.irqPending {
+		if !cu.enabled {
 			continue
 		}
 		// Mask for this channel
@@ -705,29 +701,26 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 			cu.devStatus[pendDev&0xff] = 0
 			return pendDev
 		}
-	} else {
-		if irqEnb {
-			// If interrupts are wanted, check for pending device status
-			for i := range MAX_CHAN {
-				cu = &chanUnit[i]
-				// Mask for this channel
-				imask := uint16(0x8000 >> i)
-				if !cu.irqPending || (imask&mask) == 0 {
-					continue
+	} else if irqEnb {
+		// If interrupts are wanted, check for pending device status
+		for i := range MaxChan {
+			cu = &chanUnit[i]
+			// Mask for this channel
+			imask := uint16(0x8000 >> i)
+			if !cu.irqPending || (imask&mask) == 0 {
+				continue
+			}
+			cu.irqPending = false
+			for j := range 256 {
+				// Look for device with pending status
+				if cu.devStatus[j] != 0 {
+					cu.irqPending = true
+					IrqPending = true
+					M.SetMemory(0x44, uint32(cu.devStatus[j])<<24)
+					M.SetMemory(0x40, 0)
+					cu.devStatus[j] = 0
+					return (i << 8) | uint16(j)
 				}
-				cu.irqPending = false
-				for j := range 256 {
-					// Look for device with pending status
-					if cu.devStatus[j] != 0 {
-						cu.irqPending = true
-						IrqPending = true
-						M.SetMemory(0x44, uint32(cu.devStatus[j])<<24)
-						M.SetMemory(0x40, 0)
-						cu.devStatus[j] = 0
-						return uint16((i << 8)) | uint16(j)
-					}
-				}
-
 			}
 		}
 	}
@@ -736,15 +729,15 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 }
 
 // IPL a device.
-func BootDevice(dev_num uint16) bool {
-	ch := (dev_num >> 8)
-	if ch > MAX_CHAN {
+func BootDevice(devNum uint16) bool {
+	ch := (devNum >> 8)
+	if ch > MaxChan {
 		return true
 	}
 	ch &= 0xf
-	d := dev_num & 0xff
+	d := devNum & 0xff
 
-	sc := findSubChannel(dev_num)
+	sc := findSubChannel(devNum)
 
 	cu := &chanUnit[ch]
 	// Check if channel disabled
@@ -764,7 +757,7 @@ func BootDevice(dev_num uint16) bool {
 	sc.chanStatus = 0
 	sc.dev = cu.devTab[d]
 	sc.caw = 0x8
-	sc.devAddr = dev_num
+	sc.devAddr = devNum
 	sc.ccwCount = 24
 	sc.ccwFlags = chainCmd | flagSLI
 	sc.ccwAddr = 0
@@ -780,18 +773,18 @@ func BootDevice(dev_num uint16) bool {
 		sc.ccwFlags = 0
 		return true
 	}
-	Loading = dev_num
+	Loading = devNum
 	return false
 }
 
-// Add a device at given address
-func AddDevice(dev Device, dev_num uint16) bool {
-	ch := (dev_num >> 8)
-	if ch > MAX_CHAN {
+// Add a device at given address.
+func AddDevice(dev Device, devNum uint16) bool {
+	ch := (devNum >> 8)
+	if ch > MaxChan {
 		return true
 	}
 	ch &= 0xf
-	d := dev_num & 0xff
+	d := devNum & 0xff
 
 	cu := &chanUnit[ch]
 	// Check if channel disabled
@@ -803,22 +796,22 @@ func AddDevice(dev Device, dev_num uint16) bool {
 	return false
 }
 
-// Delete a device at a given address
-func DelDevice(dev_num uint16) {
-	ch := (dev_num >> 8)
-	if ch > MAX_CHAN {
+// Delete a device at a given address.
+func DelDevice(devNum uint16) {
+	ch := (devNum >> 8)
+	if ch > MaxChan {
 		return
 	}
 	ch &= 0xf
-	d := dev_num & 0xff
+	d := devNum & 0xff
 	cu := &chanUnit[ch]
 	cu.devTab[d] = nil
 }
 
-// Enable a channel of a given type
-func AddChannel(chan_num uint16, ty int, subchan int) {
-	if chan_num <= MAX_CHAN {
-		cu := &chanUnit[chan_num]
+// Enable a channel of a given type.
+func AddChannel(chanNum uint16, ty int, subchan int) {
+	if chanNum <= MaxChan {
+		cu := &chanUnit[chanNum]
 		cu.enabled = true
 		cu.chanType = ty
 		switch ty {
@@ -834,10 +827,9 @@ func AddChannel(chan_num uint16, ty int, subchan int) {
 	}
 }
 
-// Initialize all channels and clear any device assignments
+// Initialize all channels and clear any device assignments.
 func InitializeChannels() {
-	//var d *D.Device = nil
-	for i := range MAX_CHAN {
+	for i := range MaxChan {
 		cu := &chanUnit[i]
 		cu.enabled = false
 		cu.irqPending = false
@@ -858,10 +850,10 @@ func InitializeChannels() {
    128 - +6    0x1xx - 0x6xx
 */
 
-// Look up device to find subchannel device is on
+// Look up device to find subchannel device is on.
 func findSubChannel(devNum uint16) *chanCtl {
 	ch := (devNum >> 8) & 0xf
-	if ch > MAX_CHAN {
+	if ch > MaxChan {
 		return nil
 	}
 	device := int(devNum & 0xff)
@@ -902,7 +894,7 @@ func storeCSW(ch *chanCtl) {
 func loadCCW(cu *chanDev, sc *chanCtl, ticOk bool) bool {
 	var word uint32
 	var err bool
-	var cmdFlag bool = false
+	var cmdFlag bool
 	var chain bool
 
 loop:
@@ -912,8 +904,7 @@ loop:
 		sc.chainFlg = false
 		cmdFlag = true
 	} else {
-
-		// Abort if ccw not on double word boundry
+		// Abort if ccw not on double word boundary
 		if (sc.caw & 0x7) != 0 {
 			sc.chanStatus = statusPCHK
 			return true
@@ -1061,8 +1052,8 @@ loop:
 	return false
 }
 
-// Read a fill word from memory
-// Return true if fail and false if success
+// Read a fill word from memory.
+// Return true if fail and false if success.
 func readFullWord(cu *chanDev, sc *chanCtl, addr uint32) (uint32, bool) {
 	if !M.CheckAddr(addr) {
 		sc.chanStatus |= statusPCHK
@@ -1083,8 +1074,8 @@ func readFullWord(cu *chanDev, sc *chanCtl, addr uint32) (uint32, bool) {
 	return w, false
 }
 
-// Read a word into channel buffer
-// Return true if fail, false if success
+// Read a word into channel buffer.
+// Return true if fail, false if success.
 func readBuffer(cu *chanDev, sc *chanCtl) bool {
 	var addr uint32
 
@@ -1093,18 +1084,18 @@ func readBuffer(cu *chanDev, sc *chanCtl) bool {
 	} else {
 		addr = sc.ccwAddr
 	}
-	if word, err := readFullWord(cu, sc, addr); err {
+	word, err := readFullWord(cu, sc, addr)
+	if err {
 		sc.chanByte = bufEnd
 		return err
-	} else {
-		sc.chanBuffer = word
-		sc.chanByte = uint8(addr & 3)
 	}
+	sc.chanBuffer = word
+	sc.chanByte = uint8(addr & 3)
 	return false
 }
 
-// Write channel buffer to memory
-// Return true if fail, false if success
+// Write channel buffer to memory.
+// Return true if fail, false if success.
 func writeBuffer(cu *chanDev, sc *chanCtl) bool {
 	var addr uint32
 

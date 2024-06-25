@@ -23,13 +23,13 @@
 
    These units each buffer one record in local memory and signal
    ready when the buffer is full or empty. The channel must be
-   ready to recieve/transmit data when they are activated since
+   ready to receive/transmit data when they are activated since
    they will transfer their block during chan_cmd. All data is
    transmitted as BCD characters.
 
 */
 
-package model2540P
+package model2540p
 
 import (
 	ev "github.com/rcornwell/S370/emu/event"
@@ -37,7 +37,7 @@ import (
 	card "github.com/rcornwell/S370/util/card"
 )
 
-type Model2540P_ctx struct {
+type Model2540Pctx struct {
 	addr  uint16            // Current device address
 	col   int               // Current column
 	busy  bool              // Reader busy
@@ -51,14 +51,14 @@ type Model2540P_ctx struct {
 	ctx   *card.CardContext // Context for card reader.
 }
 
-// Handle start of CCW chain
-func (d *Model2540P_ctx) StartIO() uint8 {
+// Handle start of CCW chain.
+func (d *Model2540Pctx) StartIO() uint8 {
 	return 0
 }
 
 // Start the card punch to punch one card.
-func (d *Model2540P_ctx) StartCmd(cmd uint8) uint8 {
-	var r uint8 = 0
+func (d *Model2540Pctx) StartCmd(cmd uint8) uint8 {
+	var r uint8
 
 	// If busy return busy status right away
 	if d.busy {
@@ -66,7 +66,7 @@ func (d *Model2540P_ctx) StartCmd(cmd uint8) uint8 {
 	}
 
 	// Decode command
-	switch cmd & 07 {
+	switch cmd & 0o7 {
 	case 0:
 		return 0
 	// Punch a card.
@@ -97,7 +97,6 @@ func (d *Model2540P_ctx) StartCmd(cmd uint8) uint8 {
 		r = ch.CStatusChnEnd | ch.CStatusDevEnd
 		if cmd != ch.CmdCTL {
 			d.sense |= ch.SenseCMDREJ
-
 		}
 		if !d.ctx.Attached() {
 			d.sense = ch.SenseINTVENT
@@ -114,15 +113,14 @@ func (d *Model2540P_ctx) StartCmd(cmd uint8) uint8 {
 	return r
 }
 
-// Handle HIO instruction
-func (d *Model2540P_ctx) HaltIO() uint8 {
+// Handle HIO instruction.
+func (d *Model2540Pctx) HaltIO() uint8 {
 	d.halt = true
 	return 1
 }
 
 // Initialize a device.
-func (d *Model2540P_ctx) InitDev() uint8 {
-
+func (d *Model2540Pctx) InitDev() uint8 {
 	d.count = 0
 	d.sense = 0
 	d.busy = false
@@ -132,7 +130,8 @@ func (d *Model2540P_ctx) InitDev() uint8 {
 	return 0
 }
 
-func (d *Model2540P_ctx) callback(cmd int) {
+// Process card punch operations.
+func (d *Model2540Pctx) callback(cmd int) {
 	if cmd == int(ch.CmdSense) {
 		d.busy = false
 		d.halt = false
@@ -144,7 +143,7 @@ func (d *Model2540P_ctx) callback(cmd int) {
 	// If ready, punch out current card.
 	if d.rdy {
 		switch d.ctx.PunchCard(d.image) {
-		case card.CARD_OK:
+		case card.CardOK:
 			ch.SetDevAttn(d.addr, ch.CStatusDevEnd)
 		default:
 			ch.SetDevAttn(d.addr, ch.CStatusDevEnd|ch.CStatusCheck)
@@ -162,9 +161,9 @@ func (d *Model2540P_ctx) callback(cmd int) {
 
 		c, err = ch.ChanReadByte(d.addr)
 		if err {
-			d.rdy = true
+			d.rdy = false
 		} else {
-			d.image.Image[d.col] = card.EbcdicToHol(c)
+			d.image.Image[d.col] = card.EBCDICToHol(c)
 			d.col++
 			if d.col == 80 {
 				d.rdy = true
@@ -173,9 +172,9 @@ func (d *Model2540P_ctx) callback(cmd int) {
 	}
 	if d.rdy {
 		ch.ChanEnd(d.addr, ch.CStatusChnEnd)
-		ev.AddEvent(d, d.callback, 1000, int(cmd))
+		ev.AddEvent(d, d.callback, 1000, cmd)
 		d.rdy = true
 	} else {
-		ev.AddEvent(d, d.callback, 100, int(cmd))
+		ev.AddEvent(d, d.callback, 100, cmd)
 	}
 }

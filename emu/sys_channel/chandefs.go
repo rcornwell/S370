@@ -1,5 +1,5 @@
 /*
- * S370 - Channel Channel definitions
+ * S370 - Channel definitions
  *
  * Copyright 2024, Richard Cornwell
  *
@@ -23,13 +23,13 @@
  *
  */
 
-package sys_channel
+package syschannel
 
 import (
 	D "github.com/rcornwell/S370/emu/device"
 )
 
-// Interface for devices to handle commands
+// Interface for devices to handle commands.
 type Device interface {
 	StartIO() uint8
 	StartCmd(cmd uint8) uint8
@@ -37,7 +37,7 @@ type Device interface {
 	InitDev() uint8
 }
 
-// Holds individual subchannel control information
+// Holds individual subchannel control information.
 type chanCtl struct { // Channel control structure
 	dev        D.Device // Pointer to device interface
 	caw        uint32   // Channel command address word
@@ -55,7 +55,7 @@ type chanCtl struct { // Channel control structure
 	chainFlg   bool     // Holding on chain
 }
 
-// Holds channel information
+// Holds channel information.
 type chanDev struct { // Channel information
 	devTab     [256]D.Device // Pointer to device interfaces
 	devStatus  [256]uint8    // Status from each device
@@ -66,11 +66,13 @@ type chanDev struct { // Channel information
 	enabled    bool          // Channel enabled
 }
 
-var IrqPending bool
-var Loading uint16 = NoDev
+var (
+	IrqPending bool
+	Loading    = NoDev
+)
 
 const (
-	MAX_CHAN uint16 = 12 // Max number of channels
+	MaxChan  uint16 = 12 // Max number of channels
 	TypeDis  int    = 0  // Channel disabled
 	TypeSel  int    = 1  // Selector channel
 	TypeMux  int    = 2  // Mulitplexer channel
@@ -91,13 +93,13 @@ const (
 	chainCmd  uint16 = 0x4000 // Chain command
 	flagSLI   uint16 = 0x2000 // Suppress length indicator
 	flagSkip  uint16 = 0x1000 // Suppress memory write
-	flagPCI   uint16 = 0x0800 // Program controled interrupt
+	flagPCI   uint16 = 0x0800 // Program controlled interrupt
 	flagIDA   uint16 = 0x0400 // Channel indirect
 
 	bufEmpty uint8 = 0x04 // Buffer is empty
 	bufEnd   uint8 = 0x10 // Device has returned channel end, no more data
 
-	// Common Channel sense bytes
+	// Common Channel sense bytes.
 	CStatusAttn   uint8 = 0x80 // Unit attention
 	CStatusSMS    uint8 = 0x40 // Status modifier
 	CStatusCtlEnd uint8 = 0x20 // Control unit end
@@ -107,9 +109,9 @@ const (
 	CStatusCheck  uint8 = 0x02 // Unit check
 	CStatusExpt   uint8 = 0x01 // Unit exception
 
-	// Command masks
-	//CMD_TYPE uint8 = 0x3 // Type mask
-	//	CMD_CHAN  uint8 = 0x0 // Channel command
+	// Command masks.
+	// CMD_TYPE uint8 = 0x3 // Type mask.
+	// CMD_CHAN  uint8 = 0x0 // Channel command.
 	CmdWrite uint8 = 0x1 // Write command
 	CmdRead  uint8 = 0x2 // Read command
 	CmdCTL   uint8 = 0x3 // Control command
@@ -117,7 +119,7 @@ const (
 	CmdTIC   uint8 = 0x8 // Transfer in channel
 	CmdRDBWD uint8 = 0xc // Read backward
 
-	// Channel status information
+	// Channel status information.
 	statusAttn   uint16 = 0x8000 // Device raised attention
 	statusSMS    uint16 = 0x4000 // Status modifier
 	statusCtlEnd uint16 = 0x2000 // Control end
@@ -125,8 +127,8 @@ const (
 	statusChnEnd uint16 = 0x0800 // Channel end
 	statusDevEnd uint16 = 0x0400 // Device end
 	statusCheck  uint16 = 0x0200 // Unit check
-	statusExcept uint16 = 0x0100 // Unit excpetion
-	statusPCI    uint16 = 0x0080 // Program interupt
+	statusExcept uint16 = 0x0100 // Unit excpretion
+	statusPCI    uint16 = 0x0080 // Program interrupt
 	statusLength uint16 = 0x0040 // Incorrect length
 	statusPCHK   uint16 = 0x0020 // Program check
 	statusProt   uint16 = 0x0010 // Protection check
@@ -137,7 +139,7 @@ const (
 
 	NoDev uint16 = 0xffff // Code for no device
 
-	// Basic sense information
+	// Basic sense information.
 	SenseCMDREJ  uint8 = 0x80 // Command reject
 	SenseINTVENT uint8 = 0x40 // Unit intervention required
 	SenseBUSCHK  uint8 = 0x20 // Parity error on bus

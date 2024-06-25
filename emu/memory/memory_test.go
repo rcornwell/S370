@@ -29,9 +29,8 @@ import (
 	"testing"
 )
 
-// Set size in K
+// Set size in K.
 func TestSetSize(t *testing.T) {
-
 	for i := range 32 {
 		SetSize(i)
 		r := memory.size
@@ -58,7 +57,7 @@ func TestSetSize(t *testing.T) {
 	}
 }
 
-// Check get memory
+// Check get memory.
 func TestGetMemory(t *testing.T) {
 	memory.size = 2048
 	for i := range uint32(256) {
@@ -96,7 +95,7 @@ func TestGetMemory(t *testing.T) {
 	}
 }
 
-// Check get memory
+// Check get memory.
 func TestSetMemory(t *testing.T) {
 	memory.size = 2048
 	for i := range uint32(256) {
@@ -141,7 +140,7 @@ func TestSetMemory(t *testing.T) {
 	}
 }
 
-// Check set memory under mask
+// Check set memory under mask.
 func TestSetMemoryMask(t *testing.T) {
 	memory.size = 2048
 	for i := range uint32(256) {
@@ -188,7 +187,7 @@ func TestSetMemoryMask(t *testing.T) {
 	}
 }
 
-// Check get memory word
+// Check get memory word.
 func TestGetWprd(t *testing.T) {
 	memory.size = 2048
 	for i := range uint32(256) {
@@ -235,7 +234,7 @@ func TestGetWprd(t *testing.T) {
 	}
 }
 
-// Check set memory word
+// Check set memory word.
 func TestPutWord(t *testing.T) {
 	memory.size = 2048
 	for i := range uint32(256) {
@@ -286,7 +285,7 @@ func TestPutWord(t *testing.T) {
 	}
 }
 
-// Check set memory under mask
+// Check set memory under mask.
 func TestPutWordMask(t *testing.T) {
 	memory.size = 2048
 	for i := range uint32(256) {
@@ -339,7 +338,7 @@ func TestPutWordMask(t *testing.T) {
 	}
 }
 
-// Check get memory
+// Check get memory.
 func TestCheckAddr(t *testing.T) {
 	memory.size = 2048
 
@@ -354,7 +353,7 @@ func TestCheckAddr(t *testing.T) {
 	}
 }
 
-// Check set memory word
+// Check set memory word.
 func TestGetKey(t *testing.T) {
 	memory.size = 4096
 	for i := range uint32(2048) {

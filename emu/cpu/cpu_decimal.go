@@ -24,20 +24,20 @@
 package cpu
 
 // Load decimal number into temp storage
-// return error or zero
-func (cpu *cpu) decLoad(data *[32]uint8, addr uint32, len uint8, sign *bool) uint16 {
-	var err uint16 = 0
+// return error or zero.
+func (cpu *cpu) decLoad(data *[32]uint8, addr uint32, length uint8, sign *bool) uint16 {
+	var err uint16
 	var t uint32
 
-	a := addr + uint32(len)
+	a := addr + uint32(length)
 	// Clear result
-	for i := range len {
+	for i := range length {
 		data[i] = 0
 	}
 
 	j := 0
 	// Read into data backwards
-	for range len {
+	for range length {
 		t, err = cpu.readByte(a)
 		if err != 0 {
 			return err
@@ -70,11 +70,11 @@ func (cpu *cpu) decLoad(data *[32]uint8, addr uint32, len uint8, sign *bool) uin
 }
 
 // Store decimal number into memory
-// return error code
-func (cpu *cpu) decStore(data [32]uint8, addr uint32, len uint8) uint16 {
-	a := addr + uint32(len)
+// return error code.
+func (cpu *cpu) decStore(data [32]uint8, addr uint32, length uint8) uint16 {
+	a := addr + uint32(length)
 	j := 0
-	for range len {
+	for range length {
 		t := data[j] & 0xf
 		j++
 		t |= (data[j] & 0xf) << 4
@@ -87,8 +87,8 @@ func (cpu *cpu) decStore(data [32]uint8, addr uint32, len uint8) uint16 {
 	return 0
 }
 
-// Add or subtract a pair of BCD numbers
-func dec_add(l uint8, addsub bool, v1 *[32]uint8, v2 *[32]uint8) (uint8, bool) {
+// Add or subtract a pair of BCD numbers.
+func decAdd(l uint8, addsub bool, v1 *[32]uint8, v2 *[32]uint8) (uint8, bool) {
 	var cy uint8
 	var z bool
 	if addsub {
@@ -115,7 +115,8 @@ func dec_add(l uint8, addsub bool, v1 *[32]uint8, v2 *[32]uint8) (uint8, bool) {
 	return cy, z
 }
 
-func dec_recomp(l uint8, v1 *[32]uint8) bool {
+// Recomplement a number for decimal add.
+func decRecomp(l uint8, v1 *[32]uint8) bool {
 	// We need to recomplent the result
 	cy := uint8(1)
 	z := true
@@ -173,12 +174,11 @@ func (cpu *cpu) opDecAdd(step *stepInfo) uint16 {
 	if (step.opcode & 3) != 0 {
 		if err = cpu.decLoad(&v1, a1, l1, &s1); err != 0 {
 			return err
-		} else {
-			for i := range 32 {
-				v1[i] = 0
-			}
-			s1 = false
 		}
+		for i := range 32 {
+			v1[i] = 0
+		}
+		s1 = false
 	}
 
 	if s1 != s2 {
@@ -187,8 +187,7 @@ func (cpu *cpu) opDecAdd(step *stepInfo) uint16 {
 		addsub = false
 	}
 
-	cy, z = dec_add(l, addsub, &v1, &v2)
-
+	cy, z = decAdd(l, addsub, &v1, &v2)
 	if cy != 0 {
 		if addsub {
 			s1 = !s1
@@ -198,7 +197,7 @@ func (cpu *cpu) opDecAdd(step *stepInfo) uint16 {
 	} else {
 		if addsub {
 			// We need to recomplent the result
-			z = dec_recomp(l, &v1)
+			z = decRecomp(l, &v1)
 		}
 	}
 
@@ -243,12 +242,12 @@ func (cpu *cpu) opDecAdd(step *stepInfo) uint16 {
 	return err
 }
 
-// Handle SRP instruction
+// Handle SRP instruction.
 func (cpu *cpu) opSRP(step *stepInfo) uint16 {
 	var err uint16
 	var v1 [32]uint8
 	var s1 bool
-	var cy uint8 = 0
+	var cy uint8
 	var i, j int
 
 	ov := false
@@ -343,8 +342,8 @@ func (cpu *cpu) opSRP(step *stepInfo) uint16 {
 	return err
 }
 
-// Step for multiply decimal number
-func dec_mulstep(l int, s1 int, v1 *[32]uint8, v2 *[32]uint8) {
+// Step for multiply decimal number.
+func decMulstep(l int, s1 int, v1 *[32]uint8, v2 *[32]uint8) {
 	var cy uint8
 	cy = 0
 	s2 := 1
@@ -360,7 +359,7 @@ func dec_mulstep(l int, s1 int, v1 *[32]uint8, v2 *[32]uint8) {
 	}
 }
 
-// Decimal multiply
+// Decimal multiply.
 func (cpu *cpu) opMP(step *stepInfo) uint16 {
 	var err uint16
 	var v1 [32]uint8
@@ -404,7 +403,7 @@ func (cpu *cpu) opMP(step *stepInfo) uint16 {
 		v1[j] = 0
 		for mul != 0 {
 			// Add multiplier to miltiplican
-			dec_mulstep(l1, j, &v1, &v2)
+			decMulstep(l1, j, &v1, &v2)
 			mul--
 		}
 	}
@@ -416,7 +415,7 @@ func (cpu *cpu) opMP(step *stepInfo) uint16 {
 	return cpu.decStore(v1, step.address1, uint8(l1))
 }
 
-// BCD Packed Divide instruction
+// BCD Packed Divide instruction.
 func (cpu *cpu) opDP(step *stepInfo) uint16 {
 	var err uint16
 	var v1 [32]uint8

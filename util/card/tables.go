@@ -25,7 +25,7 @@
 
 package card
 
-// Character conversion tables
+// Character conversion tables.
 
 var asciiToHol26 = [128]uint16{
 	/* Control                              */
@@ -71,7 +71,7 @@ var asciiToHol26 = [128]uint16{
 	0x604, 0x602, 0x601, 0x406, 0x806, 0x805, 0x005, 0xf000,
 }
 
-// Set for IBM 029 codes
+// Set for IBM 029 codes.
 var asciiToHol29 = [128]uint16{
 	/* Control                              */
 	0xf000, 0xf000, 0xf000, 0xf000, 0xf000, 0xf000, 0xf000, 0xf000, /*0-37*/
@@ -116,7 +116,7 @@ var asciiToHol29 = [128]uint16{
 	0x604, 0x602, 0x601, 0x406, 0x806, 0x805, 0xF02, 0xf000,
 }
 
-// Ascii codes to IBM EBCDIC punch codes
+// Ascii codes to IBM EBCDIC punch codes.
 var asciiToHolEbcdic = [128]uint16{
 	/* Control                              */
 	0xf000, 0xf000, 0xf000, 0xf000, 0xf000, 0xf000, 0xf000, 0xf000, /*0-37*/
@@ -161,7 +161,7 @@ var asciiToHolEbcdic = [128]uint16{
 	0x604, 0x602, 0x601, 0x902, 0x806, 0x502, 0xF02, 0xf000,
 }
 
-/* IBM EBCDIC codes to IBM punch codes */
+// IBM EBCDIC codes to IBM punch codes.
 var ebcdicToHolTable = [256]uint16{
 	/*  T918    T91    T92    T93    T94    T95    T96   T97   0x0x */
 	0xB03, 0x901, 0x881, 0x841, 0x821, 0x811, 0x809, 0x805,
@@ -228,6 +228,7 @@ var ebcdicToHolTable = [256]uint16{
 	/* 8        9     TE0928 TE0938 TE0948 TE0958 TE0968 TE0978  */
 	0x002, 0x001, 0xE83, 0xE43, 0xE23, 0xE13, 0xE0B, 0xE07,
 }
+
 var asciiToSix = [128]int8{
 	/* Control                              */
 	-1, -1, -1, -1, -1, -1, -1, -1, /* 0 - 37 */
@@ -238,32 +239,34 @@ var asciiToSix = [128]int8{
 	/* Control                              */
 	-1, -1, -1, -1, -1, -1, -1, -1,
 	/*sp    !    "    #    $    %    &    ' */
-	000, 052, -1, 032, 053, 017, 060, 014, /* 40 - 77 */
+	0o00, 0o52, -1, 0o32, 0o53, 0o17, 0o60, 0o14, /* 40 - 77 */
 	/* (    )    *    +    ,    -    .    / */
-	034, 074, 054, 060, 033, 040, 073, 021,
+	0o34, 0o74, 0o54, 0o60, 0o33, 0o40, 0o73, 0o21,
 	/* 0    1    2    3    4    5    6    7 */
-	012, 001, 002, 003, 004, 005, 006, 007,
+	0o12, 0o01, 0o02, 0o03, 0o04, 0o05, 0o06, 0o07,
 	/* 8    9    :    ;    <    =    >    ? */
-	010, 011, 015, 056, 076, 013, 016, 072,
+	0o10, 0o11, 0o15, 0o56, 0o76, 0o13, 0o16, 0o72,
 	/* @    A    B    C    D    E    F    G */
-	014, 061, 062, 063, 064, 065, 066, 067, /* 100 - 137 */
+	0o14, 0o61, 0o62, 0o63, 0o64, 0o65, 0o66, 0o67, /* 100 - 137 */
 	/* H    I    J    K    L    M    N    O */
-	070, 071, 041, 042, 043, 044, 045, 046,
+	0o70, 0o71, 0o41, 0o42, 0o43, 0o44, 0o45, 0o46,
 	/* P    Q    R    S    T    U    V    W */
-	047, 050, 051, 022, 023, 024, 025, 026,
+	0o47, 0o50, 0o51, 0o22, 0o23, 0o24, 0o25, 0o26,
 	/* X    Y    Z    [    \    ]    ^    _ */
-	027, 030, 031, 075, 036, 055, 057, 020,
+	0o27, 0o30, 0o31, 0o75, 0o36, 0o55, 0o57, 0o20,
 	/* `    a    b    c    d    e    f    g */
-	035, 061, 062, 063, 064, 065, 066, 067, /* 140 - 177 */
+	0o35, 0o61, 0o62, 0o63, 0o64, 0o65, 0o66, 0o67, /* 140 - 177 */
 	/* h    i    j    k    l    m    n    o */
-	070, 071, 041, 042, 043, 044, 045, 046,
+	0o70, 0o71, 0o41, 0o42, 0o43, 0o44, 0o45, 0o46,
 	/* p    q    r    s    t    u    v    w */
-	047, 050, 051, 022, 023, 024, 025, 026,
+	0o47, 0o50, 0o51, 0o22, 0o23, 0o24, 0o25, 0o26,
 	/* x    y    z    {    |    }    ~   del*/
-	027, 030, 031, 057, 077, 017, -1, -1,
+	0o27, 0o30, 0o31, 0o57, 0o77, 0o17, -1, -1,
 }
 
-// Back tables which are automatically generated
-var holToAsciiTable26 [4096]uint8
-var holToAsciiTable29 [4096]uint8
-var holToEbcdicTable [4096]uint16
+// Back tables which are automatically generated.
+var (
+	holToASCIITable26 [4096]uint8
+	holToASCIITable29 [4096]uint8
+	holToEBCDICTable  [4096]uint16
+)

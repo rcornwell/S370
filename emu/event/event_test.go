@@ -1,5 +1,3 @@
-package event
-
 /*
  * S370 - Event system test cases.
  *
@@ -25,52 +23,56 @@ package event
  *
  */
 
+package event
+
 import (
 	"testing"
 )
 
-var step_count uint64
+var stepCount uint64
 
 type device struct {
 	iarg int
 	time uint64
 }
 
-var device_a device
-var device_b device
-var device_c device
-var device_d device
+var (
+	deviceA device
+	deviceB device
+	deviceC device
+	deviceD device
+)
 
-// Callbacks, save step count in routine time and set argument to iarg
-func (d *device) a_callback(iarg int) {
+// Callbacks, save step count in routine time and set argument to iarg.
+func (d *device) aCallback(iarg int) {
 	d.iarg = iarg
-	d.time = step_count
+	d.time = stepCount
 }
 
-// Callbacks, save step count in routine time and set argument to iarg
-func (d *device) b_callback(iarg int) {
+// Callbacks, save step count in routine time and set argument to iarg.
+func (d *device) bCallback(iarg int) {
 	d.iarg = iarg
-	d.time = step_count
+	d.time = stepCount
 }
 
-// Callbacks, save step count in routine time and set argument to iarg
-func (d *device) c_callback(iarg int) {
+// Callbacks, save step count in routine time and set argument to iarg.
+func (d *device) cCallback(iarg int) {
 	d.iarg = iarg
-	d.time = step_count
-	AddEvent(device_a, device_a.a_callback, iarg, iarg)
+	d.time = stepCount
+	AddEvent(deviceA, deviceA.aCallback, iarg, iarg)
 }
 
-// Callbacks, save step count in routine time and set argument to iarg
-func (d *device) d_callback(iarg int) {
+// Callbacks, save step count in routine time and set argument to iarg.
+func (d *device) dCallback(iarg int) {
 	d.iarg = iarg
-	d.time = step_count
+	d.time = stepCount
 }
 
 func (d device) StartIO() uint8 {
 	return 0
 }
 
-func (d device) StartCmd(cmd uint8) uint8 {
+func (d device) StartCmd(_ uint8) uint8 {
 	return 0
 }
 
@@ -81,257 +83,258 @@ func (d device) HaltIO() uint8 {
 func (d device) InitDev() uint8 {
 	return 0
 }
+
 func initTest() {
-	step_count = 0
-	device_a.time = 0
-	device_b.time = 0
-	device_c.time = 0
-	device_d.time = 0
-	device_a.iarg = 0
-	device_b.iarg = 0
-	device_c.iarg = 0
-	device_d.iarg = 0
+	stepCount = 0
+	deviceA.time = 0
+	deviceB.time = 0
+	deviceC.time = 0
+	deviceD.time = 0
+	deviceA.iarg = 0
+	deviceB.iarg = 0
+	deviceC.iarg = 0
+	deviceD.iarg = 0
 }
 
 func TestAddEvent1(t *testing.T) {
 	initTest()
-	AddEvent(device_a, device_a.a_callback, 10, 1)
+	AddEvent(deviceA, deviceA.aCallback, 10, 1)
 	for range 20 {
-		step_count++
+		stepCount++
 		Advance(1)
 	}
-	if device_a.time != 10 {
-		t.Errorf("Event did not fire at correct time %d got %d", 10, device_a.time)
+	if deviceA.time != 10 {
+		t.Errorf("Event did not fire at correct time %d got %d", 10, deviceA.time)
 	}
-	if device_a.iarg != 1 {
-		t.Errorf("Event did not set data correct %d got %d", 1, device_a.iarg)
+	if deviceA.iarg != 1 {
+		t.Errorf("Event did not set data correct %d got %d", 1, deviceA.iarg)
 	}
 }
 
 // Add two events.
 func TestAddEvent2(t *testing.T) {
 	initTest()
-	AddEvent(device_a, device_a.a_callback, 10, 1)
-	AddEvent(device_b, device_b.b_callback, 5, 2)
+	AddEvent(deviceA, deviceA.aCallback, 10, 1)
+	AddEvent(deviceB, deviceB.bCallback, 5, 2)
 	for range 20 {
-		step_count++
+		stepCount++
 		Advance(1)
 	}
-	if device_a.time != 10 {
-		t.Errorf("Event A did not fire at correct time %d got %d", 10, device_a.time)
+	if deviceA.time != 10 {
+		t.Errorf("Event A did not fire at correct time %d got %d", 10, deviceA.time)
 	}
-	if device_a.iarg != 1 {
-		t.Errorf("Event A did not set data correct %d got %d", 1, device_a.iarg)
+	if deviceA.iarg != 1 {
+		t.Errorf("Event A did not set data correct %d got %d", 1, deviceA.iarg)
 	}
-	if device_b.time != 5 {
-		t.Errorf("Event B did not fire at correct time %d got %d", 5, device_b.time)
+	if deviceB.time != 5 {
+		t.Errorf("Event B did not fire at correct time %d got %d", 5, deviceB.time)
 	}
-	if device_b.iarg != 2 {
-		t.Errorf("Event B did not set data correct %d got %d", 2, device_b.iarg)
+	if deviceB.iarg != 2 {
+		t.Errorf("Event B did not set data correct %d got %d", 2, deviceB.iarg)
 	}
 }
 
 // Add two events.
 func TestAddEvent2a(t *testing.T) {
 	initTest()
-	AddEvent(device_a, device_a.a_callback, 10, 1)
-	AddEvent(device_b, device_b.a_callback, 5, 2)
+	AddEvent(deviceA, deviceA.aCallback, 10, 1)
+	AddEvent(deviceB, deviceB.aCallback, 5, 2)
 	for range 20 {
-		step_count++
+		stepCount++
 		Advance(1)
 	}
-	if device_a.time != 10 {
-		t.Errorf("Event A did not fire at correct time %d got %d", 10, device_a.time)
+	if deviceA.time != 10 {
+		t.Errorf("Event A did not fire at correct time %d got %d", 10, deviceA.time)
 	}
-	if device_a.iarg != 1 {
-		t.Errorf("Event A did not set data correct %d got %d", 1, device_a.iarg)
+	if deviceA.iarg != 1 {
+		t.Errorf("Event A did not set data correct %d got %d", 1, deviceA.iarg)
 	}
-	if device_b.time != 5 {
-		t.Errorf("Event B did not fire at correct time %d got %d", 5, device_b.time)
+	if deviceB.time != 5 {
+		t.Errorf("Event B did not fire at correct time %d got %d", 5, deviceB.time)
 	}
-	if device_b.iarg != 2 {
-		t.Errorf("Event B did not set data correct %d got %d", 2, device_b.iarg)
+	if deviceB.iarg != 2 {
+		t.Errorf("Event B did not set data correct %d got %d", 2, deviceB.iarg)
 	}
 }
 
-// Add event With same time
+// Add event With same time.
 func TestAddEvent3(t *testing.T) {
 	initTest()
-	AddEvent(device_a, device_a.a_callback, 10, 1)
-	AddEvent(device_b, device_b.b_callback, 10, 2)
+	AddEvent(deviceA, deviceA.aCallback, 10, 1)
+	AddEvent(deviceB, deviceB.bCallback, 10, 2)
 	for range 20 {
-		step_count++
+		stepCount++
 		Advance(1)
 	}
-	if device_a.time != 10 {
-		t.Errorf("Event A did not fire at correct time %d got %d", 10, device_a.time)
+	if deviceA.time != 10 {
+		t.Errorf("Event A did not fire at correct time %d got %d", 10, deviceA.time)
 	}
-	if device_a.iarg != 1 {
-		t.Errorf("Event A did not set data correct %d got %d", 1, device_a.iarg)
+	if deviceA.iarg != 1 {
+		t.Errorf("Event A did not set data correct %d got %d", 1, deviceA.iarg)
 	}
-	if device_b.time != 10 {
-		t.Errorf("Event B did not fire at correct time %d got %d", 10, device_b.time)
+	if deviceB.time != 10 {
+		t.Errorf("Event B did not fire at correct time %d got %d", 10, deviceB.time)
 	}
-	if device_b.iarg != 2 {
-		t.Errorf("Event B did not set data correct %d got %d", 2, device_b.iarg)
+	if deviceB.iarg != 2 {
+		t.Errorf("Event B did not set data correct %d got %d", 2, deviceB.iarg)
 	}
 }
 
 // Add event during event.
 func TestAddEvent4(t *testing.T) {
 	initTest()
-	AddEvent(device_a, device_a.a_callback, 20, 5)
-	AddEvent(device_c, device_c.c_callback, 10, 2)
+	AddEvent(deviceA, deviceA.aCallback, 20, 5)
+	AddEvent(deviceC, deviceC.cCallback, 10, 2)
 	for range 30 {
-		step_count++
+		stepCount++
 		Advance(1)
 	}
-	if device_a.time != 20 {
-		t.Errorf("Event A did not fire at correct time %d got %d", 20, device_a.time)
+	if deviceA.time != 20 {
+		t.Errorf("Event A did not fire at correct time %d got %d", 20, deviceA.time)
 	}
-	if device_a.iarg != 5 {
-		t.Errorf("Event A did not set data correct %d got %d", 5, device_a.iarg)
+	if deviceA.iarg != 5 {
+		t.Errorf("Event A did not set data correct %d got %d", 5, deviceA.iarg)
 	}
-	if device_c.time != 10 {
-		t.Errorf("Event C did not fire at correct time %d got %d", 10, device_c.time)
+	if deviceC.time != 10 {
+		t.Errorf("Event C did not fire at correct time %d got %d", 10, deviceC.time)
 	}
-	if device_c.iarg != 2 {
-		t.Errorf("Event C did not set data correct %d got %d", 2, device_c.iarg)
+	if deviceC.iarg != 2 {
+		t.Errorf("Event C did not set data correct %d got %d", 2, deviceC.iarg)
 	}
 }
 
-// Schedule 3 events, last one before first, make sure all are correct
+// Schedule 3 events, last one before first, make sure all are correct.
 func TestAddEvent5(t *testing.T) {
 	initTest()
-	AddEvent(device_a, device_a.a_callback, 20, 1)
-	AddEvent(device_b, device_b.b_callback, 20, 2)
-	AddEvent(device_d, device_d.d_callback, 25, 3)
+	AddEvent(deviceA, deviceA.aCallback, 20, 1)
+	AddEvent(deviceB, deviceB.bCallback, 20, 2)
+	AddEvent(deviceD, deviceD.dCallback, 25, 3)
 	for range 30 {
-		step_count++
+		stepCount++
 		Advance(1)
 	}
-	if device_a.time != 20 {
-		t.Errorf("Event A did not fire at correct time %d got %d", 20, device_a.time)
+	if deviceA.time != 20 {
+		t.Errorf("Event A did not fire at correct time %d got %d", 20, deviceA.time)
 	}
-	if device_a.iarg != 1 {
-		t.Errorf("Event A did not set data correct %d got %d", 1, device_a.iarg)
+	if deviceA.iarg != 1 {
+		t.Errorf("Event A did not set data correct %d got %d", 1, deviceA.iarg)
 	}
-	if device_b.time != 20 {
-		t.Errorf("Event B did not fire at correct time %d got %d", 20, device_b.time)
+	if deviceB.time != 20 {
+		t.Errorf("Event B did not fire at correct time %d got %d", 20, deviceB.time)
 	}
-	if device_b.iarg != 2 {
-		t.Errorf("Event B did not set data correct %d got %d", 2, device_b.iarg)
+	if deviceB.iarg != 2 {
+		t.Errorf("Event B did not set data correct %d got %d", 2, deviceB.iarg)
 	}
-	if device_d.time != 25 {
-		t.Errorf("Event D did not fire at correct time %d got %d", 25, device_d.time)
+	if deviceD.time != 25 {
+		t.Errorf("Event D did not fire at correct time %d got %d", 25, deviceD.time)
 	}
-	if device_d.iarg != 3 {
-		t.Errorf("Event D did not set data correct %d got %d", 3, device_d.iarg)
+	if deviceD.iarg != 3 {
+		t.Errorf("Event D did not set data correct %d got %d", 3, deviceD.iarg)
 	}
 }
 
 // Cancel an event.
 func TestAddEvent6(t *testing.T) {
 	initTest()
-	AddEvent(device_a, device_a.a_callback, 10, 5)
-	AddEvent(device_b, device_b.b_callback, 20, 2)
+	AddEvent(deviceA, deviceA.aCallback, 10, 5)
+	AddEvent(deviceB, deviceB.bCallback, 20, 2)
 	for range 30 {
-		step_count++
+		stepCount++
 		Advance(1)
-		if device_a.iarg == 5 {
-			CancelEvent(device_b, device_b.b_callback, 2)
+		if deviceA.iarg == 5 {
+			CancelEvent(deviceB, 2)
 		}
 	}
-	if device_a.time != 10 {
-		t.Errorf("Event A did not fire at correct time %d got %d", 10, device_a.time)
+	if deviceA.time != 10 {
+		t.Errorf("Event A did not fire at correct time %d got %d", 10, deviceA.time)
 	}
-	if device_a.iarg != 5 {
-		t.Errorf("Event A did not set data correct %d got %d", 5, device_a.iarg)
+	if deviceA.iarg != 5 {
+		t.Errorf("Event A did not set data correct %d got %d", 5, deviceA.iarg)
 	}
-	if device_b.time != 0 {
-		t.Errorf("Event D did not fire at correct time %d got %d", 0, device_b.time)
+	if deviceB.time != 0 {
+		t.Errorf("Event D did not fire at correct time %d got %d", 0, deviceB.time)
 	}
-	if device_b.iarg != 0 {
-		t.Errorf("Event D did not set data correct %d got %d", 0, device_b.iarg)
+	if deviceB.iarg != 0 {
+		t.Errorf("Event D did not set data correct %d got %d", 0, deviceB.iarg)
 	}
 }
 
-// Schedule 3 events, cancel one while events in queue
+// Schedule 3 events, cancel one while events in queue.
 func TestAddEvent7(t *testing.T) {
 	initTest()
-	AddEvent(device_a, device_a.a_callback, 10, 5)
-	AddEvent(device_b, device_b.b_callback, 20, 2)
-	AddEvent(device_d, device_d.d_callback, 30, 3)
+	AddEvent(deviceA, deviceA.aCallback, 10, 5)
+	AddEvent(deviceB, deviceB.bCallback, 20, 2)
+	AddEvent(deviceD, deviceD.dCallback, 30, 3)
 	for range 30 {
-		step_count++
+		stepCount++
 		Advance(1)
-		if device_a.iarg == 5 {
-			CancelEvent(device_b, device_b.b_callback, 2)
+		if deviceA.iarg == 5 {
+			CancelEvent(deviceB, 2)
 		}
 	}
-	if device_a.time != 10 {
-		t.Errorf("Event A did not fire at correct time %d got %d", 10, device_a.time)
+	if deviceA.time != 10 {
+		t.Errorf("Event A did not fire at correct time %d got %d", 10, deviceA.time)
 	}
-	if device_a.iarg != 5 {
-		t.Errorf("Event A did not set data correct %d got %d", 5, device_a.iarg)
+	if deviceA.iarg != 5 {
+		t.Errorf("Event A did not set data correct %d got %d", 5, deviceA.iarg)
 	}
-	if device_b.time != 0 {
-		t.Errorf("Event B did not fire at correct time %d got %d", 0, device_b.time)
+	if deviceB.time != 0 {
+		t.Errorf("Event B did not fire at correct time %d got %d", 0, deviceB.time)
 	}
-	if device_b.iarg != 0 {
-		t.Errorf("Event B did not set data correct %d got %d", 0, device_b.iarg)
+	if deviceB.iarg != 0 {
+		t.Errorf("Event B did not set data correct %d got %d", 0, deviceB.iarg)
 	}
-	if device_d.time != 30 {
-		t.Errorf("Event D did not fire at correct time %d got %d", 30, device_d.time)
+	if deviceD.time != 30 {
+		t.Errorf("Event D did not fire at correct time %d got %d", 30, deviceD.time)
 	}
-	if device_d.iarg != 3 {
-		t.Errorf("Event D did not set data correct %d got %d", 3, device_d.iarg)
+	if deviceD.iarg != 3 {
+		t.Errorf("Event D did not set data correct %d got %d", 3, deviceD.iarg)
 	}
 }
 
-// Schedule 4 events, cancel two while events in queue
+// Schedule 4 events, cancel two while events in queue.
 func TestAddEvent8(t *testing.T) {
 	initTest()
-	AddEvent(device_a, device_a.a_callback, 10, 5)
-	AddEvent(device_b, device_b.b_callback, 40, 2)
-	AddEvent(device_d, device_d.d_callback, 30, 3)
-	AddEvent(device_d, device_d.d_callback, 50, 4)
+	AddEvent(deviceA, deviceA.aCallback, 10, 5)
+	AddEvent(deviceB, deviceB.bCallback, 40, 2)
+	AddEvent(deviceD, deviceD.dCallback, 30, 3)
+	AddEvent(deviceD, deviceD.dCallback, 50, 4)
 	for range 60 {
-		step_count++
+		stepCount++
 		Advance(1)
-		if device_a.iarg == 5 {
-			CancelEvent(device_b, device_b.b_callback, 2)
-			CancelEvent(device_d, device_a.d_callback, 4)
+		if deviceA.iarg == 5 {
+			CancelEvent(deviceB, 2)
+			CancelEvent(deviceD, 4)
 		}
 	}
-	if device_a.time != 10 {
-		t.Errorf("Event A did not fire at correct time %d got %d", 10, device_a.time)
+	if deviceA.time != 10 {
+		t.Errorf("Event A did not fire at correct time %d got %d", 10, deviceA.time)
 	}
-	if device_a.iarg != 5 {
-		t.Errorf("Event A did not set data correct %d got %d", 5, device_a.iarg)
+	if deviceA.iarg != 5 {
+		t.Errorf("Event A did not set data correct %d got %d", 5, deviceA.iarg)
 	}
-	if device_b.time != 0 {
-		t.Errorf("Event B did not fire at correct time %d got %d", 0, device_b.time)
+	if deviceB.time != 0 {
+		t.Errorf("Event B did not fire at correct time %d got %d", 0, deviceB.time)
 	}
-	if device_b.iarg != 0 {
-		t.Errorf("Event B did not set data correct %d got %d", 0, device_b.iarg)
+	if deviceB.iarg != 0 {
+		t.Errorf("Event B did not set data correct %d got %d", 0, deviceB.iarg)
 	}
-	if device_d.time != 30 {
-		t.Errorf("Event D did not fire at correct time %d got %d", 30, device_d.time)
+	if deviceD.time != 30 {
+		t.Errorf("Event D did not fire at correct time %d got %d", 30, deviceD.time)
 	}
-	if device_d.iarg != 3 {
-		t.Errorf("Event D did not set data correct %d got %d", 3, device_d.iarg)
+	if deviceD.iarg != 3 {
+		t.Errorf("Event D did not set data correct %d got %d", 3, deviceD.iarg)
 	}
 }
 
-// Test event at zero units
+// Test event at zero units.
 func TestAddEvent9(t *testing.T) {
 	initTest()
-	AddEvent(device_a, device_a.a_callback, 0, 5)
-	if device_a.time != 0 {
-		t.Errorf("Event A did not fire at correct time %d got %d", 10, device_a.time)
+	AddEvent(deviceA, deviceA.aCallback, 0, 5)
+	if deviceA.time != 0 {
+		t.Errorf("Event A did not fire at correct time %d got %d", 10, deviceA.time)
 	}
-	if device_a.iarg != 5 {
-		t.Errorf("Event A did not set data correct %d got %d", 5, device_a.iarg)
+	if deviceA.iarg != 5 {
+		t.Errorf("Event A did not set data correct %d got %d", 5, deviceA.iarg)
 	}
 }

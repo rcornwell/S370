@@ -23,21 +23,21 @@
  *
  */
 
-package sys_channel
+package syschannel
 
 import (
 	ev "github.com/rcornwell/S370/emu/event"
 )
 
-type Test_dev struct {
+type TestDev struct {
 	Addr  uint16     // Current device address
 	Mask  uint16     // Mask for device address
-	cmd   uint8      // Current command
 	Data  [256]uint8 // Data to read/write
 	count int        // Pointer to input/output
 	Max   int        // Maximum size of date
 	sense uint8      // Current sense byte
 	halt  bool       // Halt I/O requested
+	busy  bool       // device is busy
 	Sms   bool       // Return SMS at end of command
 }
 
@@ -54,54 +54,55 @@ type Test_dev struct {
 //   *  Read Bk   00001100
 //   */
 
-// Handle start of CCW chain
-func (d *Test_dev) StartIO() uint8 {
+// Handle start of CCW chain.
+func (d *TestDev) StartIO() uint8 {
 	return 0
 }
 
-// Handle start of new command
-func (d *Test_dev) StartCmd(cmd uint8) uint8 {
-	var r uint8 = 0
-	if d.cmd != 0 {
+// Handle start of new command.
+func (d *TestDev) StartCmd(cmd uint8) uint8 {
+	var r uint8
+	if d.busy {
 		return CStatusBusy
 	}
+	d.halt = false
 	switch cmd & 7 {
 	case 0: // Test I/O
 		return 0
 	case 1: // Write
 		d.sense = 0
 		d.count = 0
-		d.cmd = cmd
+		d.busy = true
 	case 2: // Read
 		d.sense = 0
 		d.count = 0
-		d.cmd = cmd
+		d.busy = true
 	case 3: // Nop or control
 		d.sense = 0
-		d.cmd = cmd
 		d.count = 0
 		switch cmd {
 		case 0x03: // Nop
 			r = CStatusChnEnd | CStatusDevEnd
-			d.cmd = 0
 		case 0x0b: // Grab a data byte
+			d.busy = true
 		case 0x13: // Issue channel end
-			r = CStatusChnEnd
-			ev.AddEvent(d, d.callback, 10, 1)
+			d.busy = true
+			ev.AddEvent(d, d.callback, 10, int(cmd))
+			return CStatusChnEnd
 		default:
-			d.cmd = 0
 			d.sense = SenseCMDREJ
 		}
 	case 4: // Sense
-		d.cmd = cmd
-		if cmd == 0x0c { // Read backward
+		switch cmd {
+		case 0x0c: // Read backward
 			d.sense = 0
 			d.count = 0
-		} else if cmd == 0x4 { // Sense
-			ev.AddEvent(d, d.callback, 10, 1)
+			d.busy = true
+		case 0x4: // Sense
+			ev.AddEvent(d, d.callback, 10, int(cmd))
+			d.busy = true
 			return 0
-		} else {
-			d.cmd = 0
+		default:
 			d.sense = SenseCMDREJ
 		}
 	default:
@@ -112,101 +113,111 @@ func (d *Test_dev) StartCmd(cmd uint8) uint8 {
 	if d.sense != 0 {
 		r = CStatusChnEnd | CStatusDevEnd | CStatusCheck
 	} else if (r & CStatusChnEnd) == 0 {
-		ev.AddEvent(d, d.callback, 10, 1)
+		ev.AddEvent(d, d.callback, 10, int(cmd))
 	}
 	return r
 }
 
-// Handle HIO instruction
-func (d *Test_dev) HaltIO() uint8 {
+// Handle HIO instruction.
+func (d *TestDev) HaltIO() uint8 {
 	d.halt = true
 	return 1
 }
 
 // Initialize a device.
-func (d *Test_dev) InitDev() uint8 {
-	d.cmd = 0
+func (d *TestDev) InitDev() uint8 {
 	d.count = 0
 	d.Max = 0
 	d.sense = 0
 	d.Sms = false
+	d.busy = false
+	d.halt = false
 	return 0
 }
 
-// Handle channel operations
-func (d *Test_dev) callback(iarg int) {
+// Handle channel operations.
+func (d *TestDev) callback(cmd int) {
 	var v uint8
 	var e bool
 
-	switch d.cmd {
+	switch cmd {
 	case 0x01: // Write
 		r := CStatusChnEnd | CStatusDevEnd
 		if d.Sms {
 			r |= CStatusSMS
 		}
-		if d.count > d.Max {
-			d.cmd = 0
+
+		if d.halt {
 			d.Sms = false
+			d.halt = false
+			d.busy = false
+			ChanEnd(d.Addr, CStatusChnEnd|CStatusDevEnd)
+			return
+		}
+
+		if d.count > d.Max {
+			d.Sms = false
+			d.busy = false
 			ChanEnd(d.Addr, r)
 			return
 		}
-		if d.halt {
-			ChanEnd(d.Addr, CStatusChnEnd|CStatusDevEnd)
-			d.cmd = 0
-			d.halt = false
-			return
-		}
+
 		v, e = ChanReadByte(d.Addr)
 		if e {
 			d.Data[d.count] = v
 			d.count++
-			d.cmd = 0
 			d.Sms = false
+			d.busy = false
 			ChanEnd(d.Addr, r)
 			return
 		}
 		d.Data[d.count] = v
 		d.count++
-		ev.AddEvent(d, d.callback, 10, 1)
+		ev.AddEvent(d, d.callback, 10, cmd)
 	case 0x02, 0x0c: // Read and Read backwards
 		r := CStatusChnEnd | CStatusDevEnd
 		if d.Sms {
 			r |= CStatusSMS
 		}
-		if d.count >= d.Max {
-			d.cmd = 0
+
+		if d.halt {
 			d.Sms = false
+			d.halt = false
+			d.busy = false
+			ChanEnd(d.Addr, CStatusChnEnd|CStatusDevEnd)
+			return
+		}
+
+		if d.count >= d.Max {
+			d.Sms = false
+			d.busy = false
 			ChanEnd(d.Addr, r)
 			return
 		}
-		if d.halt {
-			ChanEnd(d.Addr, CStatusChnEnd|CStatusDevEnd)
-			d.cmd = 0
-			d.halt = false
-			return
-		}
+
 		if ChanWriteByte(d.Addr, d.Data[d.count]) {
-			d.cmd = 0
 			d.Sms = false
+			d.busy = false
 			ChanEnd(d.Addr, r)
 		} else {
 			d.count++
-			ev.AddEvent(d, d.callback, 10, 1)
+			ev.AddEvent(d, d.callback, 10, cmd)
 		}
 	case 0x0b:
-		d.cmd = 0x13
 		d.Data[0], _ = ChanReadByte(d.Addr)
 		ChanEnd(d.Addr, CStatusChnEnd)
-		ev.AddEvent(d, d.callback, 10, 1)
+		ev.AddEvent(d, d.callback, 10, 0x13)
 	case 0x04:
-		d.cmd = 0
 		if ChanWriteByte(d.Addr, d.sense) {
 			ChanEnd(d.Addr, CStatusChnEnd|CStatusDevEnd|CStatusExpt)
 		} else {
 			ChanEnd(d.Addr, CStatusChnEnd|CStatusDevEnd)
 		}
+		d.busy = false
+		d.halt = false
 	case 0x13: // Return channel end
-		d.cmd = 0
+		d.busy = false
+		d.halt = false
 		SetDevAttn(d.Addr, CStatusDevEnd)
 	}
 }

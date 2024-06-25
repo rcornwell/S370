@@ -25,67 +25,67 @@
 
 package card
 
-// Convert EBCDIC character into hollerith code
-func EbcdicToHol(v uint8) uint16 {
+// Convert EBCDIC character into hollerith code.
+func EBCDICToHol(v uint8) uint16 {
 	return ebcdicToHolTable[v]
 }
 
-// Return hollerith code for ebcdic character
-func HolToEbcdic(v uint16) uint16 {
-	return holToEbcdicTable[v]
+// Return hollerith code for ebcdic character.
+func HolToEBCDIC(v uint16) uint16 {
+	return holToEBCDICTable[v]
 }
 
-// Returns the ASCII character of a given Hollerith code
-func HolToAscii(v uint16) uint8 {
-	return holToAsciiTable29[v]
+// Returns the ASCII character of a given Hollerith code.
+func HolToASCII(v uint16) uint8 {
+	return holToASCIITable29[v]
 }
 
-// Return hollerith code for ascii character
-func AsciiToHol(v uint8) uint16 {
+// Return hollerith code for ascii character.
+func ASCIIToHol(v uint8) uint16 {
 	return asciiToHol29[v]
 }
 
-func AsciiToSix(v uint8) uint8 {
+func ASCIIToSix(v uint8) uint8 {
 	return uint8(asciiToSix[v])
 }
 
-// Convert BCD character into hollerith code
+// Convert BCD character into hollerith code.
 func BcdToHol(bcd uint8) uint16 {
-
 	// Handle spacce correctly
 	if bcd == 0 {
 		return 0x82 // 0 to 82 punch
 	}
-	if bcd == 020 {
+
+	if bcd == 0o20 {
 		return 0 // 20 no punch
 	}
 
 	hol := uint16(0)
 	// Convert top row
-	switch bcd & 060 {
+	switch bcd & 0o60 {
 	default:
-		hol = 00000
-	case 000:
-		hol = 00000
-	case 020:
-		hol = 01000
-	case 040:
-		hol = 02000
-	case 060:
-		hol = 04000
+		hol = 0o0000
+	case 0o00:
+		hol = 0o0000
+	case 0o20:
+		hol = 0o1000
+	case 0o40:
+		hol = 0o2000
+	case 0o60:
+		hol = 0o4000
 	}
 
 	// Handle case of 10 special
 	// only 032 is punched as 8-2
-	if (bcd&017) == 10 && (bcd&060) != 020 {
+	if (bcd&017) == 10 && (bcd&060) != 0o20 {
 		hol |= 1 << 9
 		return hol
 	}
 
 	// Convert to 0-9 row
-	bcd &= 017
+	bcd &= 0o17
 	if bcd > 9 {
-		hol |= 02 // Col 8
+		hol |= 0o2 // Col 8
 		bcd -= 8
 	}
 	if bcd != 0 {
@@ -94,46 +94,46 @@ func BcdToHol(bcd uint8) uint16 {
 	return hol
 }
 
-// Returns the BCD of the hollerith code or 0x7f if error
+// Returns the BCD of the hollerith code or 0x7f if error.
 func HolToBcd(hol uint16) uint8 {
 	var bcd uint8
 
 	// Convert rows 10,11,12
-	switch hol & 07000 {
-	case 00000:
+	switch hol & 0o7000 {
+	case 0o0000:
 		bcd = 0
-	case 01000: // 10 Punch
+	case 0o1000: // 10 Punch
 		if (hol & 0x1ff) == 0 {
 			return 10
 		}
-		bcd = 020
-	case 02000: // 11 punch
-		bcd = 040
-	case 03000: // 11-10 punch
-		bcd = 052
-	case 04000: // 12 punch
-		bcd = 060
-	case 05000: // 12-10 Punch
-		bcd = 072
+		bcd = 0o20
+	case 0o2000: // 11 punch
+		bcd = 0o40
+	case 0o3000: // 11-10 punch
+		bcd = 0o52
+	case 0o4000: // 12 punch
+		bcd = 0o60
+	case 0o5000: // 12-10 Punch
+		bcd = 0o72
 	default: // Punch in 10,11,12 rows
 		return 0x7f
 	}
 
-	hol &= 0777          // Mask rows 0-9
+	hol &= 0o777         // Mask rows 0-9
 	if (hol & 02) != 0 { //Check if row 8 punched
 		bcd += 8
-		hol &= 0775 // Clear row 8.
+		hol &= 0o775 // Clear row 8.
 	}
 
 	// Convert rows 0-9
-	for hol != 0 && (hol&01000) == 0 {
+	for hol != 0 && (hol&0o1000) == 0 {
 		bcd++
 		hol <<= 1
 	}
 
 	// Any more columns punched?
-	if (hol & 0777) != 0 {
-		return 0177
+	if (hol & 0o777) != 0 {
+		return 0o177
 	}
 	return bcd
 }

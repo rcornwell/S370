@@ -23,7 +23,7 @@
  *
  */
 
-package sys_channel
+package syschannel
 
 import (
 	"testing"
@@ -32,11 +32,11 @@ import (
 	mem "github.com/rcornwell/S370/emu/memory"
 )
 
-func setup(devNum uint16) *Test_dev {
+func setup(devNum uint16) *TestDev {
 	mem.SetSize(64)
 	InitializeChannels()
 	AddChannel(0, TypeMux, 192)
-	d := &Test_dev{Addr: devNum, Mask: 0xff}
+	d := &TestDev{Addr: devNum, Mask: 0xff}
 	AddDevice(d, devNum)
 	_ = d.InitDev()
 	for i := range 0x10 {
@@ -46,14 +46,14 @@ func setup(devNum uint16) *Test_dev {
 	return d
 }
 
-/* Read byte from main memory */
+// Read byte from main memory.
 func getMemByte(addr uint32) uint8 {
 	v := mem.GetMemory(addr)
 	b := uint8((v >> (8 * (3 - (addr & 3))) & 0xff))
 	return b
 }
 
-/* write byte to main memory */
+// write byte to main memory.
 func setMemByte(addr uint32, data uint32) {
 	off := 8 * (3 - (addr & 3))
 	m := uint32(0xff << off)
@@ -62,7 +62,7 @@ func setMemByte(addr uint32, data uint32) {
 }
 
 func runChannel() uint16 {
-	var d uint16 = NoDev
+	d := NoDev
 
 	for d == NoDev {
 		ev.Advance(1)
@@ -843,7 +843,7 @@ func TestStartIOReadCDA(t *testing.T) {
 	}
 }
 
-// Test writing with CDA enabled
+// Test writing with CDA enabled.
 func TestStartIOWriteCDA(t *testing.T) {
 	var v uint32
 
@@ -958,7 +958,6 @@ func TestStartIOReadCDASkip(t *testing.T) {
 			if vb != uint8(0x10+i) {
 				t.Errorf("Start I/O Read Skip CDA expected %02x got: %02x at: %08x", 0x10+i, vb, 0x600+i+1)
 			}
-
 		} else {
 			vb = getMemByte(uint32(0x600 + i))
 			if vb != 0x55 {
@@ -1179,7 +1178,7 @@ func TestStartIOCChainNop(t *testing.T) {
 	}
 }
 
-// Test TIC
+// Test TIC.
 func TestStartIOTic(t *testing.T) {
 	var v uint32
 
@@ -1275,32 +1274,32 @@ func TestStartIOTicTic(t *testing.T) {
 
 	cc := StartIO(0x00f)
 	if cc != 0 {
-		t.Errorf("Start I/O Tic Tic expected %d got: %d", 0, cc)
+		t.Errorf("Start I/O Tic to Tic expected %d got: %d", 0, cc)
 	}
 
 	dev := runChannel()
 	if dev != 0xf {
-		t.Errorf("Start I/O Tic Tic expected %d got: %d", 0xf, dev)
+		t.Errorf("Start I/O Tic to Tic expected %d got: %d", 0xf, dev)
 	}
 	v = mem.GetMemory(0x40)
 	if v != 0x00000520 {
-		t.Errorf("Start I/O Tic Tic CSW1 expected %08x got: %08x", 0x00000520, v)
+		t.Errorf("Start I/O Tic to Tic CSW1 expected %08x got: %08x", 0x00000520, v)
 	}
 	v = mem.GetMemory(0x44)
 	if v != 0x00200000 {
-		t.Errorf("Start I/O Tic Tic CSW2 expected %08x got: %08x", 0x00200000, v)
+		t.Errorf("Start I/O Tic to Tic CSW2 expected %08x got: %08x", 0x00200000, v)
 	}
 
 	v = mem.GetMemory(0x700)
 	if v != 0xffffffff {
-		t.Errorf("Start I/O Tic Tic Sense Data expected %08x got: %08x", 0xfffffff, v)
+		t.Errorf("Start I/O Tic to Tic Sense Data expected %08x got: %08x", 0xfffffff, v)
 	}
 
 	for i := range 0x10 {
 		vb := d.Data[i]
 		mb := uint8(0xf + (i << 4))
 		if vb != mb {
-			t.Errorf("Start I/O Tic Tic Data expected %02x got: %02x at: %02x", mb, vb, i)
+			t.Errorf("Start I/O Tic to Tic Data expected %02x got: %02x at: %02x", mb, vb, i)
 		}
 	}
 }
@@ -1346,7 +1345,6 @@ func TestStartIOTicError(t *testing.T) {
 	if v != 0xffffffff {
 		t.Errorf("Start I/O Tic Error Sense Data expected %08x got: %08x", 0xfffffff, v)
 	}
-
 }
 
 // Test TIC
@@ -1417,7 +1415,7 @@ func TestStartIOSMSTic(t *testing.T) {
 	}
 }
 
-// Test if PCI interrupts work
+// Test if PCI interrupts work.
 func TestStartIOPCI(t *testing.T) {
 	var v uint32
 
@@ -1636,7 +1634,7 @@ func TestStartIOTIOBusy(t *testing.T) {
 	}
 }
 
-// Read Protection check
+// Read Protection check.
 func TestStartIOReadProt(t *testing.T) {
 	var v uint32
 

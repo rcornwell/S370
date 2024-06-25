@@ -40,23 +40,22 @@ type Event struct {
 	next *Event
 }
 
-type EventList struct {
+type eventList struct {
 	head *Event
 	tail *Event
 }
 
-var el EventList
+var el eventList
 
-// Add an event
+// Add an event.
 func AddEvent(dev D.Device, cb Callback, time int, iarg int) bool {
-
 	// If time is 0 process event immediately
 	if time == 0 {
 		cb(iarg)
 		return false
 	}
 
-	ev := &Event{dev: dev, cb: cb, time: time, iarg: iarg, next: nil, prev: nil}
+	ev := &Event{dev: dev, cb: cb, time: time, iarg: iarg}
 
 	evptr := el.head
 	// If empty put on head
@@ -95,7 +94,8 @@ func AddEvent(dev D.Device, cb Callback, time int, iarg int) bool {
 	return false
 }
 
-func CancelEvent(dev D.Device, cb Callback, iarg int) {
+// Cancel a pending event.
+func CancelEvent(dev D.Device, iarg int) {
 	evptr := el.head
 
 	// Nothing in list, return
@@ -133,16 +133,15 @@ func CancelEvent(dev D.Device, cb Callback, iarg int) {
 	}
 }
 
-// Advance time by one clock cycle
+// Advance time by one clock cycle.
 func Advance(t int) {
-
 	if el.head == nil {
 		return
 	}
 	for t > 0 && el.head != nil {
 		evptr := el.head
 		t--
-		evptr.time -= 1
+		evptr.time--
 		for evptr != nil && evptr.time <= 0 {
 			evptr.cb(evptr.iarg)
 			el.head = evptr.next

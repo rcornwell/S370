@@ -23,13 +23,13 @@
 
    These units each buffer one record in local memory and signal
    ready when the buffer is full or empty. The channel must be
-   ready to recieve/transmit data when they are activated since
+   ready to receeve/transmit data when they are activated since
    they will transfer their block during chan_cmd. All data is
    transmitted as BCD characters.
 
 */
 
-package model2540R
+package model2540r
 
 import (
 	ev "github.com/rcornwell/S370/emu/event"
@@ -42,7 +42,7 @@ const (
 	maskCMD   = 0x27 // Mask command part of
 )
 
-type Model2540R_ctx struct {
+type Model2540Rctx struct {
 	addr  uint16            // Current device address
 	col   int               // Current column
 	busy  bool              // Reader busy
@@ -55,14 +55,14 @@ type Model2540R_ctx struct {
 	ctx   *card.CardContext // Context for card reader.
 }
 
-// Handle start of CCW chain
-func (d *Model2540R_ctx) StartIO() uint8 {
+// Handle start of CCW chain.
+func (d *Model2540Rctx) StartIO() uint8 {
 	return 0
 }
 
-// Handle start of new command
-func (d *Model2540R_ctx) StartCmd(cmd uint8) uint8 {
-	var r uint8 = 0
+// Handle start of new command.
+func (d *Model2540Rctx) StartCmd(cmd uint8) uint8 {
+	var r uint8
 
 	// If busy return busy status right away
 	if d.busy {
@@ -89,12 +89,12 @@ func (d *Model2540R_ctx) StartCmd(cmd uint8) uint8 {
 			// Read next card.
 			d.image, err = d.ctx.ReadCard()
 			switch err {
-			case card.CARD_OK:
+			case card.CardOK:
 				d.rdy = true
-			case card.CARD_EOF:
+			case card.CardEOF:
 				d.eof = true
-			case card.CARD_EMPTY:
-			case card.CARD_ERROR:
+			case card.CardEmpty:
+			case card.CardError:
 				d.err = true
 				d.rdy = true
 			}
@@ -143,15 +143,14 @@ func (d *Model2540R_ctx) StartCmd(cmd uint8) uint8 {
 	return r
 }
 
-// Handle HIO instruction
-func (d *Model2540R_ctx) HaltIO() uint8 {
+// Handle HIO instruction.
+func (d *Model2540Rctx) HaltIO() uint8 {
 	d.halt = true
 	return 1
 }
 
 // Initialize a device.
-func (d *Model2540R_ctx) InitDev() uint8 {
-
+func (d *Model2540Rctx) InitDev() uint8 {
 	d.col = 0
 	d.sense = 0
 	d.busy = false
@@ -161,9 +160,9 @@ func (d *Model2540R_ctx) InitDev() uint8 {
 	return 0
 }
 
-// Handle channel operations
-func (d *Model2540R_ctx) callback(cmd int) {
-	var r uint8 = 0
+// Handle channel operations.
+func (d *Model2540Rctx) callback(cmd int) {
+	var r uint8
 	var err int
 	var xlat uint16
 
@@ -193,20 +192,20 @@ func (d *Model2540R_ctx) callback(cmd int) {
 	// Read next card.
 	d.image, err = d.ctx.ReadCard()
 	switch err {
-	case card.CARD_OK:
+	case card.CardOK:
 		d.rdy = true
-	case card.CARD_EOF:
+	case card.CardEOF:
 		d.eof = true
 		d.busy = false
 		d.halt = false
 		ch.SetDevAttn(d.addr, ch.CStatusDevEnd|r)
 		return
-	case card.CARD_EMPTY:
+	case card.CardEmpty:
 		d.busy = false
 		d.halt = false
 		ch.SetDevAttn(d.addr, ch.CStatusDevEnd|r)
 		return
-	case card.CARD_ERROR:
+	case card.CardError:
 		d.err = true
 		d.rdy = true
 		d.busy = false
@@ -220,7 +219,7 @@ func (d *Model2540R_ctx) callback(cmd int) {
 			goto feed
 		}
 	}
-	xlat = card.HolToEbcdic(d.image.Image[d.col])
+	xlat = card.HolToEBCDIC(d.image.Image[d.col])
 
 	if xlat == 0x100 {
 		d.sense = ch.SenseDATCHK
@@ -230,9 +229,8 @@ func (d *Model2540R_ctx) callback(cmd int) {
 	}
 	if ch.ChanWriteByte(d.addr, uint8(xlat)) {
 		goto feed
-	} else {
-		d.col++
 	}
+	d.col++
 	if d.col != 80 {
 		ev.AddEvent(d, d.callback, 20, cmd)
 		return

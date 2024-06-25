@@ -23,22 +23,22 @@
 
 package cpu
 
-// Handle an unknown instruction
-func (cpu *cpu) opUnk(step *stepInfo) uint16 {
+// Handle an unknown instruction.
+func (cpu *cpu) opUnk(_ *stepInfo) uint16 {
 	return ircOper
 }
 
-// Set program mask
+// Set program mask.
 func (cpu *cpu) opSPM(step *stepInfo) uint16 {
 	cpu.progMask = uint8(step.src1>>24) & 0xf
 	cpu.cc = uint8(step.src1>>28) & 0x3
 	return 0
 }
 
-// Branch and save
+// Branch and save.
 func (cpu *cpu) opBAS(step *stepInfo) uint16 {
 	dest := cpu.PC
-	if step.opcode != OP_BASR || step.R2 != 0 {
+	if step.opcode != OpBASR || step.R2 != 0 {
 		// Check if triggered PER event.
 		if cpu.perEnb && cpu.perBranch {
 			cpu.perCode |= 0x8000 /* Set PER branch */
@@ -50,13 +50,13 @@ func (cpu *cpu) opBAS(step *stepInfo) uint16 {
 	return 0
 }
 
-// Branch and link
+// Branch and link.
 func (cpu *cpu) opBAL(step *stepInfo) uint16 {
 	dest := (uint32(cpu.ilc) << 30) |
 		(uint32(cpu.cc) << 28) |
 		(uint32(cpu.progMask) << 24) |
 		cpu.PC
-	if step.opcode != OP_BALR || step.R2 != 0 {
+	if step.opcode != OpBALR || step.R2 != 0 {
 		// Check if triggered PER event.
 		if cpu.perEnb && cpu.perBranch {
 			cpu.perCode |= 0x8000 /* Set PER branch */
@@ -68,11 +68,11 @@ func (cpu *cpu) opBAL(step *stepInfo) uint16 {
 	return 0
 }
 
-// Branch and count register
+// Branch and count register.
 func (cpu *cpu) opBCT(step *stepInfo) uint16 {
 	dest := step.src1 - 1
 
-	if dest != 0 && (step.opcode != OP_BCTR || step.R2 != 0) {
+	if dest != 0 && (step.opcode != OpBCTR || step.R2 != 0) {
 		// Check if triggered PER event.
 		if cpu.perEnb && cpu.perBranch {
 			cpu.perCode |= 0x8000 /* Set PER branch */
@@ -84,9 +84,9 @@ func (cpu *cpu) opBCT(step *stepInfo) uint16 {
 	return 0
 }
 
-// Branch conditional
+// Branch conditional.
 func (cpu *cpu) opBC(step *stepInfo) uint16 {
-	if ((0x8>>cpu.cc)&step.R1) != 0 && (step.opcode != OP_BCR || step.R2 != 0) {
+	if ((0x8>>cpu.cc)&step.R1) != 0 && (step.opcode != OpBCR || step.R2 != 0) {
 		// Check if triggered PER event.
 		if cpu.perEnb && cpu.perBranch {
 			cpu.perCode |= 0x8000 /* Set PER branch */
@@ -96,7 +96,7 @@ func (cpu *cpu) opBC(step *stepInfo) uint16 {
 	return 0
 }
 
-// Branch on index high
+// Branch on index high.
 func (cpu *cpu) opBXH(step *stepInfo) uint16 {
 	src1 := cpu.regs[step.R2|1]
 	dest := cpu.regs[step.R1] + cpu.regs[step.R2]
@@ -112,8 +112,8 @@ func (cpu *cpu) opBXH(step *stepInfo) uint16 {
 	return 0
 }
 
-// Branch of index low or equal
-func (cpu *cpu) op_BXLE(step *stepInfo) uint16 {
+// Branch of index low or equal.
+func (cpu *cpu) opBXLE(step *stepInfo) uint16 {
 	src1 := cpu.regs[step.R2|1]
 	dest := cpu.regs[step.R1] + cpu.regs[step.R2]
 	cpu.regs[step.R1] = dest
@@ -128,7 +128,7 @@ func (cpu *cpu) op_BXLE(step *stepInfo) uint16 {
 	return 0
 }
 
-// Set the condition code based on value provided
+// Set the condition code based on value provided.
 func (cpu *cpu) setCC(value uint32) {
 	if (value & MSIGN) != 0 {
 		cpu.cc = 1
@@ -141,7 +141,7 @@ func (cpu *cpu) setCC(value uint32) {
 	}
 }
 
-// Load register and make positive
+// Load register and make positive.
 func (cpu *cpu) opLPR(step *stepInfo) uint16 {
 	if step.src2 == MSIGN {
 		cpu.cc = 3
@@ -156,7 +156,7 @@ func (cpu *cpu) opLPR(step *stepInfo) uint16 {
 	return 0
 }
 
-// Load complement of register
+// Load complement of register.
 func (cpu *cpu) opLCR(step *stepInfo) uint16 {
 	if step.src2 != MSIGN {
 		step.src2 = (FMASK ^ step.src2) + 1
@@ -169,7 +169,7 @@ func (cpu *cpu) opLCR(step *stepInfo) uint16 {
 	return 0
 }
 
-// Load and test register
+// Load and test register.
 func (cpu *cpu) opLTR(step *stepInfo) uint16 {
 	cpu.regs[step.R1] = step.src2
 	cpu.perRegMod |= 1 << step.R1
@@ -177,7 +177,7 @@ func (cpu *cpu) opLTR(step *stepInfo) uint16 {
 	return 0
 }
 
-// Load number and make it negative
+// Load number and make it negative.
 func (cpu *cpu) opLNR(step *stepInfo) uint16 {
 	if (step.src2 & MSIGN) == 0 {
 		step.src2 = (FMASK ^ step.src2) + 1
@@ -188,26 +188,26 @@ func (cpu *cpu) opLNR(step *stepInfo) uint16 {
 	return 0
 }
 
-// Load value into register, handle RR and RX
-// Also handle LH and LA
+// Load value into register, handle RR and RX.
+// Also handle LH and LA.
 func (cpu *cpu) opL(step *stepInfo) uint16 {
 	cpu.regs[step.R1] = step.src2
 	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
-// Load character into register
+// Load character into register.
 func (cpu *cpu) opIC(step *stepInfo) uint16 {
-	if t, error := cpu.readByte(step.address1); error != 0 {
-		return error
-	} else {
-		cpu.regs[step.R1] = (step.src1 & 0xffffff00) | (t & 0xff)
-		cpu.perRegMod |= 1 << step.R1
+	t, err := cpu.readByte(step.address1)
+	if err != 0 {
+		return err
 	}
+	cpu.regs[step.R1] = (step.src1 & 0xffffff00) | (t & 0xff)
+	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
-// Insert character into register under mask
+// Insert character into register under mask.
 func (cpu *cpu) opICM(step *stepInfo) uint16 {
 	// Fetch register
 	d := cpu.regs[step.R1]
@@ -228,25 +228,25 @@ func (cpu *cpu) opICM(step *stepInfo) uint16 {
 	for i := uint8(0x8); i != 0; i >>= 1 {
 		// If the bit is one, read in the byte
 		if (bits & i) != 0 {
-			if t, err := cpu.readByte(step.address1); err != 0 {
+			t, err := cpu.readByte(step.address1)
+			if err != 0 {
 				return err
-			} else {
-
-				// Put byte in place
-				d = (d & ^m) | ((t << s) & m)
-
-				// If byte is not zero, adjust CC
-				if t != 0 {
-					if (t & high) != 0 {
-						cpu.cc = 1
-					}
-					if cpu.cc == 0 {
-						cpu.cc = 2
-					}
-				}
-				high = 0
-				step.address1++
 			}
+
+			// Put byte in place
+			d = (d & ^m) | ((t << s) & m)
+
+			// If byte is not zero, adjust CC
+			if t != 0 {
+				if (t & high) != 0 {
+					cpu.cc = 1
+				}
+				if cpu.cc == 0 {
+					cpu.cc = 2
+				}
+			}
+			high = 0
+			step.address1++
 		}
 		s -= 8
 		m >>= 8
@@ -256,7 +256,7 @@ func (cpu *cpu) opICM(step *stepInfo) uint16 {
 	return 0
 }
 
-// Add value to register, handle RR, RX and RH
+// Add value to register, handle RR, RX and RH.
 func (cpu *cpu) opAdd(step *stepInfo) uint16 {
 	sum := step.src1 + step.src2
 	carry := (step.src1 & step.src2) | ((step.src1 ^ step.src2) & ^sum)
@@ -273,7 +273,7 @@ func (cpu *cpu) opAdd(step *stepInfo) uint16 {
 	return 0
 }
 
-// Subtract value from register, handle RR, RX and RH
+// Subtract value from register, handle RR, RX and RH.
 func (cpu *cpu) opSub(step *stepInfo) uint16 {
 	s2 := step.src2 ^ FMASK
 	diff := step.src1 + s2 + 1
@@ -291,7 +291,7 @@ func (cpu *cpu) opSub(step *stepInfo) uint16 {
 	return 0
 }
 
-// Compare register with value, handle RR, RX and RH
+// Compare register with value, handle RR, RX and RH.
 func (cpu *cpu) opCmp(step *stepInfo) uint16 {
 	if int32(step.src1) > int32(step.src2) {
 		cpu.cc = 2
@@ -303,7 +303,7 @@ func (cpu *cpu) opCmp(step *stepInfo) uint16 {
 	return 0
 }
 
-// Logical add value to register, handle RR, RX
+// Logical add value to register, handle RR, RX.
 func (cpu *cpu) opAddL(step *stepInfo) uint16 {
 	sum := step.src1 + step.src2
 	cpu.regs[step.R1] = sum
@@ -321,7 +321,7 @@ func (cpu *cpu) opAddL(step *stepInfo) uint16 {
 	return 0
 }
 
-// Subtract logical value to register, handle RR, RX
+// Subtract logical value to register, handle RR, RX.
 func (cpu *cpu) opSubL(step *stepInfo) uint16 {
 	s2 := step.src2 ^ FMASK
 	sum := step.src1 + s2 + 1
@@ -339,7 +339,7 @@ func (cpu *cpu) opSubL(step *stepInfo) uint16 {
 	return 0
 }
 
-// Logical compare with register
+// Logical compare with register.
 func (cpu *cpu) opCmpL(step *stepInfo) uint16 {
 	if step.src1 > step.src2 {
 		cpu.cc = 2
@@ -351,7 +351,7 @@ func (cpu *cpu) opCmpL(step *stepInfo) uint16 {
 	return 0
 }
 
-// Compare character under mask
+// Compare character under mask.
 func (cpu *cpu) opCLM(step *stepInfo) uint16 {
 	// Fetch register
 	d := cpu.regs[step.R1]
@@ -369,36 +369,36 @@ func (cpu *cpu) opCLM(step *stepInfo) uint16 {
 	for i := uint8(0x8); i != 0; i >>= 1 {
 		// If the bit is one, read in the byte
 		if (bits & i) != 0 {
-			if t, err := cpu.readByte(step.address1); err != 0 {
+			t, err := cpu.readByte(step.address1)
+			if err != 0 {
 				return err
-			} else {
-				// Put byte in place
-				t2 := (d >> s) & 0xff
-
-				// Compare values
-				if t2 != t {
-					if t2 < t {
-						cpu.cc = 1
-					} else {
-						cpu.cc = 2
-					}
-					return 0
-				}
-				step.address1++
 			}
+			// Put byte in place
+			t2 := (d >> s) & 0xff
+
+			// Compare values
+			if t2 != t {
+				if t2 < t {
+					cpu.cc = 1
+				} else {
+					cpu.cc = 2
+				}
+				return 0
+			}
+			step.address1++
 		}
 		s -= 8
 	}
 	return 0
 }
 
-// Multiply register by value, handle RR and RX
+// Multiply register by value, handle RR and RX.
 func (cpu *cpu) opMul(step *stepInfo) uint16 {
 	if (step.R1 & 1) != 0 {
 		return ircSpec
 	}
 	src1 := int64(int32(cpu.regs[step.R1|1]))
-	src1 = src1 * int64(int32(step.src2))
+	src1 *= int64(int32(step.src2))
 	cpu.storeDouble(step.R1, uint64(src1))
 	return 0
 }
@@ -406,13 +406,13 @@ func (cpu *cpu) opMul(step *stepInfo) uint16 {
 // Multiply half word.
 func (cpu *cpu) opMulH(step *stepInfo) uint16 {
 	src1 := int64(int32(cpu.regs[step.R1]))
-	src1 = src1 * int64(int32(step.src2))
+	src1 *= int64(int32(step.src2))
 	cpu.regs[step.R1] = uint32(uint64(src1) & LMASKL)
 	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
-// Divide register by value, handle RR and RX
+// Divide register by value, handle RR and RX.
 func (cpu *cpu) opDiv(step *stepInfo) uint16 {
 	if (step.R1 & 1) != 0 {
 		return ircSpec
@@ -467,7 +467,7 @@ func (cpu *cpu) opDiv(step *stepInfo) uint16 {
 	return 0
 }
 
-// Logical And register with value, handle RR and RX
+// Logical And register with value, handle RR and RX.
 func (cpu *cpu) opAnd(step *stepInfo) uint16 {
 	cpu.regs[step.R1] = step.src1 & step.src2
 	cpu.perRegMod |= 1 << step.R1
@@ -479,7 +479,7 @@ func (cpu *cpu) opAnd(step *stepInfo) uint16 {
 	return 0
 }
 
-// Logical Or register with value, handle RR and RX
+// Logical Or register with value, handle RR and RX.
 func (cpu *cpu) opOr(step *stepInfo) uint16 {
 	cpu.regs[step.R1] = step.src1 | step.src2
 	cpu.perRegMod |= 1 << step.R1
@@ -491,7 +491,7 @@ func (cpu *cpu) opOr(step *stepInfo) uint16 {
 	return 0
 }
 
-// Logical Exclusive Or register with value, handle RR and RX
+// Logical Exclusive Or register with value, handle RR and RX.
 func (cpu *cpu) opXor(step *stepInfo) uint16 {
 	cpu.regs[step.R1] = step.src1 ^ step.src2
 	cpu.perRegMod |= 1 << step.R1
@@ -503,99 +503,100 @@ func (cpu *cpu) opXor(step *stepInfo) uint16 {
 	return 0
 }
 
-// Logical And immeditate to memory
+// Logical And immeditate to memory.
 func (cpu *cpu) opNI(step *stepInfo) uint16 {
-	if t, err := cpu.readByte(step.address1); err != 0 {
+	t, err := cpu.readByte(step.address1)
+	if err != 0 {
 		return err
+	}
+	t &= uint32(step.reg)
+	if err = cpu.writeByte(step.address1, t); err != 0 {
+		return err
+	}
+	if t != 0 {
+		cpu.cc = 1
 	} else {
-		t &= uint32(step.reg)
-		if err = cpu.writeByte(step.address1, t); err != 0 {
-			return err
-		}
-		if t != 0 {
-			cpu.cc = 1
-		} else {
-			cpu.cc = 0
-		}
+		cpu.cc = 0
 	}
 	return 0
 }
 
-// Logical Or immediate to memory
+// Logical Or immediate to memory.
 func (cpu *cpu) opOI(step *stepInfo) uint16 {
-	if t, err := cpu.readByte(step.address1); err != 0 {
+	t, err := cpu.readByte(step.address1)
+	if err != 0 {
 		return err
+	}
+	t |= uint32(step.reg)
+	if err = cpu.writeByte(step.address1, t); err != 0 {
+		return err
+	}
+	if t != 0 {
+		cpu.cc = 1
 	} else {
-		t |= uint32(step.reg)
-		if err = cpu.writeByte(step.address1, t); err != 0 {
-			return err
-		}
-		if t != 0 {
-			cpu.cc = 1
-		} else {
-			cpu.cc = 0
-		}
+		cpu.cc = 0
 	}
 	return 0
 }
 
-// Logical Exclusive Or immediate to memory
+// Logical Exclusive Or immediate to memory.
 func (cpu *cpu) opXI(step *stepInfo) uint16 {
-	if t, err := cpu.readByte(step.address1); err != 0 {
+	t, err := cpu.readByte(step.address1)
+	if err != 0 {
 		return err
+	}
+	t ^= uint32(step.reg)
+	err = cpu.writeByte(step.address1, t)
+	if err != 0 {
+		return err
+	}
+	if t != 0 {
+		cpu.cc = 1
 	} else {
-		t ^= uint32(step.reg)
-		if err = cpu.writeByte(step.address1, t); err != 0 {
-			return err
-		}
-		if t != 0 {
+		cpu.cc = 0
+	}
+	return 0
+}
+
+// Compare immediate with memory.
+func (cpu *cpu) opCLI(step *stepInfo) uint16 {
+	t, err := cpu.readByte(step.address1)
+	if err != 0 {
+		return err
+	}
+	if t != uint32(step.reg) {
+		if t < uint32(step.reg) {
 			cpu.cc = 1
 		} else {
-			cpu.cc = 0
+			cpu.cc = 2
 		}
-	}
-	return 0
-}
-
-// Compare immediate with memory
-func (cpu *cpu) opCLI(step *stepInfo) uint16 {
-	if t, err := cpu.readByte(step.address1); err != 0 {
-		return err
 	} else {
-		if t != uint32(step.reg) {
-			if t < uint32(step.reg) {
-				cpu.cc = 1
-			} else {
-				cpu.cc = 2
-			}
-		} else {
-			cpu.cc = 0
-		}
+		cpu.cc = 0
 	}
 	return 0
 }
 
-// Move immediate value to memory
+// Move immediate value to memory.
 func (cpu *cpu) opMVI(step *stepInfo) uint16 {
 	return cpu.writeByte(step.address1, uint32(step.reg))
 }
 
-// Store full word into memory
+// Store full word into memory.
 func (cpu *cpu) opST(step *stepInfo) uint16 {
 	return cpu.writeFull(step.address1, step.src1)
 }
 
-// Store half word into memory
+// Store half word into memory.
 func (cpu *cpu) opSTH(step *stepInfo) uint16 {
 	return cpu.writeHalf(step.address1, step.src1)
 }
 
-// Store character into memory
+// Store character into memory.
 func (cpu *cpu) opSTC(step *stepInfo) uint16 {
 	return cpu.writeByte(step.address1, step.src1)
 }
 
-// Store character under mask
+// Store character under mask.
 func (cpu *cpu) opSTCM(step *stepInfo) uint16 {
 	// Fetch register
 	d := cpu.regs[step.R1]
@@ -623,69 +624,69 @@ func (cpu *cpu) opSTCM(step *stepInfo) uint16 {
 
 // Test and set.
 func (cpu *cpu) opTS(step *stepInfo) uint16 {
-	if t2, err := cpu.readByte(step.address1); err != 0 {
+	t2, err := cpu.readByte(step.address1)
+	if err != 0 {
 		return err
+	}
+	if err = cpu.writeByte(step.address1, step.src1&0xff); err != 0 {
+		return err
+	}
+	if (t2 & 0x80) != 0 {
+		cpu.cc = 1
 	} else {
-		if err = cpu.writeByte(step.address1, step.src1&0xff); err != 0 {
-			return err
-		}
-		if (t2 & 0x80) != 0 {
-			cpu.cc = 1
-		} else {
-			cpu.cc = 0
-		}
+		cpu.cc = 0
 	}
 	return 0
 }
 
-// Compare character under mask
+// Compare character under mask.
 func (cpu *cpu) opTM(step *stepInfo) uint16 {
-	if t, err := cpu.readByte(step.address1); err != 0 {
+	t, err := cpu.readByte(step.address1)
+	if err != 0 {
 		return err
-	} else {
-		t &= uint32(step.reg)
-		if t != 0 {
-			if uint32(step.reg) == t {
-				cpu.cc = 3
-			} else {
-				cpu.cc = 1
-			}
+	}
+	t &= uint32(step.reg)
+	if t != 0 {
+		if uint32(step.reg) == t {
+			cpu.cc = 3
 		} else {
-			cpu.cc = 0
+			cpu.cc = 1
 		}
+	} else {
+		cpu.cc = 0
 	}
 	return 0
 }
 
-// Shift right logical
+// Shift right logical.
 func (cpu *cpu) opSRL(step *stepInfo) uint16 {
 	t := cpu.regs[step.R1]
 	s := step.address1 & 0x3f
 	if s > 31 {
 		t = 0
 	} else {
-		t = t >> s
+		t >>= s
 	}
 	cpu.regs[step.R1] = t
 	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
-// Shift left logical
+// Shift left logical.
 func (cpu *cpu) opSLL(step *stepInfo) uint16 {
 	t := cpu.regs[step.R1]
 	s := step.address1 & 0x3f
 	if s > 31 {
 		t = 0
 	} else {
-		t = t << s
+		t <<= s
 	}
 	cpu.regs[step.R1] = t
 	cpu.perRegMod |= 1 << step.R1
 	return 0
 }
 
-// Shift Arithmatic right
+// Shift Arithmatic right.
 func (cpu *cpu) opSRA(step *stepInfo) uint16 {
 	t := cpu.regs[step.R1]
 	s := step.address1 & 0x3f
@@ -704,7 +705,7 @@ func (cpu *cpu) opSRA(step *stepInfo) uint16 {
 	return 0
 }
 
-// Shift Arithmatic left
+// Shift Arithmatic left.
 func (cpu *cpu) opSLA(step *stepInfo) uint16 {
 	t := cpu.regs[step.R1]
 	si := t & MSIGN
@@ -725,7 +726,7 @@ func (cpu *cpu) opSLA(step *stepInfo) uint16 {
 	return 0
 }
 
-// Shift Double left logical
+// Shift Double left logical.
 func (cpu *cpu) opSLDL(step *stepInfo) uint16 {
 	if (step.R1 & 1) != 0 {
 		return ircSpec
@@ -737,7 +738,7 @@ func (cpu *cpu) opSLDL(step *stepInfo) uint16 {
 	return 0
 }
 
-// Shift Double right logical
+// Shift Double right logical.
 func (cpu *cpu) opSRDL(step *stepInfo) uint16 {
 	if (step.R1 & 1) != 0 {
 		return ircSpec
@@ -749,7 +750,7 @@ func (cpu *cpu) opSRDL(step *stepInfo) uint16 {
 	return 0
 }
 
-// Shift Double left arithmatic
+// Shift Double left arithmatic.
 func (cpu *cpu) opSLDA(step *stepInfo) uint16 {
 	if (step.R1 & 1) != 0 {
 		return ircSpec
@@ -782,7 +783,7 @@ func (cpu *cpu) opSLDA(step *stepInfo) uint16 {
 	return 0
 }
 
-// Shift Double Arithmatic right
+// Shift Double Arithmatic right.
 func (cpu *cpu) opSRDA(step *stepInfo) uint16 {
 	if (step.R1 & 1) != 0 {
 		return ircSpec
@@ -805,7 +806,7 @@ func (cpu *cpu) opSRDA(step *stepInfo) uint16 {
 	return 0
 }
 
-// Load multiple registers
+// Load multiple registers.
 func (cpu *cpu) opLM(step *stepInfo) uint16 {
 	r := step.R2
 	tr := step.R1
@@ -821,22 +822,22 @@ func (cpu *cpu) opLM(step *stepInfo) uint16 {
 	// If we can access end, first fault will then be on end
 	if (step.address1 & PMASK) != (a2 & PMASK) {
 		// Translate address
-		if pa, err := cpu.transAddr(a2); err != 0 {
+		pa, err := cpu.transAddr(a2)
+		if err != 0 {
 			return err
-		} else {
-			if cpu.checkProtect(pa, false) {
-				return ircProt
-			}
+		}
+		if cpu.checkProtect(pa, false) {
+			return ircProt
 		}
 	}
 
 	r = step.R2
 	for {
-		if t, err := cpu.readFull(step.address1); err != 0 {
+		t, err := cpu.readFull(step.address1)
+		if err != 0 {
 			return err
-		} else {
-			cpu.regs[step.R1] = t
 		}
+		cpu.regs[step.R1] = t
 		cpu.perCode |= 1 << step.R1
 		if step.R1 == r {
 			return 0
@@ -847,7 +848,7 @@ func (cpu *cpu) opLM(step *stepInfo) uint16 {
 	}
 }
 
-// Load multiple registers
+// Load multiple registers.
 func (cpu *cpu) opSTM(step *stepInfo) uint16 {
 	r := step.R2
 
@@ -864,7 +865,7 @@ func (cpu *cpu) opSTM(step *stepInfo) uint16 {
 	}
 }
 
-// Handle memory to memory instructions
+// Handle memory to memory instructions.
 func (cpu *cpu) opMem(step *stepInfo) uint16 {
 	if err := cpu.testAccess(step.address1, uint32(step.reg), true); err != 0 {
 		return err
@@ -873,7 +874,7 @@ func (cpu *cpu) opMem(step *stepInfo) uint16 {
 		return err
 	}
 	o := step.opcode
-	if o == OP_NC || o == OP_OC || o == OP_XC {
+	if o == OpNC || o == OpOC || o == OpXC {
 		cpu.cc = 0
 	}
 
@@ -884,27 +885,27 @@ func (cpu *cpu) opMem(step *stepInfo) uint16 {
 		if err != 0 {
 			return err
 		}
-		if o != OP_MVC {
+		if o != OpMVC {
 			td, err = cpu.readByte(step.address1)
 			if err != 0 {
 				return err
 			}
 			switch o {
-			case OP_MVZ:
+			case OpMVZ:
 				td = (td & 0x0f) | (ts & 0xf0)
-			case OP_MVN:
+			case OpMVN:
 				td = (td & 0xf0) | (ts & 0x0f)
-			case OP_NC:
+			case OpNC:
 				td &= ts
 				if td != 0 {
 					cpu.cc = 1
 				}
-			case OP_OC:
+			case OpOC:
 				td |= ts
 				if td != 0 {
 					cpu.cc = 1
 				}
-			case OP_XC:
+			case OpXC:
 				td ^= ts
 				if td != 0 {
 					cpu.cc = 1
@@ -925,7 +926,7 @@ func (cpu *cpu) opMem(step *stepInfo) uint16 {
 	}
 }
 
-// Compare memory to memory
+// Compare memory to memory.
 func (cpu *cpu) opCLC(step *stepInfo) uint16 {
 	if err := cpu.testAccess(step.address1, uint32(step.reg), false); err != 0 {
 		return err
@@ -966,7 +967,7 @@ func (cpu *cpu) opCLC(step *stepInfo) uint16 {
 	}
 }
 
-// Translate memory and Translate and Test
+// Translate memory and Translate and Test.
 func (cpu *cpu) opTR(step *stepInfo) uint16 {
 	if err := cpu.testAccess(step.address1, uint32(step.reg), true); err != 0 {
 		return err
@@ -987,7 +988,7 @@ func (cpu *cpu) opTR(step *stepInfo) uint16 {
 		if err != 0 {
 			return err
 		}
-		if step.opcode == OP_TRT {
+		if step.opcode == OpTRT {
 			if t2 != 0 {
 				cpu.regs[1] &= 0xff000000
 				cpu.regs[1] |= step.address1 & AMASK
@@ -1016,7 +1017,7 @@ func (cpu *cpu) opTR(step *stepInfo) uint16 {
 	}
 }
 
-// Move with offset
+// Move with offset.
 func (cpu *cpu) opMVO(step *stepInfo) uint16 {
 	var err uint16
 	var t1, t2 uint32
@@ -1074,7 +1075,7 @@ func (cpu *cpu) opMVO(step *stepInfo) uint16 {
 	return 0
 }
 
-// Move character inverse
+// Move character inverse.
 func (cpu *cpu) opMVCIN(step *stepInfo) uint16 {
 	if err := cpu.testAccess(step.address1, uint32(step.reg), true); err != 0 {
 		return err
@@ -1084,13 +1085,13 @@ func (cpu *cpu) opMVCIN(step *stepInfo) uint16 {
 	}
 
 	for {
-		if t, err := cpu.readByte(step.address1); err != 0 {
+		t, err := cpu.readByte(step.address1)
+		if err != 0 {
 			return err
-		} else {
-			err = cpu.writeByte(step.address2, t)
-			if err != 0 {
-				return err
-			}
+		}
+		err = cpu.writeByte(step.address2, t)
+		if err != 0 {
+			return err
 		}
 		step.address2--
 		step.address1++
@@ -1101,7 +1102,7 @@ func (cpu *cpu) opMVCIN(step *stepInfo) uint16 {
 	}
 }
 
-// Move Character Long
+// Move Character Long.
 func (cpu *cpu) opMVCL(step *stepInfo) uint16 {
 	var err uint16
 	var d uint32
@@ -1179,9 +1180,9 @@ func (cpu *cpu) opMVCL(step *stepInfo) uint16 {
 	return err
 }
 
-// Compare logical long
+// Compare logical long.
 func (cpu *cpu) opCLCL(step *stepInfo) uint16 {
-	var err uint16 = 0
+	var err uint16
 	var d1, d2 uint32
 
 	// Check register alignment
@@ -1317,7 +1318,7 @@ func (cpu *cpu) opPACK(step *stepInfo) uint16 {
 	return 0
 }
 
-// Unpack packed BCD to character BCD
+// Unpack packed BCD to character BCD.
 func (cpu *cpu) opUNPK(step *stepInfo) uint16 {
 	var err uint16
 	var t, t2 uint32
@@ -1386,7 +1387,7 @@ func (cpu *cpu) opUNPK(step *stepInfo) uint16 {
 	return 0
 }
 
-// Convert packed decimal to binary
+// Convert packed decimal to binary.
 func (cpu *cpu) opCVB(step *stepInfo) uint16 {
 	var err uint16
 	var t1, t2 uint32
@@ -1440,7 +1441,7 @@ func (cpu *cpu) opCVB(step *stepInfo) uint16 {
 	return 0
 }
 
-// Convert binary to packed decimal
+// Convert binary to packed decimal.
 func (cpu *cpu) opCVD(step *stepInfo) uint16 {
 	var err uint16
 	var v uint32
@@ -1481,7 +1482,7 @@ func (cpu *cpu) opCVD(step *stepInfo) uint16 {
 	return cpu.writeFull(step.address1, v)
 }
 
-// Edit string, mark saves address of significant digit
+// Edit string, mark saves address of significant digit.
 func (cpu *cpu) opED(step *stepInfo) uint16 {
 	var err uint16
 	var src1f, src2f uint32 // Full word source
@@ -1516,7 +1517,7 @@ func (cpu *cpu) opED(step *stepInfo) uint16 {
 		switch digit {
 		case 0x21, 0x20: // Significance starter, digit selector
 
-			// If we have not run of of source, grab next pair
+			// If we have not run of source, grab next pair
 			if need {
 				if (step.address2 & 3) == 0 {
 					src2f, err = cpu.readFull(step.address2)
@@ -1538,7 +1539,7 @@ func (cpu *cpu) opED(step *stepInfo) uint16 {
 
 			// Prepare for next trip
 			src2 = (src2 & 0xf) << 4
-			if step.opcode == OP_EDMK && !sig && t != 0 {
+			if step.opcode == OpEDMK && !sig && t != 0 {
 				cpu.regs[1] &= 0xff000000
 				cpu.regs[1] |= step.address1 & AMASK
 				cpu.perRegMod |= 2
@@ -1568,7 +1569,6 @@ func (cpu *cpu) opED(step *stepInfo) uint16 {
 					fallthrough
 				case 0xb0, 0xd0:
 					need = true
-
 				}
 			}
 		case 0x22: // Field separator

@@ -181,7 +181,7 @@ const FDMASK uint64 = 0x00000000ffffffff
 //		ASSERT_TRUE(small < 8)
 //	}
 
-var trap_flag bool
+var trapFlag bool
 
 func setup() {
 	memory.SetSize(64)
@@ -194,12 +194,12 @@ func (cpu *cpu) testInst(mask uint8, steps int) {
 	cpu.progMask = mask & 0xf
 	memory.SetMemory(0x68, 0)
 	memory.SetMemory(0x6c, 0x800)
-	trap_flag = false
+	trapFlag = false
 	for range steps {
 		_ = CycleCPU()
 
 		if cpu.PC == 0x800 {
-			trap_flag = true
+			trapFlag = true
 		}
 		// Stop it next opcode = 0
 		w := memory.GetMemory(cpu.PC)
@@ -212,7 +212,7 @@ func (cpu *cpu) testInst(mask uint8, steps int) {
 	}
 }
 
-// Test LR instruction
+// Test LR instruction.
 func TestCycleLR(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x18310000) // LR 3,1
@@ -229,7 +229,7 @@ func TestCycleLR(t *testing.T) {
 	}
 }
 
-// Test LTR instruction
+// Test LTR instruction.
 func TestCycleLTR(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x12340000) // LTR 3,4
@@ -259,7 +259,7 @@ func TestCycleLTR(t *testing.T) {
 		t.Errorf("LTR CC not correct got: %x wanted: %x", cpuState.cc, 0)
 	}
 
-	// Test positve
+	// Test positive
 	cpuState.regs[4] = 0x12345678
 	cpuState.testInst(0, 20)
 	if cpuState.regs[3] != 0x12345678 {
@@ -273,12 +273,12 @@ func TestCycleLTR(t *testing.T) {
 	}
 }
 
-// Test LCR instruction
+// Test LCR instruction.
 func TestCycleLCR(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x13340000) // LCR 3,4
 
-	// Test positve
+	// Test positive
 	cpuState.regs[4] = 0x00001000
 	cpuState.testInst(0, 20)
 	if cpuState.regs[3] != 0xfffff000 {
@@ -331,12 +331,12 @@ func TestCycleLCR(t *testing.T) {
 	}
 }
 
-// Test LPR instruction
+// Test LPR instruction.
 func TestCycleLPR(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x10340000) // LPR 3,4
 
-	// Test positve
+	// Test positive
 	cpuState.regs[4] = 0x00000001
 	cpuState.testInst(0, 20)
 	if cpuState.regs[3] != 0x00000001 {
@@ -389,12 +389,12 @@ func TestCycleLPR(t *testing.T) {
 	}
 }
 
-// Test LNR instruction
+// Test LNR instruction.
 func TestCycleLNR(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x11340000) // LNR 3,4
 
-	// Test positve
+	// Test positive
 	cpuState.regs[4] = 0x00000001
 	cpuState.testInst(0, 20)
 	if cpuState.regs[3] != 0xffffffff {
@@ -447,7 +447,7 @@ func TestCycleLNR(t *testing.T) {
 	}
 }
 
-// Test L instruction
+// Test L instruction.
 func TestCycleL(t *testing.T) {
 	setup()
 	cpuState.regs[3] = 0xffffffff
@@ -541,12 +541,12 @@ func TestCycleL(t *testing.T) {
 	}
 }
 
-// Test Add register
+// Test Add register.
 func TestCycleA(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x1A120000) // AR 1,2
 
-	// Test positve
+	// Test positive
 	cpuState.regs[1] = 0x12345678
 	cpuState.regs[2] = 0x00000005
 	cpuState.testInst(0, 20)
@@ -630,7 +630,7 @@ func TestCycleA(t *testing.T) {
 	cpuState.testInst(8, 20)
 	psw1 := memory.GetMemory(0x28)
 	psw2 := memory.GetMemory(0x2c)
-	if !trap_flag {
+	if !trapFlag {
 		t.Errorf("AR 3 did not trap")
 	}
 	if cpuState.regs[1] != 0x80000000 {
@@ -716,7 +716,7 @@ func TestCycleA(t *testing.T) {
 	}
 }
 
-// Second test of Add Half
+// Second test of Add Half.
 func TestCycleAH1(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x4a156200) // AH 1,200(5,6)
@@ -748,7 +748,7 @@ func TestCycleAH1(t *testing.T) {
 	}
 }
 
-// Test Add Logical
+// Test Add Logical.
 func TestCycleAL(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x1e120000) // ALR 1,2
@@ -823,7 +823,7 @@ func TestCycleAL(t *testing.T) {
 		cpuState.cc = 3
 		n1 := rnum.Int31()
 		n2 := rnum.Int31()
-		ur := uint64(uint64(n1)&LMASKL) + uint64(uint64(n2)&LMASKL)
+		ur := (uint64(n1) & LMASKL) + (uint64(n2) & LMASKL)
 		sum := uint32(ur & LMASKL)
 		cpuState.regs[1] = uint32(n1)
 		memory.SetMemory(0x100, uint32(n2))
@@ -847,7 +847,7 @@ func TestCycleAL(t *testing.T) {
 	}
 }
 
-// Test subtract instruction
+// Test subtract instruction.
 func TestCycleS(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x1b120000) // SR 1,2
@@ -904,7 +904,6 @@ func TestCycleS(t *testing.T) {
 	cpuState.regs[1] = 0x80000000
 	cpuState.testInst(0, 20)
 	if cpuState.regs[1] != 0x00000000 {
-
 		t.Errorf("S register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x00000000)
 	}
 	if cpuState.cc != 0 {
@@ -963,7 +962,7 @@ func TestCycleS(t *testing.T) {
 	}
 }
 
-// Test AH instruction
+// Test AH instruction.
 func TestCycleAH(t *testing.T) {
 	setup()
 	// Test add half positive
@@ -998,7 +997,7 @@ func TestCycleAH(t *testing.T) {
 	}
 }
 
-// Test Subtract half
+// Test Subtract half.
 func TestCycleSH(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x4b156200) // SH 1,200(5,6)
@@ -1016,7 +1015,7 @@ func TestCycleSH(t *testing.T) {
 	}
 }
 
-// Test Subtract logical
+// Test Subtract logical.
 func TestCycleSL(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x1f120000) // SLR 1,2
@@ -1066,14 +1065,14 @@ func TestCycleSL(t *testing.T) {
 		n2 := uint32(rnum.Int31())
 		n3 := ^n2                          // Negate n2
 		sum := uint64(n1) + uint64(n3) + 1 // Sum
-		cpuState.regs[1] = uint32(n1)
-		memory.SetMemory(0x100, uint32(n2))
+		cpuState.regs[1] = n1
+		memory.SetMemory(0x100, n2)
 		memory.SetMemory(0x400, 0x5f100100) // SL 1,100(0,0)
 		// Compute resulting cc flags
 		cc := uint8(0)
 		if (sum & 0x100000000) != 0 {
 			cc = 2
-			//r &= 0x0ffffffff
+			// r &= 0x0ffffffff
 		}
 		if sum != 0 {
 			cc++
@@ -1142,7 +1141,7 @@ func TestCycleC(t *testing.T) {
 	}
 }
 
-// Test CL instruction
+// Test CL instruction.
 func TestCycleCL(t *testing.T) {
 	setup()
 	// Test compare half equal
@@ -1163,7 +1162,7 @@ func TestCycleCL(t *testing.T) {
 	}
 }
 
-// Test CH instruction
+// Test CH instruction.
 func TestCycleCH(t *testing.T) {
 	setup()
 	// Test compare half equal
@@ -1236,7 +1235,7 @@ func TestCycleCH(t *testing.T) {
 	}
 }
 
-// Test Multiply instruction
+// Test Multiply instruction.
 func TestCycleM(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x1c240000) // MR 2,4
@@ -1496,7 +1495,7 @@ func TestCycleD(t *testing.T) {
 	if cpuState.regs[3] != 0x9abcdef0 {
 		t.Errorf("D register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x9abcdef0)
 	}
-	if !trap_flag {
+	if !trapFlag {
 		t.Errorf("D over did not trap")
 	}
 
@@ -1519,11 +1518,11 @@ func TestCycleD(t *testing.T) {
 			r = -r
 		}
 		if (q & 0x7fffffff) != q {
-			if !trap_flag {
+			if !trapFlag {
 				t.Errorf("D rand over did not trap")
 			}
 		} else {
-			if trap_flag {
+			if trapFlag {
 				t.Errorf("D rand no over did trap")
 			}
 		}
@@ -1539,7 +1538,7 @@ func TestCycleD(t *testing.T) {
 	}
 }
 
-// Test Store Word
+// Test Store Word.
 func TestCycleST(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x50123400) // ST 1,400(2,3)
@@ -1626,7 +1625,7 @@ func TestCycleST(t *testing.T) {
 	}
 }
 
-// Test Store Half Word
+// Test Store Half Word.
 func TestCycleSTH(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x40345ffe) // STH 2,ffe(4,5)
@@ -1699,7 +1698,7 @@ func TestCycleSTH(t *testing.T) {
 	}
 }
 
-// Test Load Half Word
+// Test Load Half Word.
 func TestCycleLH(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x48345986) // LH 3,986(4,5)
@@ -1785,7 +1784,7 @@ func TestCycleLH(t *testing.T) {
 	}
 }
 
-// Test LA
+// Test LA.
 func TestCycleLA(t *testing.T) {
 	setup()
 	// From Princ Ops p147
@@ -1842,7 +1841,7 @@ func TestCycleLA(t *testing.T) {
 	}
 }
 
-// Test STC
+// Test STC.
 func TestCycleSTC(t *testing.T) {
 	setup()
 	for i := range 4 { // Test all 4 offsets.
@@ -1865,7 +1864,7 @@ func TestCycleSTC(t *testing.T) {
 	}
 }
 
-// Test IC
+// Test IC.
 func TestCycleSIC(t *testing.T) {
 	setup()
 	for i := range 4 { // Test all 4 offsets.
@@ -1888,7 +1887,7 @@ func TestCycleSIC(t *testing.T) {
 	}
 }
 
-// Test EX
+// Test EX.
 func TestCycleEX(t *testing.T) {
 	setup()
 	memory.SetMemory(0x100, 0x1a000000) // Target instruction AR 0,0
@@ -1912,12 +1911,12 @@ func TestCycleEX(t *testing.T) {
 	memory.SetMemory(0x404, 0x00000000) // Prevent fetch of next instruction
 	cpuState.testInst(0, 20)
 
-	if !trap_flag {
-		t.Errorf("EX EX did not trap")
+	if !trapFlag {
+		t.Errorf("EX of EX did not trap")
 	}
 }
 
-// Test BAL
+// Test BAL.
 func TestCycleBAL(t *testing.T) {
 	setup()
 	cpuState.regs[3] = 0x12000000
@@ -1935,7 +1934,7 @@ func TestCycleBAL(t *testing.T) {
 	}
 }
 
-// Test BALR
+// Test BALR.
 func TestCycleBALR(t *testing.T) {
 	setup()
 	cpuState.regs[1] = 0
@@ -1969,7 +1968,7 @@ func TestCycleBALR(t *testing.T) {
 	}
 }
 
-// Test BCT
+// Test BCT.
 func TestCycleBCT(t *testing.T) {
 	setup()
 	cpuState.regs[1] = 3          // Count
@@ -2000,7 +1999,7 @@ func TestCycleBCT(t *testing.T) {
 	}
 }
 
-// Test BCTR
+// Test BCTR.
 func TestCycleBCTR(t *testing.T) {
 	setup()
 	cpuState.regs[1] = 3          // Count
@@ -2044,10 +2043,9 @@ func TestCycleBCTR(t *testing.T) {
 	if cpuState.PC != 0x402 {
 		t.Errorf("BCT PC not correct got: %08x wanted: %08x", cpuState.PC, 0x402)
 	}
-
 }
 
-// Test BC on all conditions with all values of CC
+// Test BC on all conditions with all values of CC.
 func TestCycleBC(t *testing.T) {
 	setup()
 	memory.SetMemory(0x100, 0)
@@ -2074,7 +2072,7 @@ func TestCycleBC(t *testing.T) {
 	}
 }
 
-// Test BCR on all conditions with all values of CC
+// Test BCR on all conditions with all values of CC.
 func TestCycleBCR(t *testing.T) {
 	setup()
 	cpuState.regs[1] = 0x12005678 // Branch destination
@@ -2101,7 +2099,7 @@ func TestCycleBCR(t *testing.T) {
 	}
 }
 
-// Test BXH
+// Test BXH.
 func TestCycleBXH(t *testing.T) {
 	setup()
 
@@ -2186,10 +2184,9 @@ func TestCycleBXH(t *testing.T) {
 	if cpuState.PC != 0x404 {
 		t.Errorf("BXH PC not correct got: %08x wanted: %08x", cpuState.PC, 0x404)
 	}
-
 }
 
-// Test BXLE
+// Test BXLE.
 func TestCycleBXLE(t *testing.T) {
 	setup()
 
@@ -2276,7 +2273,7 @@ func TestCycleBXLE(t *testing.T) {
 	}
 }
 
-// Test and instruction
+// Test and instruction.
 func TestCycleN(t *testing.T) {
 	setup()
 
@@ -2315,7 +2312,7 @@ func TestCycleN(t *testing.T) {
 	}
 }
 
-// Test or instruction
+// Test or instruction.
 func TestCycleO(t *testing.T) {
 	setup()
 
@@ -2355,7 +2352,7 @@ func TestCycleO(t *testing.T) {
 	}
 }
 
-// Test or instruction
+// Test or instruction.
 func TestCycleX(t *testing.T) {
 	setup()
 
@@ -2395,7 +2392,7 @@ func TestCycleX(t *testing.T) {
 	}
 }
 
-// Shift left arithmetic single register
+// Shift left arithmetic single register.
 func TestCycleSLA(t *testing.T) {
 	setup()
 
@@ -2584,7 +2581,7 @@ func TestCycleSLA(t *testing.T) {
 	}
 }
 
-// Shift left logical instruction
+// Shift left logical instruction.
 func TestCycleSLL(t *testing.T) {
 	setup()
 
@@ -2602,7 +2599,7 @@ func TestCycleSLL(t *testing.T) {
 	}
 }
 
-// Shift right logical instruction
+// Shift right logical instruction.
 func TestCycleSRL(t *testing.T) {
 	setup()
 
@@ -2620,7 +2617,7 @@ func TestCycleSRL(t *testing.T) {
 	}
 }
 
-// Shift right arithmatic instruction
+// Shift right arithmatic instruction.
 func TestCycleSRA(t *testing.T) {
 	setup()
 
@@ -2637,7 +2634,7 @@ func TestCycleSRA(t *testing.T) {
 	}
 }
 
-// Shift right double logical
+// Shift right double logical.
 func TestCycleSRDL(t *testing.T) {
 	setup()
 
@@ -2660,7 +2657,7 @@ func TestCycleSRDL(t *testing.T) {
 	}
 }
 
-// Shift left double logical
+// Shift left double logical.
 func TestCycleSLDL(t *testing.T) {
 	setup()
 
@@ -2707,7 +2704,7 @@ func TestCycleSLDL(t *testing.T) {
 	cpuState.regs[5] = 0x00010001
 	memory.SetMemory(0x400, 0x8d1f2100) // SLDL 1,100(2)
 	cpuState.testInst(0, 20)
-	if !trap_flag {
+	if !trapFlag {
 		t.Error("SLDL did not trap")
 	}
 	v = cpuState.regs[4]
@@ -2722,7 +2719,7 @@ func TestCycleSLDL(t *testing.T) {
 	}
 }
 
-// Shift double right arithmatic
+// Shift double right arithmatic.
 func TestCycleSRDA(t *testing.T) {
 	setup()
 
@@ -2782,10 +2779,9 @@ func TestCycleSRDA(t *testing.T) {
 	if cpuState.cc != 1 {
 		t.Errorf("SRDA CC not correct got: %x wanted: %x", cpuState.cc, 1)
 	}
-
 }
 
-// // Shift double left arithmatic
+// // Shift double left arithmatic.
 func TestCycleSLDA(t *testing.T) {
 	setup()
 
