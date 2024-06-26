@@ -295,11 +295,13 @@ func (cpu *cpu) opSub(step *stepInfo) uint16 {
 func (cpu *cpu) opCmp(step *stepInfo) uint16 {
 	if int32(step.src1) > int32(step.src2) {
 		cpu.cc = 2
-	} else if step.src1 != step.src2 {
-		cpu.cc = 1
-	} else {
-		cpu.cc = 0
+		return 0
 	}
+	if step.src1 != step.src2 {
+		cpu.cc = 1
+		return 0
+	}
+	cpu.cc = 0
 	return 0
 }
 
@@ -343,11 +345,13 @@ func (cpu *cpu) opSubL(step *stepInfo) uint16 {
 func (cpu *cpu) opCmpL(step *stepInfo) uint16 {
 	if step.src1 > step.src2 {
 		cpu.cc = 2
-	} else if step.src1 != step.src2 {
-		cpu.cc = 1
-	} else {
-		cpu.cc = 0
+		return 0
 	}
+	if step.src1 != step.src2 {
+		cpu.cc = 1
+		return 0
+	}
+	cpu.cc = 0
 	return 0
 }
 
@@ -628,7 +632,7 @@ func (cpu *cpu) opTS(step *stepInfo) uint16 {
 	if err != 0 {
 		return err
 	}
-	if err = cpu.writeByte(step.address1, step.src1&0xff); err != 0 {
+	if err = cpu.writeByte(step.address1, 0xff); err != 0 {
 		return err
 	}
 	if (t2 & 0x80) != 0 {
@@ -969,16 +973,21 @@ func (cpu *cpu) opCLC(step *stepInfo) uint16 {
 
 // Translate memory and Translate and Test.
 func (cpu *cpu) opTR(step *stepInfo) uint16 {
-	if err := cpu.testAccess(step.address1, uint32(step.reg), true); err != 0 {
+	err := cpu.testAccess(step.address1, uint32(step.reg), true)
+	if err != 0 {
 		return err
 	}
-	if err := cpu.testAccess(step.address2, 256, false); err != 0 {
+	err = cpu.testAccess(step.address2, 256, false)
+	if err != 0 {
 		return err
+	}
+
+	if step.opcode == OpTRT {
+		cpuState.cc = 0
 	}
 
 	for {
 		var t1, t2 uint32
-		var err uint16
 		t1, err = cpu.readByte(step.address1)
 		if err != 0 {
 			return err
@@ -1003,11 +1012,10 @@ func (cpu *cpu) opTR(step *stepInfo) uint16 {
 				return 0
 			}
 		} else {
-			err = cpu.writeByte(step.address1, t1)
+			err = cpu.writeByte(step.address1, t2)
 			if err != 0 {
 				return err
 			}
-			step.address2++
 		}
 		step.address1++
 		step.reg--
@@ -1255,10 +1263,9 @@ func (cpu *cpu) opCLCL(step *stepInfo) uint16 {
 
 // Pack characters into digits.
 func (cpu *cpu) opPACK(step *stepInfo) uint16 {
-	var err uint16
 	var t, t2 uint32
 
-	err = cpu.testAccess(step.address1, 0, true)
+	err := cpu.testAccess(step.address1, 0, true)
 	if err != 0 {
 		return err
 	}
@@ -1290,14 +1297,14 @@ func (cpu *cpu) opPACK(step *stepInfo) uint16 {
 		t &= uint32(0xf)
 		step.address2--
 		step.R2--
-		if step.R1 != 0 {
+		if step.R2 != 0 {
 			t2, err = cpu.readByte(step.address2)
 			if err != 0 {
 				return err
 			}
 			t |= (t2 << 4) & 0xf0
 			step.address2--
-			step.R1--
+			step.R2--
 		}
 		err = cpu.writeByte(step.address1, t)
 		if err != 0 {
@@ -1320,10 +1327,9 @@ func (cpu *cpu) opPACK(step *stepInfo) uint16 {
 
 // Unpack packed BCD to character BCD.
 func (cpu *cpu) opUNPK(step *stepInfo) uint16 {
-	var err uint16
-	var t, t2 uint32
+	var t uint32
 
-	err = cpu.testAccess(step.address1, 0, true)
+	err := cpu.testAccess(step.address1, 0, true)
 	if err != 0 {
 		return err
 	}
@@ -1332,6 +1338,7 @@ func (cpu *cpu) opUNPK(step *stepInfo) uint16 {
 		return err
 	}
 
+	// Point to end
 	step.address1 += uint32(step.R1)
 	step.address2 += uint32(step.R2)
 
@@ -1354,30 +1361,25 @@ func (cpu *cpu) opUNPK(step *stepInfo) uint16 {
 		}
 		step.address2--
 		step.R2--
-		t2 = (t & 0xf) | 0xf0
+		t2 := (t & 0xf) | 0xf0
 		err = cpu.writeByte(step.address1, t2)
 		if err != 0 {
 			return err
 		}
+		step.address1--
+		step.R1--
 		if step.R1 != 0 {
 			t2 = ((t >> 4) & 0xf) | 0xf0
 			err = cpu.writeByte(step.address1, t2)
 			if err != 0 {
 				return err
 			}
-			step.address2--
+			step.address1--
 			step.R1--
 		}
-		err = cpu.writeByte(step.address1, t)
-		if err != 0 {
-			return err
-		}
-		step.address1--
-		step.R1--
 	}
-	t = 0xf0
 	for step.R1 != 0 {
-		err = cpu.writeByte(step.address1, t)
+		err = cpu.writeByte(step.address1, 0xf0)
 		if err != 0 {
 			return err
 		}
@@ -1418,7 +1420,7 @@ func (cpu *cpu) opCVB(step *stepInfo) uint16 {
 	}
 
 	// Convert lower
-	for i := 28; i >= 0; i -= 4 {
+	for i := 28; i > 0; i -= 4 {
 		d := (t2 >> i) & uint32(0xf)
 		if d >= 0xa {
 			return ircData
@@ -1426,9 +1428,10 @@ func (cpu *cpu) opCVB(step *stepInfo) uint16 {
 		v = (v * 10) + uint64(d)
 	}
 
+	r := uint16(0)
 	// Check if too big
 	if (v&OMASKL) != 0 && v != uint64(MSIGN) {
-		return ircFixDiv
+		r = ircFixDiv
 	}
 
 	// two's compliment if needed
@@ -1438,28 +1441,22 @@ func (cpu *cpu) opCVB(step *stepInfo) uint16 {
 
 	cpu.regs[step.R1] = uint32(v & LMASKL)
 	cpu.perRegMod |= 1 << step.R1
-	return 0
+	return r
 }
 
 // Convert binary to packed decimal.
 func (cpu *cpu) opCVD(step *stepInfo) uint16 {
-	var err uint16
-	var v uint32
-	var t uint64
-	var s bool
-
-	v = cpu.regs[step.R1]
+	v := cpu.regs[step.R1]
 
 	// Save sign
+	s := false
 	if (v & MSIGN) != 0 {
 		v = ^v + 1
 		s = true
-	} else {
-		s = false
 	}
 
 	// Convert to packed decimal
-	t = 0
+	t := uint64(0)
 	for i := 4; v != 0; i += 4 {
 		d := v % 10
 		v /= 10
@@ -1474,12 +1471,12 @@ func (cpu *cpu) opCVD(step *stepInfo) uint16 {
 	}
 
 	v = uint32((t >> 32) & LMASKL)
-	err = cpu.writeFull(step.address1, v)
+	err := cpu.writeFull(step.address1, v)
 	if err != 0 {
 		return err
 	}
 	v = uint32(t & LMASKL)
-	return cpu.writeFull(step.address1, v)
+	return cpu.writeFull(step.address1+4, v)
 }
 
 // Edit string, mark saves address of significant digit.

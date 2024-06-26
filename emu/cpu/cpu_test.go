@@ -33,9 +33,11 @@ import (
 	"github.com/rcornwell/S370/emu/memory"
 )
 
-const testCycles int = 100
-const HDMASK uint64 = 0xffffffff80000000
-const FDMASK uint64 = 0x00000000ffffffff
+const (
+	testCycles int    = 100
+	HDMASK     uint64 = 0xffffffff80000000
+	FDMASK     uint64 = 0x00000000ffffffff
+)
 
 //  CTEST( instruct, fp_conversion) {
 // 	ASSERT_EQUAL(0, floatToFpreg(0, 0.0))
@@ -189,13 +191,13 @@ func setup() {
 	cpuState.cc = 3
 }
 
-func (cpu *cpu) testInst(mask uint8, steps int) {
+func (cpu *cpu) testInst(mask uint8) {
 	cpu.PC = 0x400
 	cpu.progMask = mask & 0xf
 	memory.SetMemory(0x68, 0)
 	memory.SetMemory(0x6c, 0x800)
 	trapFlag = false
-	for range steps {
+	for range 20 {
 		_ = CycleCPU()
 
 		if cpu.PC == 0x800 {
@@ -217,7 +219,7 @@ func TestCycleLR(t *testing.T) {
 	setup()
 	memory.SetMemory(0x400, 0x18310000) // LR 3,1
 	cpuState.regs[1] = 0x12345678
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0x12345678 {
 		t.Errorf("LR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x12345678)
 	}
@@ -235,7 +237,7 @@ func TestCycleLTR(t *testing.T) {
 	memory.SetMemory(0x400, 0x12340000) // LTR 3,4
 	// Test negative number
 	cpuState.regs[4] = 0xcdef1234
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0xcdef1234 {
 		t.Errorf("LTR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x12345678)
 	}
@@ -248,7 +250,7 @@ func TestCycleLTR(t *testing.T) {
 
 	// Test zero
 	cpuState.regs[4] = 0x00000000
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0x00000000 {
 		t.Errorf("LTR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x00000000)
 	}
@@ -261,7 +263,7 @@ func TestCycleLTR(t *testing.T) {
 
 	// Test positive
 	cpuState.regs[4] = 0x12345678
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0x12345678 {
 		t.Errorf("LTR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x12345678)
 	}
@@ -280,7 +282,7 @@ func TestCycleLCR(t *testing.T) {
 
 	// Test positive
 	cpuState.regs[4] = 0x00001000
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0xfffff000 {
 		t.Errorf("LCR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0xfffff000)
 	}
@@ -293,7 +295,7 @@ func TestCycleLCR(t *testing.T) {
 
 	// Test negative number
 	cpuState.regs[4] = 0xffffffff
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0x00000001 {
 		t.Errorf("LCR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x00000001)
 	}
@@ -306,7 +308,7 @@ func TestCycleLCR(t *testing.T) {
 
 	// Test zero
 	cpuState.regs[4] = 0x00000000
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0x00000000 {
 		t.Errorf("LCR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x00000000)
 	}
@@ -319,7 +321,7 @@ func TestCycleLCR(t *testing.T) {
 
 	// Test overflow
 	cpuState.regs[4] = 0x80000000
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0x80000000 {
 		t.Errorf("LCR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x80000000)
 	}
@@ -338,7 +340,7 @@ func TestCycleLPR(t *testing.T) {
 
 	// Test positive
 	cpuState.regs[4] = 0x00000001
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0x00000001 {
 		t.Errorf("LPR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x00000001)
 	}
@@ -351,7 +353,7 @@ func TestCycleLPR(t *testing.T) {
 
 	// Test negative number
 	cpuState.regs[4] = 0xffffffff
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0x00000001 {
 		t.Errorf("LPR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x00000001)
 	}
@@ -364,7 +366,7 @@ func TestCycleLPR(t *testing.T) {
 
 	// Test zero
 	cpuState.regs[4] = 0x00000000
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0x00000000 {
 		t.Errorf("LPR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x00000000)
 	}
@@ -377,7 +379,7 @@ func TestCycleLPR(t *testing.T) {
 
 	// Test overflow
 	cpuState.regs[4] = 0x80000000
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0x80000000 {
 		t.Errorf("LPR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x80000000)
 	}
@@ -396,7 +398,7 @@ func TestCycleLNR(t *testing.T) {
 
 	// Test positive
 	cpuState.regs[4] = 0x00000001
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0xffffffff {
 		t.Errorf("LNR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0xffffffff)
 	}
@@ -409,7 +411,7 @@ func TestCycleLNR(t *testing.T) {
 
 	// Test negative number
 	cpuState.regs[4] = 0xffffffff
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0xffffffff {
 		t.Errorf("LNR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0xffffffff)
 	}
@@ -422,7 +424,7 @@ func TestCycleLNR(t *testing.T) {
 
 	// Test zero
 	cpuState.regs[4] = 0x00000000
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0x00000000 {
 		t.Errorf("LNR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x00000000)
 	}
@@ -435,7 +437,7 @@ func TestCycleLNR(t *testing.T) {
 
 	// Test overflow
 	cpuState.regs[4] = 0x80000000
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0x80000000 {
 		t.Errorf("LNR register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x80000000)
 	}
@@ -455,7 +457,7 @@ func TestCycleL(t *testing.T) {
 	cpuState.regs[5] = 0x200
 	memory.SetMemory(0x1b84, 0x12345678)
 	memory.SetMemory(0x400, 0x58345984) // L 3,984(4,5)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0x12345678 {
 		t.Errorf("L register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x12345678)
 	}
@@ -470,7 +472,7 @@ func TestCycleL(t *testing.T) {
 	cpuState.regs[5] = 0x200
 	memory.SetMemory(0x1b84, 0x92345678)
 	memory.SetMemory(0x400, 0x58345984) // L 3,984(4,5)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0x92345678 {
 		t.Errorf("L register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x92345678)
 	}
@@ -485,7 +487,7 @@ func TestCycleL(t *testing.T) {
 	cpuState.regs[5] = 0x200
 	memory.SetMemory(0x1984, 0x00000000)
 	memory.SetMemory(0x400, 0x58340984) // L 3,984(4)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[3] != 0x00000000 {
 		t.Errorf("L register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x00000000)
 	}
@@ -501,7 +503,7 @@ func TestCycleL(t *testing.T) {
 	memory.SetMemory(0x1b84, 0xff123456)
 	memory.SetMemory(0x1b88, 0x78ffffff)
 	memory.SetMemory(0x400, 0x58345984) // L 3,984(4,5)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.regs[3] != 0x12345678 {
 		t.Errorf("L register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x12345678)
@@ -517,7 +519,7 @@ func TestCycleL(t *testing.T) {
 	memory.SetMemory(0x1984, 0xffff1234)
 	memory.SetMemory(0x1988, 0x5678ffff)
 	memory.SetMemory(0x400, 0x58340984) // L 3,984(4)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.regs[3] != 0x12345678 {
 		t.Errorf("L register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x12345678)
@@ -531,7 +533,7 @@ func TestCycleL(t *testing.T) {
 	memory.SetMemory(0x1984, 0xffffff12)
 	memory.SetMemory(0x1988, 0x345678ff)
 	memory.SetMemory(0x400, 0x58304984) // L 3,984(4)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.regs[3] != 0x12345678 {
 		t.Errorf("L register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], 0x12345678)
@@ -549,7 +551,7 @@ func TestCycleA(t *testing.T) {
 	// Test positive
 	cpuState.regs[1] = 0x12345678
 	cpuState.regs[2] = 0x00000005
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[1] != 0x1234567d {
 		t.Errorf("AR register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x1234567d)
 	}
@@ -564,7 +566,7 @@ func TestCycleA(t *testing.T) {
 	// Test negative number
 	cpuState.regs[1] = 0x81234567
 	cpuState.regs[2] = 0x00000001
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[1] != 0x81234568 {
 		t.Errorf("AR register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x81234568)
 	}
@@ -579,7 +581,7 @@ func TestCycleA(t *testing.T) {
 	// Test zero
 	cpuState.regs[1] = 0x00000002
 	cpuState.regs[2] = 0xfffffffe
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[1] != 0x00000000 {
 		t.Errorf("AR register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x00000000)
 	}
@@ -594,7 +596,7 @@ func TestCycleA(t *testing.T) {
 	// Test overflow
 	cpuState.regs[1] = 0x7fffffff
 	cpuState.regs[2] = 0x00000001
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[1] != 0x80000000 {
 		t.Errorf("AR register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x80000000)
 	}
@@ -610,7 +612,7 @@ func TestCycleA(t *testing.T) {
 	cpuState.regs[1] = 0x12345678
 	cpuState.regs[2] = 0x00000001
 	cpuState.regs[3] = 0x00000010
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[1] != 0x12345679 {
 		t.Errorf("AR 2 register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x12345679)
 	}
@@ -627,7 +629,7 @@ func TestCycleA(t *testing.T) {
 	memory.SetMemory(0x400, 0x1a120000) // AR 1,2
 	cpuState.regs[1] = 0x7fffffff
 	cpuState.regs[2] = 0x00000001
-	cpuState.testInst(8, 20)
+	cpuState.testInst(8)
 	psw1 := memory.GetMemory(0x28)
 	psw2 := memory.GetMemory(0x2c)
 	if !trapFlag {
@@ -655,7 +657,7 @@ func TestCycleA(t *testing.T) {
 	cpuState.regs[5] = 0x00000100
 	cpuState.regs[6] = 0x00000200
 	memory.SetMemory(0x500, 0x34567890)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	s := uint32(0x12345678) + uint32(0x34567890)
 	if cpuState.regs[1] != s {
 		t.Errorf("A register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], s)
@@ -677,13 +679,14 @@ func TestCycleA(t *testing.T) {
 		cpuState.regs[1] = uint32(n1)
 		memory.SetMemory(0x100, uint32(n2))
 		memory.SetMemory(0x400, 0x5a100100) // A 1,100(0,0)
-		cpuState.testInst(0, 20)
+		cpuState.testInst(0)
 
-		if r == 0 { // Zero
+		switch x := r; {
+		case x == 0: // Zero
 			if cpuState.cc != 0 {
 				t.Errorf("A rand not correct got: %x wanted: %x", cpuState.cc, 0)
 			}
-		} else if r > 0 { // Positive
+		case x > 0: // Positive
 			if (ur & HDMASK) != 0 {
 				if cpuState.cc != 3 {
 					t.Errorf("A rand not correct got: %x wanted: %x", cpuState.cc, 3)
@@ -696,7 +699,7 @@ func TestCycleA(t *testing.T) {
 			if cpuState.cc != 2 {
 				t.Errorf("A rand not correct got: %x wanted: %x", cpuState.cc, 2)
 			}
-		} else { // Negative
+		default: // Negative
 			if (ur & HDMASK) != HDMASK {
 				if cpuState.cc != 3 {
 					t.Errorf("A rand not correct got: %x wanted: %x", cpuState.cc, 3)
@@ -724,7 +727,7 @@ func TestCycleAH1(t *testing.T) {
 	cpuState.regs[5] = 0x00000100
 	cpuState.regs[6] = 0x00000202
 	memory.SetMemory(0x500, 0x34567890)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	s := uint32(0x12345678) + uint32(0x7890)
 	if cpuState.regs[1] != s {
 		t.Errorf("AH register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], s)
@@ -739,7 +742,7 @@ func TestCycleAH1(t *testing.T) {
 	cpuState.regs[5] = 0x00000100
 	cpuState.regs[6] = 0x00000200
 	memory.SetMemory(0x500, 0xfffe1234)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[1] != 0xffffffff {
 		t.Errorf("AH register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0xffffffff)
 	}
@@ -754,7 +757,7 @@ func TestCycleAL(t *testing.T) {
 	memory.SetMemory(0x400, 0x1e120000) // ALR 1,2
 	cpuState.regs[1] = 0x00000000
 	cpuState.regs[2] = 0x00000000
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.regs[1] != 0x00000000 {
 		t.Errorf("ALR register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x00000000)
@@ -767,7 +770,7 @@ func TestCycleAL(t *testing.T) {
 	memory.SetMemory(0x400, 0x1e120000) // ALR 1,2
 	cpuState.regs[1] = 0xffff0000
 	cpuState.regs[2] = 0x00000002
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.regs[1] != 0xffff0002 {
 		t.Errorf("ALR register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0xffff0002)
@@ -780,7 +783,7 @@ func TestCycleAL(t *testing.T) {
 	memory.SetMemory(0x400, 0x1e120000) // ALR 1,2
 	cpuState.regs[1] = 0xfffffffe
 	cpuState.regs[2] = 0x00000002
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.regs[1] != 0x00000000 {
 		t.Errorf("ALR register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x00000000)
@@ -793,7 +796,7 @@ func TestCycleAL(t *testing.T) {
 	memory.SetMemory(0x400, 0x1e120000) // ALR 1,2
 	cpuState.regs[1] = 0xfffffffe
 	cpuState.regs[2] = 0x00000003
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.regs[1] != 0x00000001 {
 		t.Errorf("ALR register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x00000001)
@@ -808,7 +811,7 @@ func TestCycleAL(t *testing.T) {
 	cpuState.regs[5] = 0x00000100
 	cpuState.regs[6] = 0x00000200
 	memory.SetMemory(0x500, 0xf0000000)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[1] != 0x02345678 {
 		t.Errorf("ALR register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x02345678)
 	}
@@ -836,7 +839,7 @@ func TestCycleAL(t *testing.T) {
 		if ur != 0 {
 			cc++
 		}
-		cpuState.testInst(0, 20)
+		cpuState.testInst(0)
 
 		if cpuState.cc != cc {
 			t.Errorf("AL rand not correct got: %x wanted: %x", cpuState.cc, cc)
@@ -853,7 +856,7 @@ func TestCycleS(t *testing.T) {
 	memory.SetMemory(0x400, 0x1b120000) // SR 1,2
 	cpuState.regs[1] = 0x12345678
 	cpuState.regs[2] = 0x00000001
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[1] != 0x12345677 {
 		t.Errorf("S register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x12345677)
 	}
@@ -867,7 +870,7 @@ func TestCycleS(t *testing.T) {
 	cpuState.regs[1] = 0x12345678
 	cpuState.regs[5] = 0x00000100
 	cpuState.regs[6] = 0x00000200
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.regs[1] != 0x00045678 {
 		t.Errorf("S register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x00045678)
@@ -879,7 +882,7 @@ func TestCycleS(t *testing.T) {
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0x1b110000) // SR 1,1
 	cpuState.regs[1] = 0x8fffffff
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.regs[1] != 0x00000000 {
 		t.Errorf("S register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x00000000)
@@ -891,7 +894,7 @@ func TestCycleS(t *testing.T) {
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0x1b110000) // SR 1,1
 	cpuState.regs[1] = 0xffffffff
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.regs[1] != 0x00000000 {
 		t.Errorf("S register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x00000000)
@@ -902,7 +905,7 @@ func TestCycleS(t *testing.T) {
 
 	memory.SetMemory(0x400, 0x1b110000) // SR 1,1
 	cpuState.regs[1] = 0x80000000
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[1] != 0x00000000 {
 		t.Errorf("S register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x00000000)
 	}
@@ -923,13 +926,14 @@ func TestCycleS(t *testing.T) {
 		cpuState.regs[1] = uint32(n1)
 		memory.SetMemory(0x100, uint32(n2))
 		memory.SetMemory(0x400, 0x5b100100) // S 1,100(0,0)
-		cpuState.testInst(0, 20)
+		cpuState.testInst(0)
 
-		if r == 0 { // Zero
+		switch x := r; {
+		case x == 0: // Zero
 			if cpuState.cc != 0 {
 				t.Errorf("S rand not correct got: %x wanted: %x", cpuState.cc, 0)
 			}
-		} else if r > 0 { // Positive
+		case x > 0: // Positive
 			if (ur & HDMASK) != 0 {
 				if cpuState.cc != 3 {
 					t.Errorf("S rand not correct got: %x wanted: %x", cpuState.cc, 3)
@@ -942,7 +946,7 @@ func TestCycleS(t *testing.T) {
 			if cpuState.cc != 2 {
 				t.Errorf("S rand not correct got: %x wanted: %x", cpuState.cc, 2)
 			}
-		} else { // Negative
+		default: // Negative
 			if (ur & HDMASK) != HDMASK {
 				if cpuState.cc != 3 {
 					t.Errorf("S rand not correct got: %x wanted: %x", cpuState.cc, 3)
@@ -969,7 +973,7 @@ func TestCycleAH(t *testing.T) {
 	memory.SetMemory(0x400, 0x4a300200) // AH 3,200(0,0)
 	memory.SetMemory(0x200, 0x1234eeee)
 	cpuState.regs[3] = 0x12345678
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v := cpuState.regs[3]
 	r := uint32(0x12345678 + 0x1234)
@@ -985,7 +989,7 @@ func TestCycleAH(t *testing.T) {
 	memory.SetMemory(0x400, 0x4a300200) // AH 3,200(0,0)
 	memory.SetMemory(0x200, 0xfffe9999) // -2
 	cpuState.regs[3] = 0x12345678
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v = cpuState.regs[3]
 	r = uint32(0x12345676)
@@ -1005,7 +1009,7 @@ func TestCycleSH(t *testing.T) {
 	cpuState.regs[1] = 0x12345678
 	cpuState.regs[5] = 0x00000100
 	cpuState.regs[6] = 0x00000200
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	s := uint32(0x12345678) - uint32(0x1230)
 	if cpuState.regs[1] != s {
 		t.Errorf("SH register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], s)
@@ -1021,7 +1025,7 @@ func TestCycleSL(t *testing.T) {
 	memory.SetMemory(0x400, 0x1f120000) // SLR 1,2
 	cpuState.regs[1] = 0x12345678
 	cpuState.regs[2] = 0x12345678
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[1] != 0x00000000 {
 		t.Errorf("SL register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x00000000)
 	}
@@ -1035,7 +1039,7 @@ func TestCycleSL(t *testing.T) {
 	cpuState.regs[5] = 0x00000100
 	cpuState.regs[6] = 0x00000200
 	memory.SetMemory(0x500, 0x11111111)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[1] != 0xeeeeeeee {
 		t.Errorf("SL register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0xeeeeeeee)
 	}
@@ -1049,7 +1053,7 @@ func TestCycleSL(t *testing.T) {
 	cpuState.regs[5] = 0x00000100
 	cpuState.regs[6] = 0x00000200
 	memory.SetMemory(0x500, 0x23456789)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[1] != 0xeeeeeeef {
 		t.Errorf("SL register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0xeeeeeeef)
 	}
@@ -1078,7 +1082,7 @@ func TestCycleSL(t *testing.T) {
 			cc++
 		}
 
-		cpuState.testInst(0, 20)
+		cpuState.testInst(0)
 
 		if cpuState.cc != cc {
 			t.Errorf("SL rand not correct got: %x wanted: %x", cpuState.cc, cc)
@@ -1094,7 +1098,7 @@ func TestCycleC(t *testing.T) {
 	memory.SetMemory(0x400, 0x19120000) // CR 1,2
 	cpuState.regs[1] = 0x12345678
 	cpuState.regs[2] = 0x12345678
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[1] != 0x12345678 {
 		t.Errorf("CR register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0x12345678)
 	}
@@ -1106,7 +1110,7 @@ func TestCycleC(t *testing.T) {
 	memory.SetMemory(0x400, 0x19120000) // CR 1,2
 	cpuState.regs[1] = 0xfffffffe       // -2
 	cpuState.regs[2] = 0xfffffffd       // -3
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[1] != 0xfffffffe {
 		t.Errorf("CR register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0xfffffffe)
 	}
@@ -1118,7 +1122,7 @@ func TestCycleC(t *testing.T) {
 	memory.SetMemory(0x400, 0x19120000) // CR 1,2
 	cpuState.regs[1] = 2
 	cpuState.regs[2] = 3
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[1] != 2 {
 		t.Errorf("CR register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 2)
 	}
@@ -1131,7 +1135,7 @@ func TestCycleC(t *testing.T) {
 	cpuState.regs[1] = 0xf0000000
 	cpuState.regs[5] = 0x00000100
 	cpuState.regs[6] = 0x00000200
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.regs[1] != 0xf0000000 {
 		t.Errorf("C register 1 was incorrect got: %08x wanted: %08x", cpuState.regs[1], 0xf0000000)
@@ -1151,7 +1155,7 @@ func TestCycleCL(t *testing.T) {
 	cpuState.regs[1] = 0x12345678
 	cpuState.regs[2] = 0x200
 	cpuState.regs[3] = 0x300
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v := cpuState.regs[1]
 	if v != 0x12345678 {
@@ -1160,6 +1164,57 @@ func TestCycleCL(t *testing.T) {
 	if cpuState.cc != 0 {
 		t.Errorf("CL CC not correct got: %x wanted: %x", cpuState.cc, 0)
 	}
+
+	// Compare logical register
+	cpuState.cc = 3
+	cpuState.regs[1] = 0x12345678
+	cpuState.regs[2] = 0x12345678
+	memory.SetMemory(0x400, 0x15120000) // CLR 1,2
+	cpuState.testInst(0)
+	if cpuState.cc != 0 {
+		t.Errorf("CL CC not correct got: %x wanted: %x", cpuState.cc, 0)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[1] = 0x12345678
+	cpuState.regs[2] = 0x12345679
+	memory.SetMemory(0x400, 0x15120000) // CLR 1,2
+	cpuState.testInst(0)
+	if cpuState.cc != 1 {
+		t.Errorf("CL CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[1] = 0x12345679
+	cpuState.regs[2] = 0x12345678
+	memory.SetMemory(0x400, 0x15120000) // CLR 1,2
+	cpuState.testInst(0)
+	if cpuState.cc != 2 {
+		t.Errorf("CL CC not correct got: %x wanted: %x", cpuState.cc, 2)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[1] = 0x7fffffff
+	cpuState.regs[2] = 0x8fffffff
+	memory.SetMemory(0x400, 0x15120000) // CLR 1,2
+	cpuState.testInst(0)
+	if cpuState.cc != 1 {
+		t.Errorf("CL CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+
+	// Compare logical
+	cpuState.cc = 3
+	cpuState.regs[1] = 0x12345678
+	cpuState.regs[2] = 0x100
+	cpuState.regs[3] = 0x100
+	memory.SetMemory(0x300, 0x12345678)
+	memory.SetMemory(0x400, 0x55123100) // CL 1,100(2,3)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
+	if cpuState.cc != 0 {
+		t.Errorf("CL CC not correct got: %x wanted: %x", cpuState.cc, 0)
+	}
+
 }
 
 // Test CH instruction.
@@ -1169,7 +1224,7 @@ func TestCycleCH(t *testing.T) {
 	memory.SetMemory(0x400, 0x49300100) // CH 3,100(0,0)
 	memory.SetMemory(0x100, 0x5678abcd)
 	cpuState.regs[3] = 0x00005678
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v := cpuState.regs[3]
 	if v != 0x00005678 {
@@ -1184,7 +1239,7 @@ func TestCycleCH(t *testing.T) {
 	memory.SetMemory(0x400, 0x49300100) // CH 3,100(0,0)
 	memory.SetMemory(0x100, 0x9678abcd)
 	cpuState.regs[3] = 0xffff9678
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.cc != 0 {
 		t.Errorf("CH CC not correct got: %x wanted: %x", cpuState.cc, 0)
@@ -1195,7 +1250,7 @@ func TestCycleCH(t *testing.T) {
 	memory.SetMemory(0x400, 0x49300100) // CH 3,100(0,0)
 	memory.SetMemory(0x100, 0x1234abcd)
 	cpuState.regs[3] = 0x00001235
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.cc != 2 {
 		t.Errorf("CH CC not correct got: %x wanted: %x", cpuState.cc, 2)
@@ -1206,7 +1261,7 @@ func TestCycleCH(t *testing.T) {
 	memory.SetMemory(0x400, 0x49300100) // CH 3,100(0,0)
 	memory.SetMemory(0x100, 0x8234abcd)
 	cpuState.regs[3] = 0x00001235
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.cc != 2 {
 		t.Errorf("CH CC not correct got: %x wanted: %x", cpuState.cc, 2)
@@ -1217,7 +1272,7 @@ func TestCycleCH(t *testing.T) {
 	memory.SetMemory(0x400, 0x49300100) // CH 3,100(0,0)
 	memory.SetMemory(0x100, 0x1234abcd)
 	cpuState.regs[3] = 0x80001235
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.cc != 1 {
 		t.Errorf("CH CC not correct got: %x wanted: %x", cpuState.cc, 1)
@@ -1228,7 +1283,7 @@ func TestCycleCH(t *testing.T) {
 	memory.SetMemory(0x400, 0x49300100) // CH 3,100(0,0)
 	memory.SetMemory(0x100, 0xfffd0000)
 	cpuState.regs[3] = 0xfffffffc
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if cpuState.cc != 1 {
 		t.Errorf("CH CC not correct got: %x wanted: %x", cpuState.cc, 1)
@@ -1242,7 +1297,7 @@ func TestCycleM(t *testing.T) {
 	cpuState.regs[2] = 0
 	cpuState.regs[3] = 28
 	cpuState.regs[4] = 19
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[2] != 0 {
 		t.Errorf("MR register 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], 0)
 	}
@@ -1259,7 +1314,7 @@ func TestCycleM(t *testing.T) {
 	cpuState.regs[2] = 0
 	cpuState.regs[3] = 0x12345678
 	cpuState.regs[4] = 0x34567890
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[2] != 0x3b8c7b8 {
 		t.Errorf("MR register 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], 0x3b8c7b8)
 	}
@@ -1276,7 +1331,7 @@ func TestCycleM(t *testing.T) {
 	cpuState.regs[2] = 0
 	cpuState.regs[3] = 0x7fffffff
 	cpuState.regs[4] = 0x7fffffff
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[2] != 0x3fffffff {
 		t.Errorf("MR register 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], 0x3fffffff)
 	}
@@ -1293,7 +1348,7 @@ func TestCycleM(t *testing.T) {
 	cpuState.regs[2] = 0
 	cpuState.regs[3] = 0xfffffffc // -4
 	cpuState.regs[4] = 0xfffffffb // -5
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[2] != 0 {
 		t.Errorf("MR register 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], 0)
 	}
@@ -1310,7 +1365,7 @@ func TestCycleM(t *testing.T) {
 	cpuState.regs[2] = 0
 	cpuState.regs[3] = 0xfffffffc // -4
 	cpuState.regs[4] = 0x0000000a // 10
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[2] != 0xffffffff {
 		t.Errorf("MR register 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], 0xffffffff)
 	}
@@ -1329,7 +1384,7 @@ func TestCycleM(t *testing.T) {
 	cpuState.regs[3] = 0x12345678
 	cpuState.regs[5] = 0x00000100
 	cpuState.regs[6] = 0x00000200
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[2] != 0x03b8c7b8 {
 		t.Errorf("M register 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], 0x03b8c7b8)
 	}
@@ -1353,7 +1408,7 @@ func TestCycleM(t *testing.T) {
 		cpuState.regs[3] = uint32(n1)
 		cpuState.regs[4] = uint32(n2)
 		memory.SetMemory(0x400, 0x1c240000) // MR 2,4
-		cpuState.testInst(0, 20)
+		cpuState.testInst(0)
 		if cpuState.regs[2] != h {
 			t.Errorf("MR rand register 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], h)
 		}
@@ -1374,7 +1429,7 @@ func TestCycleMH(t *testing.T) {
 	cpuState.regs[3] = 4
 	cpuState.regs[5] = 0x00000100
 	cpuState.regs[6] = 0x00000200
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[2] != 0 {
 		t.Errorf("MHregister 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], 0)
 	}
@@ -1393,7 +1448,7 @@ func TestCycleMH(t *testing.T) {
 	cpuState.regs[3] = 0x00000005
 	cpuState.regs[5] = 0x00000300
 	cpuState.regs[6] = 0x00000200
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[2] != 0xfffffccd {
 		t.Errorf("MHregister 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], 0xfffffccd)
 	}
@@ -1413,7 +1468,7 @@ func TestCycleD(t *testing.T) {
 	cpuState.regs[3] = 0x12345678
 	cpuState.regs[4] = 0x00000234
 	// divide R2/R3 by R4
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[2] != (0x112345678 % 0x234) {
 		t.Errorf("DR register 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], 0x112345678%0x234)
 	}
@@ -1431,7 +1486,7 @@ func TestCycleD(t *testing.T) {
 	cpuState.regs[3] = 0x12345678
 	cpuState.regs[4] = 0xfffffdcc
 	// divide R2/R3 by R4
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[2] != (0x112345678 % 0x234) {
 		t.Errorf("DR register 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], 0x112345678%0x234)
 	}
@@ -1449,7 +1504,7 @@ func TestCycleD(t *testing.T) {
 	cpuState.regs[3] = 0x44556677
 	cpuState.regs[4] = 0x12345678 // 0x1122334455667788 / 0x12345678
 	// divide R2/R3 by R4
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[2] != (0x11b3d5f7) {
 		t.Errorf("DR register 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], 0x11b3d5f7)
 	}
@@ -1468,7 +1523,7 @@ func TestCycleD(t *testing.T) {
 	cpuState.regs[3] = 0x9abcdef0
 	cpuState.regs[5] = 0x00000100
 	cpuState.regs[6] = 0x00000200
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.regs[2] != 0x50c0186a {
 		t.Errorf("D register 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], 0x50c0186a)
 	}
@@ -1488,7 +1543,7 @@ func TestCycleD(t *testing.T) {
 	cpuState.regs[5] = 0x00000100
 	cpuState.regs[6] = 0x00000200
 
-	cpuState.testInst(0x8, 20)
+	cpuState.testInst(0x8)
 	if cpuState.regs[2] != 0x12345678 {
 		t.Errorf("D register 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], 0x12345678)
 	}
@@ -1512,7 +1567,7 @@ func TestCycleD(t *testing.T) {
 		cpuState.regs[3] = uint32(dividend & int64(FMASK))
 		memory.SetMemory(0x100, uint32(divisor))
 		memory.SetMemory(0x400, 0x5d200100) // D 2,100(0,0)
-		cpuState.testInst(0, 20)
+		cpuState.testInst(0)
 
 		if divisor < 0 {
 			r = -r
@@ -1547,7 +1602,7 @@ func TestCycleST(t *testing.T) {
 	cpuState.regs[2] = 0x100
 	cpuState.regs[3] = 0x100
 	// Store Half
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v := memory.GetMemory(0x600)
 	if v != 0x12345678 {
@@ -1566,7 +1621,7 @@ func TestCycleST(t *testing.T) {
 	cpuState.regs[2] = 0x101
 	cpuState.regs[3] = 0x100
 	// Store Half
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v = memory.GetMemory(0x600)
 	if v != 0xff123456 {
@@ -1588,7 +1643,7 @@ func TestCycleST(t *testing.T) {
 	cpuState.regs[2] = 0x102
 	cpuState.regs[3] = 0x100
 	// Store Half
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v = memory.GetMemory(0x600)
 	if v != 0xffff1234 {
@@ -1610,7 +1665,7 @@ func TestCycleST(t *testing.T) {
 	cpuState.regs[2] = 0x103
 	cpuState.regs[3] = 0x100
 	// Store Half
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v = memory.GetMemory(0x600)
 	if v != 0xffffff12 {
@@ -1634,7 +1689,7 @@ func TestCycleSTH(t *testing.T) {
 	cpuState.regs[4] = 1
 	cpuState.regs[5] = 1
 	// Store Half
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v := memory.GetMemory(0x1000)
 	if v != 0xccdd5678 {
@@ -1650,7 +1705,7 @@ func TestCycleSTH(t *testing.T) {
 	cpuState.regs[4] = 1
 	cpuState.regs[5] = 3
 	// Store Half
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v = memory.GetMemory(0x1000)
 	if v != 0x1234ccdd {
@@ -1666,7 +1721,7 @@ func TestCycleSTH(t *testing.T) {
 	cpuState.regs[4] = 1
 	cpuState.regs[5] = 2
 	// Store Half
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v = memory.GetMemory(0x1000)
 	if v != 0x12ccdd78 {
@@ -1683,7 +1738,7 @@ func TestCycleSTH(t *testing.T) {
 	cpuState.regs[4] = 1
 	cpuState.regs[5] = 4
 	// Store Half
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v = memory.GetMemory(0x1000)
 	if v != 0x123456cc {
@@ -1707,7 +1762,7 @@ func TestCycleLH(t *testing.T) {
 	cpuState.regs[4] = 0x1000
 	cpuState.regs[5] = 0x200
 	// Store Half
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v := cpuState.regs[3]
 	if v != 0x00004321 {
@@ -1723,7 +1778,7 @@ func TestCycleLH(t *testing.T) {
 	cpuState.regs[4] = 0x1000
 	cpuState.regs[5] = 0x200
 	// Store Half
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v = cpuState.regs[3]
 	if v != 0x00001765 {
@@ -1739,7 +1794,7 @@ func TestCycleLH(t *testing.T) {
 	cpuState.regs[4] = 0x1000
 	cpuState.regs[5] = 0x200
 	// Store Half
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v = cpuState.regs[3]
 	if v != 0xffff8765 {
@@ -1756,7 +1811,7 @@ func TestCycleLH(t *testing.T) {
 	cpuState.regs[4] = 0x1000
 	cpuState.regs[5] = 0x201
 	// Store Half
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v = cpuState.regs[3]
 	if v != 0x00006543 {
@@ -1773,7 +1828,7 @@ func TestCycleLH(t *testing.T) {
 	cpuState.regs[4] = 0x1000
 	cpuState.regs[5] = 0x203
 	// Store Half
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v = cpuState.regs[3]
 	if v != 0x000021ab {
@@ -1790,7 +1845,7 @@ func TestCycleLA(t *testing.T) {
 	// From Princ Ops p147
 	memory.SetMemory(0x400, 0x41100800) // LA 1,800
 	cpuState.regs[1] = 0xffffffff
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[1]
 	if v != 2048 {
 		t.Errorf("LA Register not correct got: %08x wanted: %08x", v, 2048)
@@ -1802,7 +1857,7 @@ func TestCycleLA(t *testing.T) {
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0x4150500a) // LA 5, 10(5)
 	cpuState.regs[5] = 0x00123456
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v = cpuState.regs[5]
 	if v != 0x00123460 {
@@ -1816,7 +1871,7 @@ func TestCycleLA(t *testing.T) {
 	memory.SetMemory(0x400, 0x4156500a) // LA 5, 10(6,5)
 	cpuState.regs[5] = 0x00123456
 	cpuState.regs[6] = 0x00000010
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v = cpuState.regs[5]
 	if v != 0x00123470 {
@@ -1830,7 +1885,7 @@ func TestCycleLA(t *testing.T) {
 	memory.SetMemory(0x400, 0x4155000a) // LA 5, 10(0,5)
 	cpuState.regs[5] = 0x00123456
 	cpuState.regs[6] = 0x00000010
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	v = cpuState.regs[5]
 	if v != 0x00123460 {
@@ -1850,7 +1905,7 @@ func TestCycleSTC(t *testing.T) {
 		cpuState.regs[1] = uint32(i)
 		memory.SetMemory(0x400, 0x42501100) // STC 5,100(0,1)
 		memory.SetMemory(0x100, 0xaabbccdd)
-		cpuState.testInst(0, 20)
+		cpuState.testInst(0)
 		if cpuState.cc != 3 {
 			t.Errorf("STC CC not correct got: %x wanted: %x", cpuState.cc, 3)
 		}
@@ -1873,7 +1928,7 @@ func TestCycleSIC(t *testing.T) {
 		cpuState.regs[1] = uint32(i)
 		memory.SetMemory(0x400, 0x43501100) // IC 5,100(0,1)
 		memory.SetMemory(0x100, 0x00112233)
-		cpuState.testInst(0, 20)
+		cpuState.testInst(0)
 		if cpuState.cc != 3 {
 			t.Errorf("IC CC not correct got: %x wanted: %x", cpuState.cc, 3)
 		}
@@ -1896,7 +1951,7 @@ func TestCycleEX(t *testing.T) {
 	cpuState.regs[5] = 0x200
 	memory.SetMemory(0x400, 0x44100100) // EX 1,100(0,0)
 	memory.SetMemory(0x404, 0x00000000) // Prevent fetch of next instruction
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[4]
 	if v != 0x300 {
 		t.Errorf("EX AR Register not correct got: %08x wanted: %08x", v, 0x300)
@@ -1909,7 +1964,7 @@ func TestCycleEX(t *testing.T) {
 	cpuState.regs[5] = 0x200
 	memory.SetMemory(0x400, 0x44100100) // EX 1,100(0,0)
 	memory.SetMemory(0x404, 0x00000000) // Prevent fetch of next instruction
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 
 	if !trapFlag {
 		t.Errorf("EX of EX did not trap")
@@ -1924,7 +1979,7 @@ func TestCycleBAL(t *testing.T) {
 	memory.SetMemory(0x400, 0x45134078) // BAL 1,78(3,4)
 	cpuState.ilc = 0
 	cpuState.cc = 3
-	cpuState.testInst(0xa, 20)
+	cpuState.testInst(0xa)
 	v := cpuState.regs[1]
 	if v != 0xba000404 {
 		t.Errorf("BAL Register 1 not correct got: %08x wanted: %08x", v, 0xba000404)
@@ -1942,7 +1997,7 @@ func TestCycleBALR(t *testing.T) {
 	memory.SetMemory(0x400, 0x05120000) // BALR 1,2
 	cpuState.ilc = 0
 	cpuState.cc = 3
-	cpuState.testInst(0xa, 20)
+	cpuState.testInst(0xa)
 	v := cpuState.regs[1]
 	if v != 0x7a000402 {
 		t.Errorf("BAL Register 1 not correct got: %08x wanted: %08x", v, 0x7a000402)
@@ -1958,7 +2013,7 @@ func TestCycleBALR(t *testing.T) {
 	memory.SetMemory(0x400, 0x05100000) // BALR 1,9
 	cpuState.ilc = 0
 	cpuState.cc = 3
-	cpuState.testInst(0xa, 20)
+	cpuState.testInst(0xa)
 	v = cpuState.regs[1]
 	if v != 0x7a000402 {
 		t.Errorf("BAL Register 1 not correct got: %08x wanted: %08x", v, 0x7a000402)
@@ -1976,7 +2031,7 @@ func TestCycleBCT(t *testing.T) {
 	cpuState.regs[3] = 0x00000010
 	memory.SetMemory(0x400, 0x46123100) // BCT 1,100(2,3)
 	cpuState.cc = 3
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[1]
 	if v != 2 {
 		t.Errorf("BCT Register 1 not correct got: %08x wanted: %08x", v, 2)
@@ -1989,7 +2044,7 @@ func TestCycleBCT(t *testing.T) {
 	cpuState.regs[3] = 0x00000010
 	memory.SetMemory(0x400, 0x46123100) // BCT 1,100(2,3)
 	cpuState.cc = 3
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	if v != 0 {
 		t.Errorf("BCT Register 1 not correct got: %08x wanted: %08x", v, 0)
@@ -2007,7 +2062,7 @@ func TestCycleBCTR(t *testing.T) {
 	cpuState.regs[3] = 0x00000010
 	memory.SetMemory(0x400, 0x06120000) // BCTR 1,2
 	cpuState.cc = 3
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[1]
 	if v != 2 {
 		t.Errorf("BCT Register 1 not correct got: %08x wanted: %08x", v, 2)
@@ -2021,7 +2076,7 @@ func TestCycleBCTR(t *testing.T) {
 	cpuState.regs[3] = 0x00000010
 	memory.SetMemory(0x400, 0x06120000) // BCTR 1,2
 	cpuState.cc = 3
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	if v != 0xffffffff {
 		t.Errorf("BCT Register 1 not correct got: %08x wanted: %08x", v, 0xffffffff)
@@ -2035,7 +2090,7 @@ func TestCycleBCTR(t *testing.T) {
 	cpuState.regs[3] = 0x00000010
 	memory.SetMemory(0x400, 0x06120000) // BCTR 1,2
 	cpuState.cc = 3
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	if v != 0 {
 		t.Errorf("BCT Register 1 not correct got: %08x wanted: %08x", v, 0)
@@ -2054,7 +2109,7 @@ func TestCycleBC(t *testing.T) {
 			op := uint32(0x47000100) | (uint32(i) << 20) // BC i,100
 			cpuState.cc = uint8(j)
 			memory.SetMemory(0x400, op)
-			cpuState.testInst(0, 20)
+			cpuState.testInst(0)
 			if ((i&8) != 0 && cpuState.cc == 0) ||
 				((i&4) != 0 && cpuState.cc == 1) ||
 				((i&2) != 0 && cpuState.cc == 2) ||
@@ -2081,7 +2136,7 @@ func TestCycleBCR(t *testing.T) {
 			op := uint32(0x07010000) | (uint32(i) << 20) // BCR i,1
 			cpuState.cc = uint8(j)
 			memory.SetMemory(0x400, op)
-			cpuState.testInst(0, 20)
+			cpuState.testInst(0)
 			if ((i&8) != 0 && cpuState.cc == 0) ||
 				((i&4) != 0 && cpuState.cc == 1) ||
 				((i&2) != 0 && cpuState.cc == 2) ||
@@ -2111,7 +2166,7 @@ func TestCycleBXH(t *testing.T) {
 	cpuState.regs[4] = 1                // Increment
 	cpuState.regs[5] = 0x12345678       // Compare value
 
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[1]
 	if v != 0x12345679 {
 		t.Errorf("BXH Register not correct got: %08x wanted: %08x", v, 0x12345679)
@@ -2131,7 +2186,7 @@ func TestCycleBXH(t *testing.T) {
 	cpuState.regs[4] = 0xffffffff       // Increment -1
 	cpuState.regs[5] = 0x12345678       // Compare value
 
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	if v != 0x12345677 {
 		t.Errorf("BXH Register not correct got: %08x wanted: %08x", v, 0x12345677)
@@ -2152,7 +2207,7 @@ func TestCycleBXH(t *testing.T) {
 	cpuState.regs[4] = 0xffffffff       // Increment -1
 	cpuState.regs[5] = 0x12345678       // Compare value
 
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	if v != 0x12345679 {
 		t.Errorf("BXH Register not correct got: %08x wanted: %08x", v, 0x12345679)
@@ -2173,7 +2228,7 @@ func TestCycleBXH(t *testing.T) {
 	cpuState.regs[4] = 0xffffffff       // Increment -1
 	cpuState.regs[5] = 0x12345678       // Compare value
 
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	if v != 0x12345677 {
 		t.Errorf("BXH Register not correct got: %08x wanted: %08x", v, 0x12345677)
@@ -2198,7 +2253,7 @@ func TestCycleBXLE(t *testing.T) {
 	cpuState.regs[4] = 1                // Increment
 	cpuState.regs[5] = 0x12345678       // Compare value
 
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[1]
 	if v != 0x12345679 {
 		t.Errorf("BXLE Register not correct got: %08x wanted: %08x", v, 0x12345679)
@@ -2218,7 +2273,7 @@ func TestCycleBXLE(t *testing.T) {
 	cpuState.regs[4] = 0xffffffff       // Increment -1
 	cpuState.regs[5] = 0x12345678       // Compare value
 
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	if v != 0x12345677 {
 		t.Errorf("BXLE Register not correct got: %08x wanted: %08x", v, 0x12345677)
@@ -2239,7 +2294,7 @@ func TestCycleBXLE(t *testing.T) {
 	cpuState.regs[4] = 0xffffffff       // Increment -1
 	cpuState.regs[5] = 0x12345678       // Compare value
 
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	if v != 0x12345679 {
 		t.Errorf("BXLE Register not correct got: %08x wanted: %08x", v, 0x12345679)
@@ -2260,7 +2315,7 @@ func TestCycleBXLE(t *testing.T) {
 	cpuState.regs[4] = 0xffffffff       // Increment -1
 	cpuState.regs[5] = 0x12345678       // Compare value
 
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	if v != 0x12345677 {
 		t.Errorf("BXLE Register not correct got: %08x wanted: %08x", v, 0x12345677)
@@ -2283,8 +2338,7 @@ func TestCycleN(t *testing.T) {
 	cpuState.regs[1] = 0x11223344
 	cpuState.regs[2] = 0x200
 	cpuState.regs[3] = 0x300
-
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[1]
 	mv := uint32(0x11223344) & uint32(0x12345678)
 	if v != mv {
@@ -2293,6 +2347,7 @@ func TestCycleN(t *testing.T) {
 	if cpuState.cc != 1 {
 		t.Errorf("N CC not correct got: %x wanted: %x", cpuState.cc, 1)
 	}
+
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0x54123454) // N 1,454(2,3)
 	memory.SetMemory(0x404, 0)
@@ -2300,10 +2355,37 @@ func TestCycleN(t *testing.T) {
 	cpuState.regs[1] = 0xffffffff
 	cpuState.regs[2] = 0x200
 	cpuState.regs[3] = 0x300
-
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	mv = uint32(0xffffffff) & uint32(0x00000000)
+	if v != mv {
+		t.Errorf("N Register not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 0 {
+		t.Errorf("N CC not correct got: %x wanted: %x", cpuState.cc, 0)
+	}
+	// And register
+	cpuState.cc = 3
+	cpuState.regs[1] = 0xff00ff00
+	cpuState.regs[2] = 0x12345678
+	memory.SetMemory(0x400, 0x14120000) // NR 1,2
+	cpuState.testInst(0)
+	v = cpuState.regs[1]
+	mv = uint32(0x12005600)
+	if v != mv {
+		t.Errorf("N Register not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("N CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+	// And register zero result
+	cpuState.cc = 3
+	cpuState.regs[1] = 0x12345678
+	cpuState.regs[2] = 0xedcba987
+	memory.SetMemory(0x400, 0x14120000) // NR 1,2
+	cpuState.testInst(0)
+	v = cpuState.regs[1]
+	mv = uint32(0x0)
 	if v != mv {
 		t.Errorf("N Register not correct got: %08x wanted: %08x", v, mv)
 	}
@@ -2323,7 +2405,7 @@ func TestCycleO(t *testing.T) {
 	cpuState.regs[2] = 0x200
 	cpuState.regs[3] = 0x300
 
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[1]
 	mv := uint32(0x11223344) | uint32(0x12345678)
 	if v != mv {
@@ -2341,7 +2423,7 @@ func TestCycleO(t *testing.T) {
 	cpuState.regs[2] = 0x200
 	cpuState.regs[3] = 0x300
 
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	mv = uint32(0x00000000)
 	if v != mv {
@@ -2349,6 +2431,21 @@ func TestCycleO(t *testing.T) {
 	}
 	if cpuState.cc != 0 {
 		t.Errorf("O CC not correct got: %x wanted: %x", cpuState.cc, 0)
+	}
+
+	// Or register
+	cpuState.cc = 3
+	cpuState.regs[1] = 0xff00ff00
+	cpuState.regs[2] = 0x12345678
+	memory.SetMemory(0x400, 0x16120000) // OR 1,2
+	cpuState.testInst(0)
+	v = cpuState.regs[1]
+	mv = uint32(0xff34ff78)
+	if v != mv {
+		t.Errorf("O Register not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("O CC not correct got: %x wanted: %x", cpuState.cc, 1)
 	}
 }
 
@@ -2363,7 +2460,7 @@ func TestCycleX(t *testing.T) {
 	cpuState.regs[2] = 0x200
 	cpuState.regs[3] = 0x300
 
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[1]
 	mv := uint32(0x11223344) ^ uint32(0x12345678)
 	if v != mv {
@@ -2381,7 +2478,7 @@ func TestCycleX(t *testing.T) {
 	cpuState.regs[2] = 0x200
 	cpuState.regs[3] = 0x300
 
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	mv = 0x00000000
 	if v != mv {
@@ -2389,6 +2486,21 @@ func TestCycleX(t *testing.T) {
 	}
 	if cpuState.cc != 0 {
 		t.Errorf("X CC not correct got: %x wanted: %x", cpuState.cc, 0)
+	}
+
+	// Exclusive or register
+	cpuState.cc = 3
+	cpuState.regs[1] = 0xff00ff00
+	cpuState.regs[2] = 0x12345678
+	memory.SetMemory(0x400, 0x17120000) // XR 1,2
+	cpuState.testInst(0)
+	v = cpuState.regs[1]
+	mv = 0xed34a978
+	if v != mv {
+		t.Errorf("X Register not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("X CC not correct got: %x wanted: %x", cpuState.cc, 1)
 	}
 }
 
@@ -2399,7 +2511,7 @@ func TestCycleSLA(t *testing.T) {
 	cpuState.regs[1] = 0x12345678
 	cpuState.regs[2] = 0x00000001
 	memory.SetMemory(0x400, 0x8b1f2001) // SLA 1,1(2)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[1]
 	mv := uint32(0x12345678) << 2
 	if v != mv {
@@ -2413,7 +2525,7 @@ func TestCycleSLA(t *testing.T) {
 	cpuState.cc = 3
 	cpuState.regs[1] = 0x12345678
 	memory.SetMemory(0x400, 0x8b100000) // SLA 1,0(0)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	mv = uint32(0x12345678)
 	if v != mv {
@@ -2427,7 +2539,7 @@ func TestCycleSLA(t *testing.T) {
 	cpuState.cc = 3
 	cpuState.regs[1] = 0x92345678
 	memory.SetMemory(0x400, 0x8b100000) // SLA 1,0(0)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	mv = uint32(0x92345678)
 	if v != mv {
@@ -2441,7 +2553,7 @@ func TestCycleSLA(t *testing.T) {
 	cpuState.cc = 3
 	cpuState.regs[1] = 0
 	memory.SetMemory(0x400, 0x8b100000) // SLA 1,0(0)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	mv = uint32(0)
 	if v != mv {
@@ -2456,7 +2568,7 @@ func TestCycleSLA(t *testing.T) {
 	cpuState.regs[1] = 0x10000000
 	cpuState.regs[2] = 2
 	memory.SetMemory(0x400, 0x8b1f2000) // SLA 1,0(2)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	mv = uint32(0x40000000)
 	if v != mv {
@@ -2470,7 +2582,7 @@ func TestCycleSLA(t *testing.T) {
 	cpuState.regs[1] = 0x10000000
 	cpuState.regs[2] = 3
 	memory.SetMemory(0x400, 0x8b1f2000) // SLA 1,0(2)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	mv = uint32(0x00000000)
 	if v != mv {
@@ -2485,7 +2597,7 @@ func TestCycleSLA(t *testing.T) {
 	cpuState.regs[1] = 0x7fffffff
 	cpuState.regs[2] = 0x0000001f       // Shift by 31 shifts out entire number
 	memory.SetMemory(0x400, 0x8b1f2000) // SLA 1,0(2)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	mv = uint32(0x00000000)
 	if v != mv {
@@ -2500,7 +2612,7 @@ func TestCycleSLA(t *testing.T) {
 	cpuState.regs[1] = 0x7fffffff
 	cpuState.regs[2] = 0x00000020       // Shift by 32 shifts out entire number
 	memory.SetMemory(0x400, 0x8b1f2000) // SLA 1,0(2)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	mv = uint32(0x00000000)
 	if v != mv {
@@ -2514,7 +2626,7 @@ func TestCycleSLA(t *testing.T) {
 	cpuState.regs[1] = 0x80000000
 	cpuState.regs[2] = 0x0000001f       // Shift by 31 shifts out entire number
 	memory.SetMemory(0x400, 0x8b1f2000) // SLA 1,0(2)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	mv = uint32(0x80000000)
 	if v != mv {
@@ -2528,7 +2640,7 @@ func TestCycleSLA(t *testing.T) {
 	cpuState.regs[1] = 0x80000000
 	cpuState.regs[2] = 2                // Shift by 2 should overflow
 	memory.SetMemory(0x400, 0x8b1f2000) // SLA 1,0(2)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	mv = uint32(0x80000000)
 	if v != mv {
@@ -2542,7 +2654,7 @@ func TestCycleSLA(t *testing.T) {
 	cpuState.regs[1] = 0x80000001
 	cpuState.regs[2] = 2                // Shift by 2 should overflow
 	memory.SetMemory(0x400, 0x8b1f2000) // SLA 1,0(2)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	mv = uint32(0x80000004)
 	if v != mv {
@@ -2556,7 +2668,7 @@ func TestCycleSLA(t *testing.T) {
 	cpuState.regs[1] = 0xf0000001
 	cpuState.regs[2] = 0x00000001
 	memory.SetMemory(0x400, 0x8b1f2001) // SLA 1,1(2)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[1]
 	mv = uint32(0xc0000004)
 	if v != mv {
@@ -2570,7 +2682,7 @@ func TestCycleSLA(t *testing.T) {
 	cpuState.cc = 3
 	cpuState.regs[2] = 0x007f0a72
 	memory.SetMemory(0x400, 0x8b2f0008) // SLA 2,8(0) // Shift left 8
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[2]
 	mv = uint32(0x7f0a7200)
 	if v != mv {
@@ -2588,7 +2700,7 @@ func TestCycleSLL(t *testing.T) {
 	cpuState.regs[1] = 0x82345678
 	cpuState.regs[2] = 0x12340003       // Shift 3 bits
 	memory.SetMemory(0x400, 0x891f2100) // SLL 1,100(2)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[1]
 	mv := uint32(0x11a2b3c0)
 	if v != mv {
@@ -2596,6 +2708,18 @@ func TestCycleSLL(t *testing.T) {
 	}
 	if cpuState.cc != 3 {
 		t.Errorf("SLL CC not correct got: %x wanted: %x", cpuState.cc, 3)
+	}
+
+	for i := range uint32(31) {
+		cpuState.regs[1] = 1
+		cpuState.regs[2] = 0x12340000 + i   // Shift i bits
+		memory.SetMemory(0x400, 0x891f2100) // SLL 1,100(2)
+		cpuState.testInst(0)
+		v := cpuState.regs[1]
+		mv := uint32(1 << i)
+		if v != mv {
+			t.Errorf("SLL Register not correct got: %08x wanted: %08x", v, mv)
+		}
 	}
 }
 
@@ -2606,7 +2730,7 @@ func TestCycleSRL(t *testing.T) {
 	cpuState.regs[1] = 0x82345678
 	cpuState.regs[2] = 0x12340003       // Shift 3 bits
 	memory.SetMemory(0x400, 0x881f2100) // SRL 1,100(2)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[1]
 	mv := uint32(0x82345678 >> 3)
 	if v != mv {
@@ -2623,7 +2747,7 @@ func TestCycleSRA(t *testing.T) {
 
 	cpuState.regs[2] = 0x11223344
 	memory.SetMemory(0x400, 0x8a2f0105) // SRA 2,105(0) // Shift right 5
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[2]
 	mv := uint32(0x0089119a)
 	if v != mv {
@@ -2641,7 +2765,7 @@ func TestCycleSRDL(t *testing.T) {
 	cpuState.regs[4] = 0x12345678
 	cpuState.regs[5] = 0xaabbccdd
 	memory.SetMemory(0x400, 0x8c4f0118) // SRDL 4,118(0) // Shift right 24 (x18)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[4]
 	mv := uint32(0x00000012)
 	if v != mv {
@@ -2665,7 +2789,7 @@ func TestCycleSLDL(t *testing.T) {
 	cpuState.regs[5] = 0xaabbccdd
 	cpuState.regs[6] = 8
 	memory.SetMemory(0x400, 0x8d4f6100) // SLDL 4,100(6)  // Shift left 8
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[4]
 	mv := uint32(0x345678aa)
 	if v != mv {
@@ -2684,7 +2808,7 @@ func TestCycleSLDL(t *testing.T) {
 	cpuState.regs[4] = 0x12345678
 	cpuState.regs[5] = 0x00010001
 	memory.SetMemory(0x400, 0x8d4f051b) // SLDL 4,51b(0) // Shift left 27
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[4]
 	mv = uint32(0xc0000800)
 	if v != mv {
@@ -2703,7 +2827,7 @@ func TestCycleSLDL(t *testing.T) {
 	cpuState.regs[4] = 0x12345678
 	cpuState.regs[5] = 0x00010001
 	memory.SetMemory(0x400, 0x8d1f2100) // SLDL 1,100(2)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if !trapFlag {
 		t.Error("SLDL did not trap")
 	}
@@ -2727,7 +2851,7 @@ func TestCycleSRDA(t *testing.T) {
 	cpuState.regs[5] = 0xaabbccdd
 	cpuState.regs[6] = 8
 	memory.SetMemory(0x400, 0x8e4f0118) // SRDA 4,118(0) // Shift right 24 (x18)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[4]
 	mv := uint32(0x00000012)
 	if v != mv {
@@ -2746,7 +2870,7 @@ func TestCycleSRDA(t *testing.T) {
 	cpuState.regs[4] = 0x02345678
 	cpuState.regs[5] = 0xaabbccdd
 	memory.SetMemory(0x400, 0x8e4f013c) // SRDA 4,13c(0) //  Shift right 60 (x3c)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[4]
 	mv = uint32(0x00000000)
 	if v != mv {
@@ -2765,7 +2889,7 @@ func TestCycleSRDA(t *testing.T) {
 	cpuState.regs[4] = 0x92345678
 	cpuState.regs[5] = 0xaabbccdd
 	memory.SetMemory(0x400, 0x8e4f0118) // SRDA 4,118(0) // Shift right 24 (x18)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[4]
 	mv = uint32(0xffffff92)
 	if v != mv {
@@ -2781,14 +2905,14 @@ func TestCycleSRDA(t *testing.T) {
 	}
 }
 
-// // Shift double left arithmatic.
+// Shift double left arithmatic.
 func TestCycleSLDA(t *testing.T) {
 	setup()
 
 	cpuState.regs[2] = 0x007f0a72
 	cpuState.regs[3] = 0xfedcba98
 	memory.SetMemory(0x400, 0x8f2f001f) // SLDA 2,1f(0)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v := cpuState.regs[2]
 	mv := uint32(0x7f6e5d4c)
 	if v != mv {
@@ -2807,7 +2931,7 @@ func TestCycleSLDA(t *testing.T) {
 	cpuState.regs[2] = 0xffffffff
 	cpuState.regs[3] = 0xffffe070
 	memory.SetMemory(0x400, 0x8f2f0030) // SLDA 2,30(0)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[2]
 	mv = uint32(0xe0700000)
 	if v != mv {
@@ -2826,7 +2950,7 @@ func TestCycleSLDA(t *testing.T) {
 	cpuState.regs[2] = 0x92345678
 	cpuState.regs[3] = 0xc0506070
 	memory.SetMemory(0x400, 0x8f2f0020) // SLDA 2,20(0)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[2]
 	mv = uint32(0xc0506070)
 	if v != mv {
@@ -2845,7 +2969,7 @@ func TestCycleSLDA(t *testing.T) {
 	cpuState.regs[2] = 0xff902030
 	cpuState.regs[3] = 0x40506070
 	memory.SetMemory(0x400, 0x8f2f0008) // SLDA 2,8(0)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[2]
 	mv = uint32(0x90203040)
 	if v != mv {
@@ -2864,7 +2988,7 @@ func TestCycleSLDA(t *testing.T) {
 	cpuState.regs[2] = 0x00000000
 	cpuState.regs[3] = 0x000076f7
 	memory.SetMemory(0x400, 0x8f2f0030) // SLDA 2,30(0)
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	v = cpuState.regs[2]
 	mv = uint32(0x76f70000)
 	if v != mv {
@@ -2880,27 +3004,1483 @@ func TestCycleSLDA(t *testing.T) {
 	}
 }
 
+// Load multiple registers.
+func TestCycleLM(t *testing.T) {
+	setup()
+
+	cpuState.regs[2] = 0xffffffff
+	cpuState.regs[3] = 0x00000010
+	cpuState.regs[4] = 0xffffffff
+	cpuState.regs[5] = 0x00000000
+	memory.SetMemory(0x110, 0x12345678)
+	memory.SetMemory(0x114, 0x11223344)
+	memory.SetMemory(0x118, 0x55667788)
+	memory.SetMemory(0x11c, 0x99aabbcc)
+	memory.SetMemory(0x400, 0x98253100) // LM 2,5,100(3)
+	cpuState.testInst(0)
+	v := cpuState.regs[2]
+	mv := uint32(0x12345678)
+	if v != mv {
+		t.Errorf("LM Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[3]
+	mv = uint32(0x11223344)
+	if v != mv {
+		t.Errorf("LM Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[4]
+	mv = uint32(0x55667788)
+	if v != mv {
+		t.Errorf("LM Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[5]
+	mv = uint32(0x99aabbcc)
+	if v != mv {
+		t.Errorf("LM Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 3 {
+		t.Errorf("LM CC not correct got: %x wanted: %x", cpuState.cc, 3)
+	}
+}
+
+// Store multiple registers.
+func TestCycleSTM(t *testing.T) {
+	setup()
+
+	// From Princ Ops p143
+	cpuState.regs[14] = 0x00002563
+	cpuState.regs[15] = 0x00012736
+	cpuState.regs[0] = 0x12430062
+	cpuState.regs[1] = 0x73261257
+	cpuState.regs[6] = 0x00004000
+	memory.SetMemory(0x400, 0x90e16050) // STM 14,1,50(6)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x4050)
+	mv := uint32(0x00002563)
+	if v != mv {
+		t.Errorf("STM Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x4054)
+	mv = uint32(0x00012736)
+	if v != mv {
+		t.Errorf("STM Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x4058)
+	mv = uint32(0x12430062)
+	if v != mv {
+		t.Errorf("STM Memory 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x405c)
+	mv = uint32(0x73261257)
+	if v != mv {
+		t.Errorf("STM Memory 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 3 {
+		t.Errorf("STM CC not correct got: %x wanted: %x", cpuState.cc, 3)
+	}
+}
+
+// Test under mask.
+func TestCycleTM(t *testing.T) {
+	setup()
+
+	// From Princ Ops p147
+	memory.SetMemory(0x9998, 0xaafbaaaa)
+	cpuState.regs[9] = 0x00009990
+	memory.SetMemory(0x400, 0x91c39009) // TM 9(9),c3
+	cpuState.testInst(0)
+	if cpuState.cc != 3 {
+		t.Errorf("TM CC not correct got: %x wanted: %x", cpuState.cc, 3)
+	}
+
+	cpuState.cc = 3
+	memory.SetMemory(0x9998, 0xaa3caaaa)
+	cpuState.regs[9] = 0x00009990
+	memory.SetMemory(0x400, 0x91c39009) // TM 9(9),c3
+	cpuState.testInst(0)
+	if cpuState.cc != 0 {
+		t.Errorf("TM CC not correct got: %x wanted: %x", cpuState.cc, 0)
+	}
+
+	cpuState.cc = 3
+	memory.SetMemory(0x9998, 0xaa3caaaa)
+	cpuState.regs[9] = 0x00009990
+	memory.SetMemory(0x400, 0x91c39009) // TM 9(9),c3
+	cpuState.testInst(0)
+	if cpuState.cc != 0 {
+		t.Errorf("TM CC not correct got: %x wanted: %x", cpuState.cc, 0)
+	}
+
+	cpuState.cc = 3
+	memory.SetMemory(0x9998, 0xaa3caaaa)
+	cpuState.regs[9] = 0x00009990
+	memory.SetMemory(0x400, 0x91009008) // TM 9(9),c3
+	cpuState.testInst(0)
+	if cpuState.cc != 0 {
+		t.Errorf("TM CC not correct got: %x wanted: %x", cpuState.cc, 0)
+	}
+
+	cpuState.cc = 3
+	memory.SetMemory(0x9998, 0xf03caaaa)
+	cpuState.regs[9] = 0x00009990
+	memory.SetMemory(0x400, 0x91f09008) // TM 9(9),c3
+	cpuState.testInst(0)
+	if cpuState.cc != 3 {
+		t.Errorf("TM CC not correct got: %x wanted: %x", cpuState.cc, 3)
+	}
+
+	cpuState.cc = 3
+	memory.SetMemory(0x9998, 0xa0f8aaaa)
+	cpuState.regs[9] = 0x00009990
+	memory.SetMemory(0x400, 0x910c9009) // TM 9(9),c3
+	cpuState.testInst(0)
+	if cpuState.cc != 1 {
+		t.Errorf("TM CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+}
+
+// Test to convert to binary
+func TestCycleCVB(t *testing.T) {
+	setup()
+
+	// Example from Principles of Operation p122
+	cpuState.regs[5] = 50 // Example seems to have addresses in decimal?
+	cpuState.regs[6] = 900
+	memory.SetMemory(1000, 0x00000000)
+	memory.SetMemory(1004, 0x0025594f)
+	memory.SetMemory(0x400, 0x4f756032) //  CVB 7,32(5,6)
+	cpuState.testInst(0)
+	v := cpuState.regs[7]
+	mv := uint32(25594)
+	if v != mv {
+		t.Errorf("CVB 1 Register 7 not correct got: %08x wanted: %08x", v, mv)
+	}
+
+	// Test convert to binary with bad sign
+	cpuState.cc = 3
+	cpuState.regs[5] = 50 // Example seems to have addresses in decimal?
+	cpuState.regs[6] = 900
+	memory.SetMemory(1000, 0x00000000)
+	memory.SetMemory(1004, 0x00255941)  // 1 is not a valid sign
+	memory.SetMemory(0x400, 0x4f756032) // CVB 7,32(5,6)
+	cpuState.testInst(0)
+	if !trapFlag {
+		t.Error(("CVB 2 Should have trapped"))
+	}
+
+	// Test convert to binary with bad digit.
+	cpuState.cc = 3
+	cpuState.regs[5] = 50 // Example seems to have addresses in decimal?
+	cpuState.regs[6] = 900
+	memory.SetMemory(1000, 0x00000000)
+	memory.SetMemory(1004, 0x002a594f)
+	memory.SetMemory(0x400, 0x4f756032) // CVB 7,32(5,6)
+	cpuState.testInst(0)
+	if !trapFlag {
+		t.Error(("CVB 3 Should have trapped"))
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[5] = 50 // Example seems to have addresses in decimal?
+	cpuState.regs[6] = 900
+	memory.SetMemory(1000, 0x00000214)
+	memory.SetMemory(1004, 0x8000000f)
+	memory.SetMemory(0x400, 0x4f756032) // CVB 7,32(5,6)
+	cpuState.testInst(0)
+	if !trapFlag {
+		t.Error(("CVB 4 Should have trapped"))
+	}
+	v = cpuState.regs[7]
+	mv = uint32(2148000000)
+	if v != mv {
+		t.Errorf("CVB 4 Register 7 not correct got: %08x wanted: %08x", v, mv)
+	}
+
+	// Test for overflow
+	cpuState.cc = 3
+	cpuState.regs[5] = 50 // Example seems to have addresses in decimal?
+	cpuState.regs[6] = 900
+	memory.SetMemory(1000, 0x00000284)
+	memory.SetMemory(1004, 0x4242842c)
+	memory.SetMemory(0x400, 0x4f756032) // CVB 7,32(5,6)
+	cpuState.testInst(0)
+	if !trapFlag {
+		t.Error(("CVB 5 Should have trapped"))
+	}
+	v = cpuState.regs[7]
+	mv = uint32(0xa987b39a)
+	if v != mv {
+		t.Errorf("CVB 5 Register 7 not correct got: %08x wanted: %08x", v, mv)
+	}
+
+	// Test for larger overflow
+	cpuState.cc = 3
+	cpuState.regs[5] = 50 // Example seems to have addresses in decimal?
+	cpuState.regs[6] = 900
+	memory.SetMemory(1000, 0x12345678)
+	memory.SetMemory(1004, 0x4800000f)
+	memory.SetMemory(0x400, 0x4f756032) // CVB 7,32(5,6)
+	cpuState.testInst(0)
+	if !trapFlag {
+		t.Error(("CVB 6 Should have trapped"))
+	}
+
+	// Test big overflow
+	cpuState.cc = 3
+	cpuState.regs[5] = 50 // Example seems to have addresses in decimal?
+	cpuState.regs[6] = 900
+	memory.SetMemory(1000, 0x12345678)
+	memory.SetMemory(1004, 0x4800000f)
+	memory.SetMemory(0x400, 0x4f756032) // CVB 7,32(5,6)
+	cpuState.testInst(0)
+	if !trapFlag {
+		t.Error(("CVB 7 Should have trapped"))
+	}
+
+	// Test with large number
+	cpuState.cc = 3
+	cpuState.regs[5] = 50 // Example seems to have addresses in decimal?
+	cpuState.regs[6] = 900
+	memory.SetMemory(1000, 0x00000021)
+	memory.SetMemory(1004, 0x2345678f)
+	memory.SetMemory(0x400, 0x4f756032) // CVB 7,32(5,6)
+	cpuState.testInst(0)
+	v = cpuState.regs[7]
+	mv = uint32(212345678)
+	if v != mv {
+		t.Errorf("CVB 8 Register 7 not correct got: %08x wanted: %08x", v, mv)
+	}
+
+	//  Test negative
+	cpuState.cc = 3
+	cpuState.regs[5] = 50 // Example seems to have addresses in decimal?
+	cpuState.regs[6] = 900
+	memory.SetMemory(1000, 0x00000000)
+	memory.SetMemory(1004, 0x0025594d)  // d is negative
+	memory.SetMemory(0x400, 0x4f756032) // CVB 7,32(5,6)
+	cpuState.testInst(0)
+	v = cpuState.regs[7]
+	mv = uint32(0xffff9c06)
+	if v != mv {
+		t.Errorf("CVB 9 Register 7 not correct got: %08x wanted: %08x", v, mv)
+	}
+
+	// test model 50 case QE900/073C, CLF 112
+	cpuState.cc = 3
+	cpuState.regs[5] = 0x100
+	cpuState.regs[6] = 0x200
+	memory.SetMemory(0x500, 0)
+	memory.SetMemory(0x504, 0x1234567f) // Decimal 1234567+
+	memory.SetMemory(0x400, 0x4f156200) // CVB 1,200(5,6)
+	cpuState.testInst(0)
+	v = cpuState.regs[1]
+	mv = uint32(1234567)
+	if v != mv {
+		t.Errorf("CVB 10 Register ` not correct got: %08x wanted: %08x", v, mv)
+	}
+
+	// Second test with negative
+	cpuState.cc = 3
+	cpuState.regs[5] = 0x100
+	cpuState.regs[6] = 0x200
+	memory.SetMemory(0x500, 0)
+	memory.SetMemory(0x504, 0x1234567b) // Decimal 1234567-
+	memory.SetMemory(0x400, 0x4f156200) // CVB 1,200(5,6)
+	cpuState.testInst(0)
+	v = cpuState.regs[1]
+	mv = uint32(0xffed2979)
+	if v != mv {
+		t.Errorf("CVB 11 Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[5] = 50 // Example seems to have addresses in decimal?
+	cpuState.regs[6] = 900
+	memory.SetMemory(1000, 0x00000214)
+	memory.SetMemory(1004, 0x8000000f)
+	memory.SetMemory(0x400, 0x4f756032) // CVB 7,32(5,6)
+	cpuState.testInst(0)
+	v = cpuState.regs[7]
+	mv = uint32(2148000000)
+	if v != mv {
+		t.Errorf("CVB 12 Register 7 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Test convert to decimal.
+func TestCycleCVD(t *testing.T) {
+	setup()
+
+	// Example from Principles of Operation p122
+	cpuState.regs[1] = 0x00000f0f // 3855 dec
+	cpuState.regs[13] = 0x00007600
+	memory.SetMemory(0x400, 0x4e10d008) // CVD 1,8(0,13)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x7608)
+	mv := uint32(0x00000000)
+	if v != mv {
+		t.Errorf("CVD Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x760C)
+	mv = uint32(0x0003855c)
+	if v != mv {
+		t.Errorf("CVD Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+
+	cpuState.regs[1] = 0xfffff0f1 // -3855 dec
+	cpuState.regs[13] = 0x00007600
+	memory.SetMemory(0x400, 0x4e10d008) // CVD 1,8(0,13)
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x7608)
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("CVD Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x760C)
+	mv = uint32(0x0003855d)
+	if v != mv {
+		t.Errorf("CVD Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Move immeditate.
+func TestCycleMVI(t *testing.T) {
+	setup()
+
+	cpuState.regs[1] = 0x3456
+	memory.SetMemory(0x3464, 0x12345678)
+	memory.SetMemory(0x400, 0x92421010) // MVI 10(1),42
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x3464)
+	mv := uint32(0x12344278)
+	if v != mv {
+		t.Errorf("MVI Memory not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 3 {
+		t.Errorf("MVI CC not correct got: %x wanted: %x", cpuState.cc, 3)
+	}
+
+	cpuState.cc = 3
+	memory.SetMemory(0x100, 0x11223344)
+	cpuState.regs[1] = 1
+	memory.SetMemory(0x400, 0x92551100) // MVI 100(1),55 // Move byte 55 to location 101
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x100)
+	mv = uint32(0x11553344)
+	if v != mv {
+		t.Errorf("MVI Memory not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 3 {
+		t.Errorf("MVI CC not correct got: %x wanted: %x", cpuState.cc, 3)
+	}
+}
+
+// And immediate.
+func TestCycleNI(t *testing.T) {
+	setup()
+
+	cpuState.regs[1] = 0x3456
+	memory.SetMemory(0x3464, 0x12345678)
+	memory.SetMemory(0x400, 0x94f01010) // NI 10(1),f0
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x3464)
+	mv := uint32(0x12345078)
+	if v != mv {
+		t.Errorf("NI Memory not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("NI CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[1] = 0x3456
+	memory.SetMemory(0x3464, 0x12345678)
+	memory.SetMemory(0x400, 0x940f1010) // NI 10(1),f0
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x3464)
+	mv = uint32(0x12340678)
+	if v != mv {
+		t.Errorf("NI Memory not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("NI CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[1] = 0x3456
+	memory.SetMemory(0x3464, 0x12345678)
+	memory.SetMemory(0x400, 0x94001010) // NI 10(1),0
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x3464)
+	mv = uint32(0x12340078)
+	if v != mv {
+		t.Errorf("NII Memory not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 0 {
+		t.Errorf("NI CC not correct got: %x wanted: %x", cpuState.cc, 0)
+	}
+}
+
+// Compare logical immediate.
+func TestCycleCLI(t *testing.T) {
+	setup()
+
+	cpuState.regs[1] = 0x3456
+	memory.SetMemory(0x3464, 0x12345678)
+	memory.SetMemory(0x400, 0x95561010) // CLI 10(1),56
+	cpuState.testInst(0)
+	if cpuState.cc != 0 {
+		t.Errorf("CLI CC not correct got: %x wanted: %x", cpuState.cc, 0)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[1] = 0x3456
+	memory.SetMemory(0x3464, 0x12345678)
+	memory.SetMemory(0x400, 0x95ff1010) // CLI 10(1),ff
+	cpuState.testInst(0)
+	if cpuState.cc != 1 {
+		t.Errorf("CLI CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+
+	for i := range uint32(255) {
+		cpuState.regs[1] = 0x3442
+		memory.SetMemory(0x3450, 0x12345678)
+		memory.SetMemory(0x400, 0x95001010|(i<<16)) // CLI 10(1),i
+		cpuState.testInst(0)
+		var cc uint8
+		switch x := i; {
+		case x == 0x56: // Equal
+			cc = 0
+		case x < 0x56: // Greater
+			cc = 2
+		default: // Less
+			cc = 1
+		}
+		if cpuState.cc != cc {
+			t.Errorf("CLI CC not correct got: %x wanted: %x", cpuState.cc, cc)
+		}
+	}
+}
+
+// Or immediate.
+func TestCycleOI(t *testing.T) {
+	setup()
+
+	cpuState.regs[1] = 2
+	memory.SetMemory(0x1000, 0x12345678)
+	memory.SetMemory(0x400, 0x96421fff) // OI fff(1),42
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x1000)
+	mv := uint32(0x12765678)
+	if v != mv {
+		t.Errorf("OI Memory not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("OI CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+}
+
+// Xor immediate.
+func TestCycleXI(t *testing.T) {
+	setup()
+
+	cpuState.regs[0] = 0x100
+	memory.SetMemory(0x120, 0x12345678)
+	memory.SetMemory(0x400, 0x970f0123) // XI 123(0),f
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x120)
+	mv := uint32(0x12345677)
+	if v != mv {
+		t.Errorf("XI Memory not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("XI CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+}
+
+// Move numeric.
+func TestCycleMVN(t *testing.T) {
+	setup()
+
+	// From Princ Ops p144
+	memory.SetMemory(0x7090, 0xc1c2c3c4)
+	memory.SetMemory(0x7094, 0xc5c6c7c8)
+	memory.SetMemory(0x7040, 0xaaf0f1f2)
+	memory.SetMemory(0x7044, 0xf3f4f5f6)
+	memory.SetMemory(0x7048, 0xf7f8aaaa)
+	cpuState.regs[14] = 0x00007090
+	cpuState.regs[15] = 0x00007040
+	memory.SetMemory(0x400, 0xd103f001)
+	memory.SetMemory(0x404, 0xe0000000) // MVN 1(4,15),0(14)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x7090)
+	mv := uint32(0xc1c2c3c4)
+	if v != mv {
+		t.Errorf("MVN Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x7040)
+	mv = uint32(0xaaf1f2f3)
+	if v != mv {
+		t.Errorf("MVN Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x7044)
+	mv = uint32(0xf4f4f5f6)
+	if v != mv {
+		t.Errorf("MVN Memory 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x7048)
+	mv = uint32(0xf7f8aaaa)
+	if v != mv {
+		t.Errorf("MVN Memory 4 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Move character.
+func TestCycleMVC(t *testing.T) {
+	setup()
+
+	memory.SetMemory(0x100, 0x12345678)
+	memory.SetMemory(0x200, 0x11223344)
+	memory.SetMemory(0x400, 0xd2030100)
+	memory.SetMemory(0x404, 0x02000000) // MVC 100(4,0),200(0) // Move 4 bytes from 200 to 100
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x100)
+	mv := uint32(0x11223344)
+	if v != mv {
+		t.Errorf("MVC Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x200)
+	mv = uint32(0x11223344)
+	if v != mv {
+		t.Errorf("MVC Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+
+	memory.SetMemory(0x100, 0x12345678)
+	memory.SetMemory(0x104, 0xabcdef01)
+	cpuState.regs[1] = 2
+	cpuState.regs[2] = 0
+	memory.SetMemory(0x400, 0xd2011100)
+	memory.SetMemory(0x404, 0x01050000) // MVC 100(2,1),105(0) // Move 2 bytes from 105 to 102
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x100)
+	mv = uint32(0x1234cdef)
+	if v != mv {
+		t.Errorf("MVC Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x104)
+	mv = uint32(0xabcdef01)
+	if v != mv {
+		t.Errorf("MVC Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Move zones.
+func TestCycleMVZ(t *testing.T) {
+	setup()
+
+	// From Princ Ops page 144
+	memory.SetMemory(0x800, 0xf1c2f3c4)
+	memory.SetMemory(0x804, 0xf5c6aabb)
+	cpuState.regs[15] = 0x00000800
+	memory.SetMemory(0x400, 0xd304f001)
+	memory.SetMemory(0x404, 0xf0000000) // MVZ 1(5,15),0(15)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x800)
+	mv := uint32(0xf1f2f3f4)
+	if v != mv {
+		t.Errorf("MVZ Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x804)
+	mv = uint32(0xf5f6aabb)
+	if v != mv {
+		t.Errorf("MVZ Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Move offset.
+func TestCycleMVO(t *testing.T) {
+	setup()
+
+	// Princ Ops 152
+	cpuState.regs[12] = 0x00005600
+	cpuState.regs[15] = 0x00004500
+	memory.SetMemory(0x5600, 0x7788990c)
+	memory.SetMemory(0x4500, 0x123456ff)
+	memory.SetMemory(0x400, 0xf132c000)
+	memory.SetMemory(0x404, 0xf0000000) // MVO 0(4, 12), 0(3, 15)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x5600)
+	mv := uint32(0x0123456c)
+	if v != mv {
+		t.Errorf("MVO Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Pack instruction.
+func TestCyclePACK(t *testing.T) {
+	setup()
+
+	// Princ Ops p151
+	cpuState.regs[12] = 0x00001000
+	memory.SetMemory(0x1000, 0xf1f2f3f4)
+	memory.SetMemory(0x1004, 0xc5000000)
+	memory.SetMemory(0x400, 0xf244c000)
+	memory.SetMemory(0x404, 0xc0000000) // PACK 0(5, 12), 0(5, 12)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x1000)
+	mv := uint32(0x00001234)
+	if v != mv {
+		t.Errorf("PACK Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x1004)
+	mv = uint32(0x5c000000)
+	if v != mv {
+		t.Errorf("PACK Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Unpack
+func TestCycleUNPK(t *testing.T) {
+	setup()
+
+	// Princ Ops p151
+	cpuState.regs[12] = 0x00001000
+	cpuState.regs[13] = 0x00002500
+	memory.SetMemory(0x2500, 0xaa12345d)
+	memory.SetMemory(0x1000, 0xffffffff)
+	memory.SetMemory(0x1004, 0xffffffff)
+	memory.SetMemory(0x400, 0xf342c000)
+	memory.SetMemory(0x404, 0xd0010000) // UNPK 0(5, 12), 1(3, 13)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x1000)
+	mv := uint32(0xf1f2f3f4)
+	if v != mv {
+		t.Errorf("UNPK Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x1004)
+	mv = uint32(0xd5ffffff)
+	if v != mv {
+		t.Errorf("UNPK Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// And characters.
+func TestCycleNC(t *testing.T) {
+	setup()
+
+	memory.SetMemory(0x358, 0x00001790)
+	memory.SetMemory(0x360, 0x00001401)
+	cpuState.regs[7] = 0x00000358
+	memory.SetMemory(0x400, 0xd4037000)
+	memory.SetMemory(0x404, 0x70080000) // NC 0(4,7),8(7)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x358)
+	mv := uint32(0x00001400)
+	if v != mv {
+		t.Errorf("NC Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Compare logical character.
+func TestCycleCLC(t *testing.T) {
+	setup()
+
+	cpuState.regs[1] = 0x100
+	cpuState.regs[2] = 0x100
+	memory.SetMemory(0x200, 0x12345633)
+	memory.SetMemory(0x300, 0x12345644)
+	memory.SetMemory(0x400, 0xd5021100)
+	memory.SetMemory(0x404, 0x22000000) // CLC 100(3,1),200(2)
+	cpuState.testInst(0)
+	if cpuState.cc != 0 {
+		t.Errorf("CLI CC not correct got: %x wanted: %x", cpuState.cc, 0)
+	}
+
+	cpuState.regs[1] = 0x100
+	cpuState.regs[2] = 0x100
+	memory.SetMemory(0x200, 0x12345678)
+	memory.SetMemory(0x300, 0x12345678)
+	// 123456 vs 345678 because of offset
+	memory.SetMemory(0x400, 0xd5021100)
+	memory.SetMemory(0x404, 0x22010000) // CLC 100(3,1),201(2)
+	cpuState.testInst(0)
+	if cpuState.cc != 1 {
+		t.Errorf("CLI CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+}
+
+// Or character.
+func TestCycleOC(t *testing.T) {
+	setup()
+
+	memory.SetMemory(0x358, 0x00001790)
+	memory.SetMemory(0x360, 0x00001401)
+	cpuState.regs[7] = 0x00000358
+	memory.SetMemory(0x400, 0xd6037000)
+	memory.SetMemory(0x404, 0x7008aaaa) // OC 0(4,7),8(7)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x358)
+	mv := uint32(0x00001791)
+	if v != mv {
+		t.Errorf("OC Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// exclusive or character.
+func TestCycleXC(t *testing.T) {
+	setup()
+
+	memory.SetMemory(0x358, 0x00001790)
+	memory.SetMemory(0x360, 0x00001401)
+	cpuState.regs[7] = 0x00000358
+	memory.SetMemory(0x400, 0xd7037000)
+	memory.SetMemory(0x404, 0x70080000) // XC 0(4,7),8(7)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x358)
+	mv := uint32(0x00000391)
+	if v != mv {
+		t.Errorf("XC Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+
+	memory.SetMemory(0x400, 0xd7037008)
+	memory.SetMemory(0x404, 0x70000000) // XC 8(4,7),0(7)
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x360)
+	mv = uint32(0x00001790)
+	if v != mv {
+		t.Errorf("XC Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+
+	memory.SetMemory(0x400, 0xd7037000)
+	memory.SetMemory(0x404, 0x70080000) // XC 0(4,7),8(7)
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x358)
+	mv = uint32(0x00001401)
+	if v != mv {
+		t.Errorf("XC Memory 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// translate.
+func TestCycleTR(t *testing.T) {
+	setup()
+
+	// Based on Princ Ops p147
+	for i := uint32(0); i < 256; i += 4 {
+		// Table increments each char by 3. Don't worry about wrapping.
+		memory.SetMemory(0x1000+i, (((i + 3) << 24) |
+			((i + 4) << 16) |
+			((i + 5) << 8) |
+			(i + 6)))
+	}
+	memory.SetMemory(0x2100, 0x12345678)
+	memory.SetMemory(0x2104, 0xabcdef01)
+	memory.SetMemory(0x2108, 0x11223344)
+	memory.SetMemory(0x210c, 0x55667788)
+	memory.SetMemory(0x2110, 0x99aabbcc)
+	cpuState.regs[12] = 0x00002100
+	cpuState.regs[15] = 0x00001000
+	memory.SetMemory(0x400, 0xdc13c000)
+	memory.SetMemory(0x404, 0xf0000000) // TR 0(20,12),0(15)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x2100)
+	mv := uint32(0x1537597b)
+	if v != mv {
+		t.Errorf("TR Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x2104)
+	mv = uint32(0xaed0f204)
+	if v != mv {
+		t.Errorf("TR Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x2108)
+	mv = uint32(0x14253647)
+	if v != mv {
+		t.Errorf("TR Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x210c)
+	mv = uint32(0x58697a8b)
+	if v != mv {
+		t.Errorf("TR Memory 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x2110)
+	mv = uint32(0x9cadbecf)
+	if v != mv {
+		t.Errorf("TR Memory 4 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Translate and test.
+func TestCycleTRT(t *testing.T) {
+	setup()
+
+	// Based on Princ Ops p147
+	for i := uint32(0); i < 256; i += 4 {
+		memory.SetMemory(0x2000+i, 0)
+	}
+	memory.SetMemory(0x204c, 0x10202500)
+	memory.SetMemory(0x2050, 0x90000000)
+	memory.SetMemory(0x2058, 0x00000030)
+	memory.SetMemory(0x205c, 0x35404500)
+	memory.SetMemory(0x2060, 0x80850000)
+	memory.SetMemory(0x2068, 0x00000050)
+	memory.SetMemory(0x206c, 0x55000000)
+	memory.SetMemory(0x2078, 0x00000060)
+	memory.SetMemory(0x207c, 0x65707500)
+
+	memory.SetMemory(0x3000, 0x40404040)
+	memory.SetMemory(0x3004, 0x40e4d5d7) //  UNP
+	memory.SetMemory(0x3008, 0xd2404040) // K
+	memory.SetMemory(0x300c, 0x4040d7d9) //   PR
+	memory.SetMemory(0x3010, 0xd6e4e34d) // OUT(
+	memory.SetMemory(0x3014, 0xf95d6be6) // 9),W
+	memory.SetMemory(0x3018, 0xd6d9c44d) // ORD(
+	memory.SetMemory(0x301C, 0xf55d0000) // 5)
+
+	cpuState.regs[1] = 0x3000
+	cpuState.regs[2] = 0
+	cpuState.regs[15] = 0x2000
+
+	memory.SetMemory(0x400, 0xdd1d1000) // TRT 0(30,1),0(15)
+	memory.SetMemory(0x404, 0xf0000000)
+	cpuState.testInst(0)
+	v := cpuState.regs[1] // Match at 3013
+	mv := uint32(0x00003013)
+	if v != mv {
+		t.Errorf("TRT Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[2] // Function value from table
+	mv = uint32(0x00000020)
+	if v != mv {
+		t.Errorf("TRT Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 { // not complete
+		t.Errorf("TRT CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+
+	// Based on Princ Ops p147
+	for i := uint32(0); i < 256; i += 4 {
+		memory.SetMemory(0x1000+i, 0)
+	}
+	memory.SetMemory(0x2020, 0x10203040)
+	memory.SetMemory(0x3000, 0x12345621) // 21 will match table entry 20
+	memory.SetMemory(0x3004, 0x11223344)
+	memory.SetMemory(0x3008, 0x55667788)
+	memory.SetMemory(0x300c, 0x99aabbcc)
+	memory.SetMemory(0x400, 0xdd0f1000)
+	memory.SetMemory(0x404, 0xf0000000) // TRT 0(16,1),0(15)
+	cpuState.regs[1] = 0x3000
+	cpuState.regs[2] = 0
+	cpuState.regs[15] = 0x2000
+	cpuState.testInst(0)
+	v = cpuState.regs[1] // Match at 3013
+	mv = uint32(0x00003003)
+	if v != mv {
+		t.Errorf("TRT Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[2] // Function value from table
+	mv = uint32(0x00000020)
+	if v != mv {
+		t.Errorf("TRT Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 { // not complete
+		t.Errorf("TRT CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+}
+
+// Test SPM instruction.
+func TestCycleSPM(t *testing.T) {
+	setup()
+
+	cpuState.regs[1] = 0x12345678       // Mask 2
+	memory.SetMemory(0x400, 0x041f0000) // SPM 1
+	cpuState.testInst(0)
+	v := cpuState.progMask
+	mv := uint8(0x2)
+	if v != mv {
+		t.Errorf("SPM Mask not correct got: %02x wanted: %02x", v, mv)
+	}
+	if cpuState.cc != 1 { // not complete
+		t.Errorf("SPM CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+}
+
+// Test SSM instruction.
+func TestCycleSSM(t *testing.T) {
+	setup()
+
+	cpuState.sysMask = 0xff00
+	cpuState.stKey = 0x30
+	cpuState.flags = 0x0 // privileged
+	cpuState.cc = 1
+	cpuState.regs[3] = 0x11
+	memory.SetMemory(0x110, 0xaabbccdd) // Access byte 1
+	memory.SetMemory(0x400, 0x80ee3100) // "SSM 100(3)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
+	v := cpuState.sysMask
+	mv := uint16(0xBBFF)
+	if v != mv {
+		t.Errorf("SSM Mask not correct got: %04x wanted: %04x", v, mv)
+	}
+	v1 := cpuState.stKey
+	mv1 := uint8(0x30)
+	if v1 != mv1 {
+		t.Errorf("SSM Key not correct got: %02x wanted: %02x", v1, mv1)
+	}
+	v1 = cpuState.progMask
+	mv1 = uint8(0x0)
+	if v1 != mv1 {
+		t.Errorf("SSM Prog Mask not correct got: %02x wanted: %02x", v1, mv1)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("SPM CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+	v2 := cpuState.PC
+	mv2 := uint32(0x404)
+	if v2 != mv2 {
+		t.Errorf("SSM PC not correct got: %04x wanted: %04x", v2, mv2)
+	}
+	if !cpuState.extEnb {
+		t.Error("SSM External mask not set")
+	}
+	cpuState.stKey = 0x00
+
+	cpuState.sysMask = 0xff00
+	cpuState.flags = 0x1 // problem state
+	cpuState.cc = 1
+	cpuState.regs[3] = 0x11
+	memory.SetMemory(0x110, 0xaabbccdd) // Access byte 1
+	memory.SetMemory(0x400, 0x80ee3100) // "SSM 100(3)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
+	if !trapFlag {
+		t.Error("SSM in problem state did not trap")
+	}
+	cpuState.flags = 0
+}
+
+// Test lpsw instruction.
+func TestCycleLPSW(t *testing.T) {
+	setup()
+
+	cpuState.stKey = 0
+	cpuState.flags = 0x0 // privileged
+	cpuState.regs[3] = 0x10
+	memory.SetMemory(0x110, 0xE1345678)
+	memory.SetMemory(0x114, 0x9a003450)  // Branch to 123450
+	memory.SetMemory(0x400, 0x82003100)  // LPSW 100(3)
+	memory.SetMemory(0x3450, 0x00000000) // Nop in case things are executed
+	cpuState.testInst(0)
+	v := cpuState.sysMask
+	mv := uint16(0xe000)
+	if v != mv {
+		t.Errorf("LPSW Mask not correct got: %04x wanted: %04x", v, mv)
+	}
+	v1 := cpuState.stKey
+	mv1 := uint8(0x30)
+	if v1 != mv1 {
+		t.Errorf("LPSW Key not correct got: %02x wanted: %02x", v1, mv1)
+	}
+	v1 = cpuState.progMask
+	mv1 = uint8(0xa)
+	if v1 != mv1 {
+		t.Errorf("LPSW Prog Mask not correct got: %02x wanted: %02x", v1, mv1)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("LPSW CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+	v2 := cpuState.PC
+	mv2 := uint32(0x003450)
+	if v2 != mv2 {
+		t.Errorf("LPSW PC not correct got: %04x wanted: %04x", v2, mv2)
+	}
+	if !cpuState.extEnb {
+		t.Error("LPSW External mask not set")
+	}
+	cpuState.stKey = 0x00
+}
+
+// Supervisory call.
+func TestCycleSVC(t *testing.T) {
+	setup()
+
+	cpuState.stKey = 0
+	cpuState.flags = 0x1 // privileged
+	cpuState.sysMask = 0xe000
+	cpuState.extEnb = true
+	cpuState.cc = 1
+	cpuState.regs[3] = 0x10
+	memory.SetMemory(0x60, 0xE1345678)
+	memory.SetMemory(0x64, 0x9a003450)   // Branch to 3450
+	memory.SetMemory(0x400, 0x0a120000)  // SVC 12
+	memory.SetMemory(0x3450, 0x00000000) // Nop in case things are executed
+	cpuState.testInst(0x4)
+	v := cpuState.sysMask
+	mv := uint16(0xe000)
+	if v != mv {
+		t.Errorf("SVC Mask not correct got: %04x wanted: %04x", v, mv)
+	}
+	v1 := cpuState.stKey
+	mv1 := uint8(0x30)
+	if v1 != mv1 {
+		t.Errorf("SVC Key not correct got: %02x wanted: %02x", v1, mv1)
+	}
+	v1 = cpuState.progMask
+	mv1 = uint8(0xa)
+	if v1 != mv1 {
+		t.Errorf("SVC Prog Mask not correct got: %02x wanted: %02x", v1, mv1)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("SVC CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+	v2 := cpuState.PC
+	mv2 := uint32(0x003450)
+	if v2 != mv2 {
+		t.Errorf("SVC PC not correct got: %04x wanted: %04x", v2, mv2)
+	}
+	if !cpuState.extEnb {
+		t.Error("SVC External mask not set")
+	}
+	v2 = memory.GetMemory(0x20)
+	mv2 = uint32(0xE1010012)
+	if v2 != mv2 {
+		t.Errorf("TR Memory 1 not correct got: %08x wanted: %08x", v2, mv2)
+	}
+	v2 = memory.GetMemory(0x24)
+	mv2 = uint32(0x54000402)
+	if v2 != mv2 {
+		t.Errorf("SVC Memory 2 not correct got: %08x wanted: %08x", v2, mv2)
+	}
+	cpuState.stKey = 0x00
+}
+
+// Set storage key.
+func TestCycleSSK(t *testing.T) {
+	setup()
+
+	cpuState.flags = 0x1          // unprivileged
+	cpuState.regs[1] = 0x11223344 // Key
+	cpuState.regs[2] = 0x00005600 // Address: last 4 bits must be 0
+	memory.PutKey(0x5600, 0x40)
+	memory.SetMemory(0x400, 0x08120000) // SSK 1,2
+	cpuState.testInst(0)
+	if !trapFlag {
+		t.Error("SSK should have trapped")
+	}
+	if memory.GetKey(0x5600) != 0x40 {
+		t.Errorf("SSK unprivileged changed key got: %02x expected: %02x", memory.GetKey(0x5600), 0x40)
+	}
+
+	cpuState.flags = 0x0          // privileged
+	cpuState.regs[1] = 0x11223344 // Key
+	cpuState.regs[2] = 0x00005600 // Address: last 4 bits must be 0
+	memory.PutKey(0x5600, 0)
+	memory.SetMemory(0x400, 0x08120000) // SSK 1,2
+	cpuState.testInst(0)
+	if memory.GetKey(0x5600) != 0x40 {
+		t.Errorf("SSK privileged did not changed key got: %02x expected: %02x", memory.GetKey(0x5600), 0x40)
+	}
+
+	cpuState.flags = 0x0          // privileged
+	cpuState.regs[1] = 0x11223344 // Key
+	cpuState.regs[2] = 0x12345674 // Address: last 4 bits must be 0
+	memory.PutKey(0x5600, 0x70)
+	memory.SetMemory(0x400, 0x08120000) // SSK 1,2
+	cpuState.testInst(0)
+	if !trapFlag {
+		t.Error("SSK should have trapped")
+	}
+	if memory.GetKey(0x5600) != 0x70 {
+		t.Errorf("SSK unaligned changed key got: %02x expected: %02x", memory.GetKey(0x5600), 0x70)
+	}
+}
+
+// ISK reads the storage key
+func TestCycleISK(t *testing.T) {
+	setup()
+
+	cpuState.flags = 0x1          // unprivileged
+	cpuState.regs[1] = 0x11223344 // Key
+	cpuState.regs[2] = 0x00005600 // Address: last 4 bits must be 0
+	memory.PutKey(0x5600, 0x40)
+	memory.SetMemory(0x400, 0x09120000) // ISK 1,2
+	cpuState.testInst(0)
+	if !trapFlag {
+		t.Error("ISK should have trapped")
+	}
+
+	cpuState.flags = 0x0          // privileged
+	cpuState.regs[1] = 0x89abcdef // Key
+	cpuState.regs[2] = 0x00005600 // Address: last 4 bits must be 0
+	memory.PutKey(0x5600, 0x20)
+	memory.SetMemory(0x400, 0x09120000) // ISK 1,2
+	cpuState.testInst(0)
+	v := cpuState.regs[1]
+	mv := uint32(0x89abcd20)
+	if v != mv {
+		t.Errorf("ISK Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if memory.GetKey(0x5600) != 0x20 {
+		t.Errorf("ISK privileged changed key got: %02x expected: %02x", memory.GetKey(0x5600), 0x20)
+	}
+
+	cpuState.flags = 0x0          // privileged
+	cpuState.regs[1] = 0x11223344 // Key
+	cpuState.regs[2] = 0x12345674 // Address: last 4 bits must be 0
+	memory.PutKey(0x5600, 0x70)
+	memory.SetMemory(0x400, 0x09120000) // ISK 1,2
+	cpuState.testInst(0)
+	if !trapFlag {
+		t.Error("ISK should have trapped")
+	}
+	if memory.GetKey(0x5600) != 0x70 {
+		t.Errorf("ISK unaligned changed key got: %02x expected: %02x", memory.GetKey(0x5600), 0x70)
+	}
+}
+
+// Protection check. unmatched key
+func TestCycleProt(t *testing.T) {
+	setup()
+
+	cpuState.flags = 0x1 // unprivileged
+	cpuState.stKey = 0x20
+	cpuState.regs[1] = 0x11223344
+	cpuState.regs[2] = 0x00005670
+	memory.SetMemory(0x5678, 0xff)
+	memory.PutKey(0x5600, 0x40)
+	memory.SetMemory(0x400, 0x50102008) // st 1,0(2)
+	cpuState.testInst(0)
+	if !trapFlag {
+		t.Error("Store to wrong key did not trap")
+	}
+	v := memory.GetMemory(0x5678)
+	mv := uint32(0xff)
+	if v != mv {
+		t.Errorf("Store to wrong key changed memory correct got: %08x wanted: %08x", v, mv)
+	}
+
+	cpuState.flags = 0x1 // unprivileged
+	cpuState.stKey = 0x40
+	cpuState.regs[1] = 0x11223344
+	cpuState.regs[2] = 0x00005670
+	memory.SetMemory(0x5678, 0xff)
+	memory.PutKey(0x5600, 0x40)
+	memory.SetMemory(0x400, 0x50102008) // st 1,0(2)
+	cpuState.testInst(0)
+	if trapFlag {
+		t.Error("Store to correct key traped")
+	}
+	v = memory.GetMemory(0x5678)
+	mv = uint32(0x11223344)
+	if v != mv {
+		t.Errorf("Store to wrong key changed memory correct got: %08x wanted: %08x", v, mv)
+	}
+
+	cpuState.flags = 0x1 // unprivileged
+	cpuState.stKey = 0x20
+	cpuState.regs[1] = 0x11223344
+	cpuState.regs[2] = 0x00005670
+	memory.SetMemory(0x5678, 0xff)
+	memory.PutKey(0x5600, 0x40)
+	memory.SetMemory(0x400, 0x58102008) // l 1,0(2)
+	memory.SetMemory(0x5678, 0x12345678)
+	cpuState.testInst(0)
+	if trapFlag {
+		t.Error("Load to wrong key traped")
+	}
+	v = memory.GetMemory(0x5678)
+	mv = uint32(0x12345678)
+	if v != mv {
+		t.Errorf("Load to wrong key did not load register correct got: %08x wanted: %08x", v, mv)
+	}
+
+	cpuState.flags = 0x1 // unprivileged
+	cpuState.stKey = 0x40
+	cpuState.regs[1] = 0x11223344
+	cpuState.regs[2] = 0x00005670
+	memory.SetMemory(0x5678, 0xff)
+	memory.PutKey(0x5600, 0x40)
+	memory.SetMemory(0x400, 0x58102008) // l 1,0(2)
+	memory.SetMemory(0x5678, 0x12345678)
+	cpuState.testInst(0)
+	if trapFlag {
+		t.Error("Load to correct key traped")
+	}
+	v = memory.GetMemory(0x5678)
+	mv = uint32(0x12345678)
+	if v != mv {
+		t.Errorf("Load to correct key did not change register correct got: %08x wanted: %08x", v, mv)
+	}
+
+	cpuState.flags = 0x1 // unprivileged
+	cpuState.stKey = 0x00
+	cpuState.regs[1] = 0x11223344
+	cpuState.regs[2] = 0x00005670
+	memory.SetMemory(0x5678, 0xff)
+	memory.PutKey(0x5600, 0x40)
+	memory.SetMemory(0x400, 0x50102008) // st 1,0(2)
+	cpuState.testInst(0)
+	if trapFlag {
+		t.Error("Store zero key did trap")
+	}
+	v = memory.GetMemory(0x5678)
+	mv = uint32(0x11223344)
+	if v != mv {
+		t.Errorf("Store to zero did not update memory correct got: %08x wanted: %08x", v, mv)
+	}
+
+	// Test fetch protection
+	cpuState.flags = 0x1 // unprivileged
+	cpuState.stKey = 0x20
+	cpuState.regs[1] = 0x11223344
+	cpuState.regs[2] = 0x00005670
+	memory.SetMemory(0x5678, 0xff)
+	memory.PutKey(0x5600, 0x41)
+	memory.SetMemory(0x400, 0x58102008) // l 1,0(2)
+	memory.SetMemory(0x5678, 0x12345678)
+	cpuState.testInst(0)
+	if trapFlag {
+		t.Error("Load to fetch protected key traped")
+	}
+	v = memory.GetMemory(0x5678)
+	mv = uint32(0x12345678)
+	if v != mv {
+		t.Errorf("Load to fetch protected key did load register correct got: %08x wanted: %08x", v, mv)
+	}
+
+	cpuState.flags = 0x1 // unprivileged
+	cpuState.stKey = 0x40
+	cpuState.regs[1] = 0x11223344
+	cpuState.regs[2] = 0x00005670
+	memory.SetMemory(0x5678, 0xff)
+	memory.PutKey(0x5600, 0x41)
+	memory.SetMemory(0x400, 0x58102008) // l 1,0(2)
+	memory.SetMemory(0x5678, 0x12345678)
+	cpuState.testInst(0)
+	if trapFlag {
+		t.Error("Load to  fetch correct key traped")
+	}
+	v = memory.GetMemory(0x5678)
+	mv = uint32(0x12345678)
+	if v != mv {
+		t.Errorf("Load to correct key did change register correct got: %08x wanted: %08x", v, mv)
+	}
+	cpuState.flags = 0
+	cpuState.stKey = 0x00
+	memory.PutKey(0x5600, 0)
+}
+
+// Test and set.
+func TestCycleTS(t *testing.T) {
+	setup()
+
+	cpuState.regs[2] = 2                // Index
+	memory.SetMemory(0x100, 0x83857789) // 102 top bit not set
+	memory.SetMemory(0x400, 0x93002100) // TS 100(2)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x100)
+	mv := uint32(0x8385ff89)
+	if v != mv {
+		t.Errorf("TS Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 0 { // not complete
+		t.Errorf("TS CC not correct got: %x wanted: %x", cpuState.cc, 0)
+	}
+
+	cpuState.cc = 3
+	cpuState.regs[2] = 2                // Index
+	memory.SetMemory(0x100, 0x8385c789) // 102 top bit not set
+	memory.SetMemory(0x400, 0x93002100) // TS 100(2)
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x100)
+	mv = uint32(0x8385ff89)
+	if v != mv {
+		t.Errorf("TS Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 { // not complete
+		t.Errorf("TS CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+}
+
+// Edit test.
+func TestCycleED(t *testing.T) {
+	setup()
+
+	cpuState.regs[12] = 0x1000
+	memory.SetMemory(0x1200, 0x0257426c)
+	memory.SetMemory(0x1000, 0x4020206b)
+	memory.SetMemory(0x1004, 0x2020214b)
+	memory.SetMemory(0x1008, 0x202040c3)
+	memory.SetMemory(0x100c, 0xd9ffffff)
+	memory.SetMemory(0x400, 0xde0cc000)
+	memory.SetMemory(0x404, 0xc2000000) // ED 0(13,12),200(12)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x1000)
+	mv := uint32(0x4040f26b)
+	if v != mv {
+		t.Errorf("ED Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x1004)
+	mv = uint32(0xf5f7f44b)
+	if v != mv {
+		t.Errorf("ED Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x1008)
+	mv = uint32(0xf2f64040)
+	if v != mv {
+		t.Errorf("ED Memory 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x100c)
+	mv = uint32(0x40ffffff)
+	if v != mv {
+		t.Errorf("ED Memory 4 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 { // not complete
+		t.Errorf("ED CC not correct got: %x wanted: %x", cpuState.cc, 2)
+	}
+
+	cpuState.regs[12] = 0x1000
+	memory.SetMemory(0x1200, 0x0000026d)
+	memory.SetMemory(0x1000, 0x4020206b)
+	memory.SetMemory(0x1004, 0x2020214b)
+	memory.SetMemory(0x1008, 0x202040c3)
+	memory.SetMemory(0x100c, 0xd9ffffff)
+	memory.SetMemory(0x400, 0xde0cc000)
+	memory.SetMemory(0x404, 0xc2000000) // ED 0(13,12),200(12)
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x1000)
+	mv = uint32(0x40404040)
+	if v != mv {
+		t.Errorf("ED Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x1004)
+	mv = uint32(0x4040404b)
+	if v != mv {
+		t.Errorf("ED Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x1008)
+	mv = uint32(0xf2f640c3)
+	if v != mv {
+		t.Errorf("ED Memory 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x100c)
+	mv = uint32(0xd9ffffff)
+	if v != mv {
+		t.Errorf("ED Memory 4 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 { // not complete
+		t.Errorf("ED CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+}
+
+// Edit and mark.
+func TestCycleEDMK(t *testing.T) {
+	setup()
+
+	cpuState.regs[1] = 0xaabbccdd
+	cpuState.regs[12] = 0x1000
+	memory.SetMemory(0x1200, 0x0000026d)
+	memory.SetMemory(0x1000, 0x4020206b)
+	memory.SetMemory(0x1004, 0x2020214b)
+	memory.SetMemory(0x1008, 0x202040c3)
+	memory.SetMemory(0x100c, 0xd9ffffff)
+	memory.SetMemory(0x400, 0xdf0cc000)
+	memory.SetMemory(0x404, 0xc2000000) // EDMK 0(13,12),200(12)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x1000)
+	mv := uint32(0x40404040)
+	if v != mv {
+		t.Errorf("EDMK Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x1004)
+	mv = uint32(0x4040404b)
+	if v != mv {
+		t.Errorf("EDMK Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x1008)
+	mv = uint32(0xf2f640c3)
+	if v != mv {
+		t.Errorf("EDMK Memory 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x100c)
+	mv = uint32(0xd9ffffff)
+	if v != mv {
+		t.Errorf("EDMK Memory 4 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[1]
+	mv = uint32(0xaabbccdd)
+	if v != mv {
+		t.Errorf("EDMK Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 { // not complete
+		t.Errorf("EDMK CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+
+	cpuState.regs[1] = 0xaabbccdd
+	cpuState.regs[12] = 0x1000
+	memory.SetMemory(0x1200, 0x0000026d)
+	memory.SetMemory(0x1000, 0x4020206b)
+	memory.SetMemory(0x1004, 0x2020204b)
+	memory.SetMemory(0x1008, 0x202040c3)
+	memory.SetMemory(0x100c, 0xd9ffffff)
+	memory.SetMemory(0x400, 0xdf0cc000)
+	memory.SetMemory(0x404, 0xc2000000) // EDMK 0(13,12),200(12)
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x1000)
+	mv = uint32(0x40404040)
+	if v != mv {
+		t.Errorf("EDMK Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x1004)
+	mv = uint32(0x40404040)
+	if v != mv {
+		t.Errorf("EDMK Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x1008)
+	mv = uint32(0xf2f640c3)
+	if v != mv {
+		t.Errorf("EDMK Memory 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x100c)
+	mv = uint32(0xd9ffffff)
+	if v != mv {
+		t.Errorf("EDMK Memory 4 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = cpuState.regs[1]
+	mv = uint32(0xaa001008)
+	if v != mv {
+		t.Errorf("EDMK Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 { // not complete
+		t.Errorf("EDMK CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+}
+
 func TestCycleCLM(t *testing.T) {
 	setup()
 	cpuState.regs[1] = 0xFF00FF00
 	cpuState.regs[2] = 0x00FFFF00
 	memory.SetMemory(0x500, 0xFFFFFFFF)
 	memory.SetMemory(0x400, 0xbd1a0500) // CLM 1,b'1010', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 0 {
 		t.Errorf("CLM CC not correct got: %x wanted: %x", cpuState.cc, 0)
 	}
 
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0xbd260500) // CLM 2,b'0110', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 0 {
 		t.Errorf("CLM CC not correct got: %x wanted: %x", cpuState.cc, 0)
 	}
 
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0xbd130500) // CLM 1,b'0011', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 1 {
 		t.Errorf("CLM CC not correct got: %x wanted: %x", cpuState.cc, 1)
 	}
@@ -2910,28 +4490,32 @@ func TestCycleCLM(t *testing.T) {
 	memory.SetMemory(0x500, 0x01020304)
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0xbd190500) // CLM 1,b'1001', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 0 {
 		t.Errorf("CLM CC not correct got: %x wanted: %x", cpuState.cc, 0)
 	}
 
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0xbd260500) // CLM 2,b'0110', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 0 {
 		t.Errorf("CLM CC not correct got: %x wanted: %x", cpuState.cc, 0)
 	}
 
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0xbd150500) // CLM 1,b'0101', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 2 {
 		t.Errorf("CLM CC not correct got: %x wanted: %x", cpuState.cc, 2)
 	}
 
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0xbd230500) // CLM 2,b'0011', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 2 {
 		t.Errorf("CLM CC not correct got: %x wanted: %x", cpuState.cc, 2)
 	}
@@ -2942,7 +4526,8 @@ func TestCycleICM(t *testing.T) {
 	cpuState.regs[1] = 0x00000000
 	memory.SetMemory(0x500, 0x01020304)
 	memory.SetMemory(0x400, 0xbF130500) // ICM 1,b'0011', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 2 {
 		t.Errorf("ICM CC not correct got: %x wanted: %x", cpuState.cc, 2)
 	}
@@ -2953,7 +4538,8 @@ func TestCycleICM(t *testing.T) {
 	cpuState.cc = 3
 	cpuState.regs[1] = 0x00000000
 	memory.SetMemory(0x400, 0xbF190500) // ICM 1,b'1001', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 2 {
 		t.Errorf("ICM CC not correct got: %x wanted: %x", cpuState.cc, 2)
 	}
@@ -2964,7 +4550,8 @@ func TestCycleICM(t *testing.T) {
 	cpuState.cc = 3
 	cpuState.regs[1] = 0xd0d0d0d0
 	memory.SetMemory(0x400, 0xbF130500) // ICM 1,b'0011', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 2 {
 		t.Errorf("ICM CC not correct got: %x wanted: %x", cpuState.cc, 2)
 	}
@@ -2975,7 +4562,8 @@ func TestCycleICM(t *testing.T) {
 	cpuState.cc = 3
 	cpuState.regs[1] = 0xd0d0d0d0
 	memory.SetMemory(0x400, 0xbF190500) // ICM 1,b'1001', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 2 {
 		t.Errorf("ICM CC not correct got: %x wanted: %x", cpuState.cc, 2)
 	}
@@ -2986,7 +4574,8 @@ func TestCycleICM(t *testing.T) {
 	cpuState.cc = 3
 	cpuState.regs[1] = 0x00000000
 	memory.SetMemory(0x400, 0xbF170500) // ICM 1,b'0111', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 2 {
 		t.Errorf("ICM CC not correct got: %x wanted: %x", cpuState.cc, 2)
 	}
@@ -2998,7 +4587,8 @@ func TestCycleICM(t *testing.T) {
 	cpuState.regs[1] = 0x00000000
 	memory.SetMemory(0x500, 0xf0f1f2f3)
 	memory.SetMemory(0x400, 0xbF130500) // ICM 1,b'0011', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 1 {
 		t.Errorf("ICM CC not correct got: %x wanted: %x", cpuState.cc, 1)
 	}
@@ -3010,7 +4600,8 @@ func TestCycleICM(t *testing.T) {
 	cpuState.regs[1] = 0xd0d0d0d0
 	memory.SetMemory(0x500, 0xf0f1f2f3)
 	memory.SetMemory(0x400, 0xbF190500) // ICM 1,b'1001', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 1 {
 		t.Errorf("ICM CC not correct got: %x wanted: %x", cpuState.cc, 1)
 	}
@@ -3022,7 +4613,8 @@ func TestCycleICM(t *testing.T) {
 	cpuState.regs[1] = 0xd0d0d0d0
 	memory.SetMemory(0x500, 0x00000000)
 	memory.SetMemory(0x400, 0xbF130500) // ICM 1,b'0011', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 0 {
 		t.Errorf("ICM CC not correct got: %x wanted: %x", cpuState.cc, 0)
 	}
@@ -3035,28 +4627,32 @@ func TestCycleICM(t *testing.T) {
 	memory.SetMemory(0x500, 0x01020304)
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0xbd190500) // ICM 1,b'1001', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 0 {
 		t.Errorf("ICM CC not correct got: %x wanted: %x", cpuState.cc, 0)
 	}
 
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0xbd260500) // ICM 2,b'0110', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 0 {
 		t.Errorf("ICM CC not correct got: %x wanted: %x", cpuState.cc, 0)
 	}
 
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0xbd150500) // ICM 1,b'0101', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 2 {
 		t.Errorf("ICM CC not correct got: %x wanted: %x", cpuState.cc, 2)
 	}
 
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0xbd230500) // ICM 2,b'0011', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 2 {
 		t.Errorf("ICM CC not correct got: %x wanted: %x", cpuState.cc, 2)
 	}
@@ -3068,7 +4664,8 @@ func TestCycleSTCM(t *testing.T) {
 	cpuState.regs[3] = 0xf0f1f2f3
 	memory.SetMemory(0x500, 0xf0f1f2f3)
 	memory.SetMemory(0x400, 0xbe330500) // STCM 3,b'0011', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 3 {
 		t.Errorf("STCM CC not correct got: %x wanted: %x", cpuState.cc, 3)
 	}
@@ -3080,10 +4677,12 @@ func TestCycleSTCM(t *testing.T) {
 		t.Errorf("STCM R3 not correct got: %x wanted: %x", cpuState.regs[3], 0xf0f1f2f3)
 	}
 
+	cpuState.cc = 3
 	cpuState.regs[3] = 0xf0f1f2f3
 	memory.SetMemory(0x500, 0xf0f1f2f3)
 	memory.SetMemory(0x400, 0xbe390500) // STCM 3,b'1001', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 3 {
 		t.Errorf("STCM CC not correct got: %x wanted: %x", cpuState.cc, 3)
 	}
@@ -3094,10 +4693,13 @@ func TestCycleSTCM(t *testing.T) {
 	if cpuState.regs[3] != 0xf0f1f2f3 {
 		t.Errorf("STCM R3 not correct got: %x wanted: %x", cpuState.regs[3], 0xf0f1f2f3)
 	}
+
+	cpuState.cc = 3
 	cpuState.regs[1] = 0xf0f1f2f3
 	memory.SetMemory(0x500, 0x00000000)
 	memory.SetMemory(0x400, 0xbe3f0500) // STCM 3,b'1111', 500
-	cpuState.testInst(0, 20)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
 	if cpuState.cc != 3 {
 		t.Errorf("STCM CC not correct got: %x wanted: %x", cpuState.cc, 3)
 	}
@@ -3128,7 +4730,7 @@ func TestCycleCLCL(t *testing.T) {
 	cpuState.regs[4] = 0x600
 	cpuState.regs[5] = 20
 	memory.SetMemory(0x400, 0x0f240000) // CLCL 2,4
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.cc != 0 {
 		t.Errorf("CLCL CC not correct got: %x wanted: %x", cpuState.cc, 0)
 	}
@@ -3154,7 +4756,7 @@ func TestCycleCLCL(t *testing.T) {
 	cpuState.regs[4] = 0x600
 	cpuState.regs[5] = 0xf0000000 + 10
 	memory.SetMemory(0x400, 0x0f240000) // CLCL 2,4
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.cc != 0 {
 		t.Errorf("CLCL CC not correct got: %x wanted: %x", cpuState.cc, 0)
 	}
@@ -3180,7 +4782,7 @@ func TestCycleCLCL(t *testing.T) {
 	cpuState.regs[4] = 0x600
 	cpuState.regs[5] = 0xf0000000 + 20
 	memory.SetMemory(0x400, 0x0f240000) // CLCL 2,4
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.cc != 0 {
 		t.Errorf("CLCL CC not correct got: %x wanted: %x", cpuState.cc, 1)
 	}
@@ -3212,7 +4814,7 @@ func TestCycleCLCL(t *testing.T) {
 	cpuState.regs[3] = 20
 	cpuState.regs[4] = 0x600
 	cpuState.regs[5] = 20
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.cc != 1 {
 		t.Errorf("CLCL CC not correct got: %x wanted: %x", cpuState.cc, 1)
 	}
@@ -3239,7 +4841,7 @@ func TestCycleCLCL(t *testing.T) {
 	cpuState.regs[3] = 20
 	cpuState.regs[4] = 0x600
 	cpuState.regs[5] = 20
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.cc != 2 {
 		t.Errorf("CLCL CC not correct got: %x wanted: %x", cpuState.cc, 2)
 	}
@@ -3265,7 +4867,7 @@ func TestCycleCLCL(t *testing.T) {
 	cpuState.regs[4] = 0x600
 	cpuState.regs[5] = 0xf5000000 + 20
 	memory.SetMemory(0x400, 0x0f240000) // CLCL 2,4
-	cpuState.testInst(0, 20)
+	cpuState.testInst(0)
 	if cpuState.cc != 1 {
 		t.Errorf("CLCL CC not correct got: %x wanted: %x", cpuState.cc, 1)
 	}

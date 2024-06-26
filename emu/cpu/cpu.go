@@ -242,8 +242,9 @@ func CycleCPU() int {
 
 	// Check type of instruction
 	if (step.opcode & 0xc0) != 0 {
-		// Check if we need new word
+		// RX, RS, SI, SS
 		cpuState.ilc++
+		// Check if we need new word?
 		if (cpuState.PC & 2) == 0 {
 			t, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
 			if err != 0 {
@@ -256,22 +257,24 @@ func CycleCPU() int {
 		}
 		step.address1 &= 0xffff
 		cpuState.PC += 2
-		// SI instruction
-		if (step.opcode & 0xc0) == 0xc0 {
-			cpuState.ilc++
-			if (cpuState.PC & 2) != 0 {
-				t, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
-				if err != 0 {
-					cpuState.suppress(oPPSW, err)
-					return memCycle
-				}
-				step.address2 = (t >> 16)
-			} else {
-				step.address2 = t
+	}
+
+	// If SS
+	if (step.opcode & 0xc0) == 0xc0 {
+		cpuState.ilc++
+		// Do we need another word?
+		if (cpuState.PC & 2) == 0 {
+			t, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
+			if err != 0 {
+				cpuState.suppress(oPPSW, err)
+				return memCycle
 			}
-			step.address2 &= 0xffff
-			cpuState.PC += 2
+			step.address2 = (t >> 16)
+		} else {
+			step.address2 = t
 		}
+		step.address2 &= 0xffff
+		cpuState.PC += 2
 	}
 
 	err = cpuState.execute(&step)
@@ -305,7 +308,7 @@ func (cpu *cpu) execute(step *stepInfo) uint16 {
 			if step.R2 != 0 {
 				step.address1 += cpu.regs[step.R2]
 			}
-		} else if (step.opcode & 0xc0) != 0xc0 { // SS
+		} else if (step.opcode & 0xc0) == 0xc0 { // SS
 			temp = (step.address2 >> 12) & 0xf
 			step.address2 &= 0xfff
 			if temp != 0 {
@@ -1086,10 +1089,9 @@ func (cpu *cpu) lpsw(src1, src2 uint32) {
 		cpu.cc = uint8((src1 >> 12) & 0x3)
 		cpu.progMask = uint8((src1 >> 8) & 0xf)
 		cpu.perEnb = (src1 & 0x40000000) != 0
+		cpu.sysMask = 0
 		if cpu.irqEnb {
 			cpu.sysMask = uint16(cpu.cregs[2] >> 16)
-		} else {
-			cpu.sysMask = 0
 		}
 	} else {
 		cpu.sysMask = uint16((src1 >> 16) & 0xfc00)

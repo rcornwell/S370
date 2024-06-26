@@ -40,7 +40,7 @@ func (cpu *cpu) opSSK(step *stepInfo) uint16 {
 	if (step.address1 & 0x0f) != 0 {
 		return ircSpec
 	}
-	if memory.CheckAddr(step.address1) {
+	if !memory.CheckAddr(step.address1) {
 		return ircAddr
 	}
 	t := uint8(step.src1 & 0xf8)
@@ -58,7 +58,7 @@ func (cpu *cpu) opISK(step *stepInfo) uint16 {
 	if (step.address1 & 0x0f) != 0 {
 		return ircSpec
 	}
-	if memory.CheckAddr(step.address1) {
+	if !memory.CheckAddr(step.address1) {
 		return ircAddr
 	}
 	t := memory.GetKey(step.address1)
@@ -78,7 +78,7 @@ func (cpu *cpu) opSVC(step *stepInfo) uint16 {
 	//  (cpu_unit[0].flags & (FEAT_370|FEAT_VMA)) == (FEAT_370|FEAT_VMA) && \
 	//  (cregs[6] & 0x88000000) == MSIGN && vma_stsvc(reg))
 	//  break
-	irqaddr := cpu.storePSW(oSPSW, uint16(step.R1))
+	irqaddr := cpu.storePSW(oSPSW, uint16(step.reg))
 	memCycle++
 	src1 := memory.GetMemory(irqaddr)
 	memCycle++
@@ -97,25 +97,26 @@ func (cpu *cpu) opSSM(step *stepInfo) uint16 {
 	} else if (cpu.cregs[0] & 0x40000000) != 0 {
 		return ircSpecOp
 	}
-	var t uint32
-	var err uint16
-	t, err = cpu.readByte(step.address1)
+
+	// Fetch new system mask
+	t, err := cpu.readByte(step.address1)
 	if err != 0 {
 		return err
 	}
 
-	ssm := uint8(t)
-	cpu.extEnb = (ssm & extEnable) != 0
+	// If in EC Mode, update various flags.
+	sm := uint8(t)
+	cpu.extEnb = (sm & extEnable) != 0
 	if cpu.ecMode {
-		if (ssm & irqEnable) != 0 {
+		if (sm & irqEnable) != 0 {
 			cpu.irqEnb = true
 			cpu.sysMask = uint16(cpu.cregs[2] >> 16)
 		} else {
 			cpu.irqEnb = false
 			cpu.sysMask = 0
 		}
-		cpu.pageEnb = (ssm & datEnable) != 0
-		cpu.perEnb = (ssm & perEnable) != 0
+		cpu.pageEnb = (sm & datEnable) != 0
+		cpu.perEnb = (sm & perEnable) != 0
 		if (t & 0xb8) != 0 {
 			return ircSpec
 		}
