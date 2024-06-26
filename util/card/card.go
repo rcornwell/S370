@@ -252,7 +252,7 @@ func cmpCard(buf *cardBuffer, s string) bool {
 		return false
 	}
 
-	word := []byte(buf.buffer[1 : len(s)+1])
+	word := (buf.buffer[1 : len(s)+1])
 	for i, v := range s {
 		if bytes.ToUpper(word)[i] != byte(v) {
 			return false
