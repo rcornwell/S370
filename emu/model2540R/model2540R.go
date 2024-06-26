@@ -32,6 +32,7 @@
 package model2540r
 
 import (
+	dev "github.com/rcornwell/S370/emu/device"
 	ev "github.com/rcornwell/S370/emu/event"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
 	card "github.com/rcornwell/S370/util/card"
@@ -66,19 +67,19 @@ func (d *Model2540Rctx) StartCmd(cmd uint8) uint8 {
 
 	// If busy return busy status right away
 	if d.busy {
-		return ch.CStatusBusy
+		return dev.CStatusBusy
 	}
 
 	// Decode command
 	switch cmd & maskCMD {
 	case 0:
 		return 0
-	case ch.CmdRead:
+	case dev.CmdRead:
 		var err int
 		if !d.ctx.Attached() {
 			d.halt = false
-			d.sense = ch.SenseINTVENT
-			return ch.CStatusChnEnd | ch.CStatusDevEnd | ch.CStatusCheck
+			d.sense = dev.SenseINTVENT
+			return dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck
 		}
 		d.sense = 0
 		d.col = 0
@@ -98,46 +99,46 @@ func (d *Model2540Rctx) StartCmd(cmd uint8) uint8 {
 				d.err = true
 				d.rdy = true
 			}
-			r = ch.CStatusChnEnd | ch.CStatusDevEnd | ch.CStatusExpt
+			r = dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusExpt
 		}
 		// Check if no more cards left in deck
 		if !d.rdy {
-			d.sense = ch.SenseINTVENT
+			d.sense = dev.SenseINTVENT
 		} else {
 			d.busy = true
 			ev.AddEvent(d, d.callback, 100, int(cmd))
 			return 0
 		}
 		// Queue up sense command
-	case ch.CmdSense:
-		if cmd != ch.CmdSense {
-			d.sense |= ch.SenseCMDREJ
+	case dev.CmdSense:
+		if cmd != dev.CmdSense {
+			d.sense |= dev.SenseCMDREJ
 		} else {
 			d.busy = true
 			ev.AddEvent(d, d.callback, 10, int(cmd))
 			r = 0
 		}
-	case ch.CmdCTL:
+	case dev.CmdCTL:
 		d.sense = 0
-		if cmd == ch.CmdCTL {
-			r = ch.CStatusChnEnd | ch.CStatusDevEnd
+		if cmd == dev.CmdCTL {
+			r = dev.CStatusChnEnd | dev.CStatusDevEnd
 			break
 		}
 		if (cmd&0x30) != 0x20 || (cmd&maskStack) == maskStack {
-			d.sense |= ch.SenseCMDREJ
-			r = ch.CStatusChnEnd | ch.CStatusDevEnd | ch.CStatusCheck
+			d.sense |= dev.SenseCMDREJ
+			r = dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck
 		} else {
 			d.busy = true
 			ev.AddEvent(d, d.callback, 1000, int(cmd))
-			r = ch.CStatusChnEnd
+			r = dev.CStatusChnEnd
 		}
 
 	default:
-		d.sense = ch.SenseCMDREJ
+		d.sense = dev.SenseCMDREJ
 	}
 
 	if d.sense != 0 {
-		r = ch.CStatusChnEnd | ch.CStatusDevEnd | ch.CStatusCheck
+		r = dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck
 	}
 	d.halt = false
 	return r
@@ -166,18 +167,18 @@ func (d *Model2540Rctx) callback(cmd int) {
 	var err int
 	var xlat uint16
 
-	if cmd == int(ch.CmdSense) {
+	if cmd == int(dev.CmdSense) {
 		d.busy = false
 		d.halt = false
 		_ = ch.ChanWriteByte(d.addr, d.sense)
-		ch.ChanEnd(d.addr, (ch.CStatusChnEnd | ch.CStatusDevEnd))
+		ch.ChanEnd(d.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd))
 		return
 	}
 
 	// Handle feed end
 	if cmd == 0x100 {
 		d.busy = false
-		ch.SetDevAttn(d.addr, ch.CStatusDevEnd)
+		ch.SetDevAttn(d.addr, dev.CStatusDevEnd)
 		return
 	}
 	if d.halt {
@@ -186,7 +187,7 @@ func (d *Model2540Rctx) callback(cmd int) {
 	// Check if new card requested
 	if !d.rdy {
 		if d.err {
-			r = ch.CStatusCheck
+			r = dev.CStatusCheck
 		}
 	}
 	// Read next card.
@@ -198,12 +199,12 @@ func (d *Model2540Rctx) callback(cmd int) {
 		d.eof = true
 		d.busy = false
 		d.halt = false
-		ch.SetDevAttn(d.addr, ch.CStatusDevEnd|r)
+		ch.SetDevAttn(d.addr, dev.CStatusDevEnd|r)
 		return
 	case card.CardEmpty:
 		d.busy = false
 		d.halt = false
-		ch.SetDevAttn(d.addr, ch.CStatusDevEnd|r)
+		ch.SetDevAttn(d.addr, dev.CStatusDevEnd|r)
 		return
 	case card.CardError:
 		d.err = true
@@ -213,16 +214,16 @@ func (d *Model2540Rctx) callback(cmd int) {
 	}
 
 	// Copy next column of card over
-	if (cmd & maskCMD) == int(ch.CmdRead) {
+	if (cmd & maskCMD) == int(dev.CmdRead) {
 		if d.err {
-			d.sense = ch.SenseDATCHK
+			d.sense = dev.SenseDATCHK
 			goto feed
 		}
 	}
 	xlat = card.HolToEBCDIC(d.image.Image[d.col])
 
 	if xlat == 0x100 {
-		d.sense = ch.SenseDATCHK
+		d.sense = dev.SenseDATCHK
 		xlat = 0
 	} else {
 		xlat &= 0xff
@@ -240,13 +241,13 @@ feed:
 	// If feed give, request a new card
 	if (cmd & maskStack) != maskStack {
 		d.rdy = false
-		ch.ChanEnd(d.addr, ch.CStatusChnEnd)
+		ch.ChanEnd(d.addr, dev.CStatusChnEnd)
 		ev.AddEvent(d, d.callback, 1000, 0) // Feed the card
 	} else {
 		if d.err {
-			r = ch.CStatusCheck
+			r = dev.CStatusCheck
 		}
 		d.busy = false
-		ch.ChanEnd(d.addr, (ch.CStatusChnEnd | ch.CStatusDevEnd | r))
+		ch.ChanEnd(d.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd | r))
 	}
 }

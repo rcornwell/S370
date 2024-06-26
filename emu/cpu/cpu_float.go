@@ -889,8 +889,8 @@ func (cpu *cpu) opAXR(step *stepInfo) uint16 {
 		}
 	} else {
 		// Do add
-		v1l = v1l + v2l
-		v1h = v1h + v2h
+		v1l += v2l
+		v1h += v2h
 		// If lower overflowed, increment upper
 		if (v1l & CMASKL) != 0 {
 			v1l &= XMASKL

@@ -317,7 +317,7 @@ func TestReadCardMatch(t *testing.T) {
 	}
 }
 
-// Test that blank cards creates requested number of blank cards
+// Test that blank cards creates requested number of blank cards.
 func TestReadBlankDeck(t *testing.T) {
 	ctx = NewCardContext(ModeText)
 	defer freeCtx()
@@ -478,7 +478,7 @@ var ebcdicString = [80]uint8{
 	0xe6, 0xe7, 0xe8, 0xe9, 0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0x40, 0x40,
 }
 
-// Try to punch an EBCDIC deck
+// Try to punch an EBCDIC deck.
 func TestPunchCardEBCDIC(t *testing.T) {
 	ctx = NewCardContext(ModeText)
 	defer freeCtx()

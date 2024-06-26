@@ -77,7 +77,7 @@ func BcdToHol(bcd uint8) uint16 {
 
 	// Handle case of 10 special
 	// only 032 is punched as 8-2
-	if (bcd&017) == 10 && (bcd&060) != 0o20 {
+	if (bcd&0o17) == 10 && (bcd&0o60) != 0o20 {
 		hol |= 1 << 9
 		return hol
 	}
@@ -119,8 +119,8 @@ func HolToBcd(hol uint16) uint8 {
 		return 0x7f
 	}
 
-	hol &= 0o777         // Mask rows 0-9
-	if (hol & 02) != 0 { //Check if row 8 punched
+	hol &= 0o777          // Mask rows 0-9
+	if (hol & 0o2) != 0 { // Check if row 8 punched
 		bcd += 8
 		hol &= 0o775 // Clear row 8.
 	}

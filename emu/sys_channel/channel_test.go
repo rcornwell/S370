@@ -23,21 +23,26 @@
  *
  */
 
-package syschannel
+package syschannel_test
 
 import (
 	"testing"
 
+	D "github.com/rcornwell/S370/emu/device"
 	ev "github.com/rcornwell/S370/emu/event"
 	mem "github.com/rcornwell/S370/emu/memory"
+	Ch "github.com/rcornwell/S370/emu/sys_channel"
+	Td "github.com/rcornwell/S370/emu/test_dev"
 )
 
-func setup(devNum uint16) *TestDev {
+const statusMask uint32 = 0xffff0000
+
+func setup() *Td.TestDev {
 	mem.SetSize(64)
-	InitializeChannels()
-	AddChannel(0, TypeMux, 192)
-	d := &TestDev{Addr: devNum, Mask: 0xff}
-	AddDevice(d, devNum)
+	Ch.InitializeChannels()
+	Ch.AddChannel(0, D.TypeMux, 192)
+	d := &Td.TestDev{Addr: 0xf, Mask: 0xff}
+	Ch.AddDevice(d, d.Addr)
 	_ = d.InitDev()
 	for i := range 0x10 {
 		d.Data[i] = uint8(0xf0 + i)
@@ -62,56 +67,56 @@ func setMemByte(addr uint32, data uint32) {
 }
 
 func runChannel() uint16 {
-	d := NoDev
+	d := D.NoDev
 
-	for d == NoDev {
+	for d == D.NoDev {
 		ev.Advance(1)
-		d = ChanScan(0x8000, true)
+		d = Ch.ChanScan(0x8000, true)
 	}
-	IrqPending = false
+	Ch.IrqPending = false
 	return d
 }
 
 // Debug channel test.
 func TestTestChan(t *testing.T) {
-	InitializeChannels()
-	cc := TestChan(0)
+	Ch.InitializeChannels()
+	cc := Ch.TestChan(0)
 	if cc != 3 {
 		t.Errorf("Test Channel on non-existing channel failed expected %d got: %d", 3, cc)
 	}
-	AddChannel(0, TypeMux, 192)
-	cc = TestChan(0)
+	Ch.AddChannel(0, D.TypeMux, 192)
+	cc = Ch.TestChan(0)
 	if cc != 0 {
 		t.Errorf("Test Channel on existing channel failed expected %d got: %d", 0, cc)
 	}
 
-	cc = TestChan(0x100)
+	cc = Ch.TestChan(0x100)
 	if cc != 3 {
 		t.Errorf("Test Channel on non-existing channel failed expected %d got: %d", 3, cc)
 	}
-	AddChannel(1, TypeSel, 0)
-	cc = TestChan(0x100)
+	Ch.AddChannel(1, D.TypeSel, 0)
+	cc = Ch.TestChan(0x100)
 	if cc != 0 {
 		t.Errorf("Test Channel on existing channel failed expected %d got: %d", 0, cc)
 	}
-	cc = TestChan(0x200)
+	cc = Ch.TestChan(0x200)
 	if cc != 3 {
 		t.Errorf("Test Channel on non-existing channel failed expected %d got: %d", 3, cc)
 	}
-	AddChannel(2, TypeBMux, 0)
-	cc = TestChan(0x200)
+	Ch.AddChannel(2, D.TypeBMux, 0)
+	cc = Ch.TestChan(0x200)
 	if cc != 0 {
 		t.Errorf("Test Channel on existing channel failed expected %d got: %d", 0, cc)
 	}
 }
 
 func TestTestIO(t *testing.T) {
-	_ = setup(0xf)
-	cc := TestIO(0x00f)
+	_ = setup()
+	cc := Ch.TestIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Test I/O expected %d got: %d", 0, cc)
 	}
-	cc = TestIO(0x004)
+	cc = Ch.TestIO(0x004)
 	if cc != 3 {
 		t.Errorf("Test I/O expected %d got: %d", 3, cc)
 	}
@@ -120,7 +125,7 @@ func TestTestIO(t *testing.T) {
 func TestStartIO(t *testing.T) {
 	var v uint32
 
-	td := setup(0xf)
+	td := setup()
 	mem.SetMemory(0x40, 0)
 	mem.SetMemory(0x44, 0)
 	mem.SetMemory(0x78, 0)
@@ -133,7 +138,7 @@ func TestStartIO(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O expected %d got: %d", 0, cc)
 	}
@@ -157,7 +162,7 @@ func TestStartIO(t *testing.T) {
 		}
 	}
 
-	IrqPending = false
+	Ch.IrqPending = false
 	mem.SetMemory(0x40, 0)
 	mem.SetMemory(0x44, 0)
 	mem.SetMemory(0x78, 0)
@@ -170,7 +175,7 @@ func TestStartIO(t *testing.T) {
 	mem.SetMemory(0x608, 0xf8f9fafb)
 	mem.SetMemory(0x60C, 0xfcfdfeff)
 
-	cc = StartIO(0x00f)
+	cc = Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O 2 expected %d got: %d", 0, cc)
 	}
@@ -197,7 +202,7 @@ func TestStartIO(t *testing.T) {
 func TestStartIOSense(t *testing.T) {
 	var v uint32
 
-	td := setup(0xf)
+	td := setup()
 	mem.SetMemory(0x40, 0)
 	mem.SetMemory(0x44, 0)
 	mem.SetMemory(0x78, 0)
@@ -210,7 +215,7 @@ func TestStartIOSense(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O sense expected %d got: %d", 0, cc)
 	}
@@ -232,8 +237,8 @@ func TestStartIOSense(t *testing.T) {
 		t.Errorf("Start I/O sense expected %08x got: %08x", 0x00555555, v)
 	}
 
-	IrqPending = false
-	td.sense = 0xff
+	Ch.IrqPending = false
+	td.Sense = 0xff
 	mem.SetMemory(0x40, 0)
 	mem.SetMemory(0x44, 0)
 	mem.SetMemory(0x78, 0)
@@ -246,7 +251,7 @@ func TestStartIOSense(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cc = StartIO(0x00f)
+	cc = Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O sense expected %d got: %d", 0, cc)
 	}
@@ -272,7 +277,7 @@ func TestStartIOSense(t *testing.T) {
 func TestStartIONop(t *testing.T) {
 	var v uint32
 
-	_ = setup(0xf)
+	_ = setup()
 	mem.SetMemory(0x40, 0xffffffff)
 	mem.SetMemory(0x44, 0xffffffff)
 	mem.SetMemory(0x78, 0)
@@ -285,7 +290,7 @@ func TestStartIONop(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 1 {
 		t.Errorf("Start I/O nop expected %d got: %d", 1, cc)
 	}
@@ -304,7 +309,7 @@ func TestStartIONop(t *testing.T) {
 		t.Errorf("Start I/O 1 CSW2 expected %08x got: %08x", 0x55555555, v)
 	}
 
-	IrqPending = false
+	Ch.IrqPending = false
 	mem.SetMemory(0x40, 0xffffffff)
 	mem.SetMemory(0x44, 0xffffffff)
 	mem.SetMemory(0x78, 0)
@@ -317,7 +322,7 @@ func TestStartIONop(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cc = StartIO(0x00f)
+	cc = Ch.StartIO(0x00f)
 	if cc != 1 {
 		t.Errorf("Start I/O zero count expected %d got: %d", 1, cc)
 	}
@@ -339,7 +344,7 @@ func TestStartIONop(t *testing.T) {
 func TestStartIOCEOnly(t *testing.T) {
 	var v uint32
 
-	_ = setup(0xf)
+	_ = setup()
 	mem.SetMemory(0x40, 0xffffffff)
 	mem.SetMemory(0x44, 0xffffffff)
 	mem.SetMemory(0x78, 0)
@@ -352,7 +357,7 @@ func TestStartIOCEOnly(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 1 {
 		t.Errorf("Start I/O ce only expected %d got: %d", 1, cc)
 	}
@@ -387,7 +392,7 @@ func TestStartIOCEOnly(t *testing.T) {
 func TestStartIOCCNop(t *testing.T) {
 	var v uint32
 
-	_ = setup(0xf)
+	_ = setup()
 	mem.SetMemory(0x40, 0xffffffff)
 	mem.SetMemory(0x44, 0xffffffff)
 	mem.SetMemory(0x78, 0)
@@ -402,7 +407,7 @@ func TestStartIOCCNop(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 1 {
 		t.Errorf("Start I/O ce only expected %d got: %d", 1, cc)
 	}
@@ -438,7 +443,7 @@ func TestStartIOCCNop(t *testing.T) {
 func TestStartIORead(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -460,7 +465,7 @@ func TestStartIORead(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Read expected %d got: %d", 0, cc)
 	}
@@ -495,7 +500,7 @@ func TestStartIORead(t *testing.T) {
 func TestStartIOShortRead(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -517,7 +522,7 @@ func TestStartIOShortRead(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Short Read expected %d got: %d", 0, cc)
 	}
@@ -552,7 +557,7 @@ func TestStartIOShortRead(t *testing.T) {
 func TestStartIOShortReadSLI(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -574,7 +579,7 @@ func TestStartIOShortReadSLI(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Short Read expected %d got: %d", 0, cc)
 	}
@@ -609,7 +614,7 @@ func TestStartIOShortReadSLI(t *testing.T) {
 func TestStartIOWrite(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -631,7 +636,7 @@ func TestStartIOWrite(t *testing.T) {
 		setMemByte(uint32(i+0x600), uint32(0x10+i))
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Write expected %d got: %d", 0, cc)
 	}
@@ -664,7 +669,7 @@ func TestStartIOWrite(t *testing.T) {
 func TestStartIOShortWrite(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -686,7 +691,7 @@ func TestStartIOShortWrite(t *testing.T) {
 		setMemByte(uint32(i+0x600), uint32(0x10+i))
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Short Write expected %d got: %d", 0, cc)
 	}
@@ -723,7 +728,7 @@ func TestStartIOShortWrite(t *testing.T) {
 func TestStartIOShortWriteSLI(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -745,7 +750,7 @@ func TestStartIOShortWriteSLI(t *testing.T) {
 		setMemByte(uint32(i+0x600), uint32(0x10+i))
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Short Write expected %d got: %d", 0, cc)
 	}
@@ -782,7 +787,7 @@ func TestStartIOShortWriteSLI(t *testing.T) {
 func TestStartIOReadCDA(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -805,7 +810,7 @@ func TestStartIOReadCDA(t *testing.T) {
 		mem.SetMemory(0x700+i, 0x55555555)
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Raad CDA expected %d got: %d", 0, cc)
 	}
@@ -847,7 +852,7 @@ func TestStartIOReadCDA(t *testing.T) {
 func TestStartIOWriteCDA(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -873,7 +878,7 @@ func TestStartIOWriteCDA(t *testing.T) {
 	mem.SetMemory(0x708, 0x8c9cacbc)
 	mem.SetMemory(0x70c, 0xccdcecfc)
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Write CDA expected %d got: %d", 0, cc)
 	}
@@ -910,7 +915,7 @@ func TestStartIOWriteCDA(t *testing.T) {
 func TestStartIOReadCDASkip(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -933,7 +938,7 @@ func TestStartIOReadCDASkip(t *testing.T) {
 		mem.SetMemory(0x700+i, 0x55555555)
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Raad CDA expected %d got: %d", 0, cc)
 	}
@@ -970,7 +975,7 @@ func TestStartIOReadCDASkip(t *testing.T) {
 func TestStartIOReadBkwd(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x10 {
@@ -992,7 +997,7 @@ func TestStartIOReadBkwd(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Read Bkwd expected %d got: %d", 0, cc)
 	}
@@ -1021,7 +1026,7 @@ func TestStartIOReadBkwd(t *testing.T) {
 func TestStartIOCChain(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -1046,7 +1051,7 @@ func TestStartIOCChain(t *testing.T) {
 	mem.SetMemory(0x608, 0x8f9fafbf)
 	mem.SetMemory(0x60c, 0xcfdfefff)
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O CChain expected %d got: %d", 0, cc)
 	}
@@ -1080,7 +1085,7 @@ func TestStartIOCChain(t *testing.T) {
 func TestStartIOCChainSLI(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -1104,7 +1109,7 @@ func TestStartIOCChainSLI(t *testing.T) {
 		mem.SetMemory(i+0x100, 0x55555555)
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O CChain SLI expected %d got: %d", 0, cc)
 	}
@@ -1141,7 +1146,7 @@ func TestStartIOCChainSLI(t *testing.T) {
 func TestStartIOCChainNop(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -1159,7 +1164,7 @@ func TestStartIOCChainNop(t *testing.T) {
 	mem.SetMemory(0x508, 0x03000700)
 	mem.SetMemory(0x50c, 0x00000001)
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O CChain Nop expected %d got: %d", 0, cc)
 	}
@@ -1182,7 +1187,7 @@ func TestStartIOCChainNop(t *testing.T) {
 func TestStartIOTic(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -1209,7 +1214,7 @@ func TestStartIOTic(t *testing.T) {
 	mem.SetMemory(0x608, 0x8f9fafbf)
 	mem.SetMemory(0x60c, 0xcfdfefff)
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Tic expected %d got: %d", 0, cc)
 	}
@@ -1241,11 +1246,11 @@ func TestStartIOTic(t *testing.T) {
 	}
 }
 
-// Test TIC to another TIC
+// Test TIC to another TIC.
 func TestStartIOTicTic(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -1272,7 +1277,7 @@ func TestStartIOTicTic(t *testing.T) {
 	mem.SetMemory(0x608, 0x8f9fafbf)
 	mem.SetMemory(0x60c, 0xcfdfefff)
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Tic to Tic expected %d got: %d", 0, cc)
 	}
@@ -1304,11 +1309,11 @@ func TestStartIOTicTic(t *testing.T) {
 	}
 }
 
-// Test TIC as first command
+// Test TIC as first command.
 func TestStartIOTicError(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -1327,7 +1332,7 @@ func TestStartIOTicError(t *testing.T) {
 	mem.SetMemory(0x50c, 0x40000001)
 	mem.SetMemory(0x700, 0xffffffff)
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 1 {
 		t.Errorf("Start I/O TIC Error expected %d got: %d", 1, cc)
 	}
@@ -1347,11 +1352,11 @@ func TestStartIOTicError(t *testing.T) {
 	}
 }
 
-// Test TIC
+// Test TIC.
 func TestStartIOSMSTic(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -1383,7 +1388,7 @@ func TestStartIOSMSTic(t *testing.T) {
 	mem.SetMemory(0x608, 0x8f9fafbf)
 	mem.SetMemory(0x60c, 0xcfdfefff)
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O SMS expected %d got: %d", 0, cc)
 	}
@@ -1419,7 +1424,7 @@ func TestStartIOSMSTic(t *testing.T) {
 func TestStartIOPCI(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x40 {
@@ -1448,7 +1453,7 @@ func TestStartIOPCI(t *testing.T) {
 	mem.SetMemory(0x61c, 0x55555555)
 	mem.SetMemory(0x620, 0x55555555)
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O PCI expected %d got: %d", 0, cc)
 	}
@@ -1485,7 +1490,7 @@ func TestStartIOPCI(t *testing.T) {
 }
 
 func TestStartIOHaltIO1(t *testing.T) {
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x40 {
@@ -1493,8 +1498,8 @@ func TestStartIOHaltIO1(t *testing.T) {
 	}
 	d.Max = 0x40
 
-	_ = TestIO(0x00f)
-	cc := HaltIO(0x00f)
+	_ = Ch.TestIO(0x00f)
+	cc := Ch.HaltIO(0x00f)
 
 	if cc != 1 {
 		t.Errorf("Start I/O HaltIO expected %d got: %d", 1, cc)
@@ -1505,7 +1510,7 @@ func TestStartIOHaltIO1(t *testing.T) {
 func TestStartIOHaltIO2(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x80 {
@@ -1531,7 +1536,7 @@ func TestStartIOHaltIO2(t *testing.T) {
 	}
 	mem.SetMemory(0x700, 0xffffffff)
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Haltio2 expected %d got: %d", 0, cc)
 	}
@@ -1546,7 +1551,7 @@ func TestStartIOHaltIO2(t *testing.T) {
 		t.Errorf("Start I/O Haltio2 CSW2 PCI expected %08x got: %08x", 0x00800000, v)
 	}
 
-	cc = HaltIO(0x00f)
+	cc = Ch.HaltIO(0x00f)
 	if cc != 1 {
 		t.Errorf("Start I/O Haltio2 expected %d got: %d", 1, cc)
 	}
@@ -1555,8 +1560,8 @@ func TestStartIOHaltIO2(t *testing.T) {
 
 	for cc != 0 {
 		ev.Advance(1)
-		_ = ChanScan(0x8000, true)
-		cc = TestIO(0xf)
+		_ = Ch.ChanScan(0x8000, true)
+		cc = Ch.TestIO(0xf)
 	}
 
 	if dev != 0xf {
@@ -1575,7 +1580,7 @@ func TestStartIOHaltIO2(t *testing.T) {
 func TestStartIOTIOBusy(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x80 {
@@ -1601,7 +1606,7 @@ func TestStartIOTIOBusy(t *testing.T) {
 	}
 	mem.SetMemory(0x700, 0xffffffff)
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O TIO Busy expected %d got: %d", 0, cc)
 	}
@@ -1615,7 +1620,7 @@ func TestStartIOTIOBusy(t *testing.T) {
 		t.Errorf("Start I/O TIO Busy CSW2 PCI expected %08x got: %08x", 0x00800000, v)
 	}
 
-	cc = TestIO(0x00f)
+	cc = Ch.TestIO(0x00f)
 	if cc != 2 {
 		t.Errorf("Start I/O TIO Busy expected %d got: %d", 2, cc)
 	}
@@ -1638,7 +1643,7 @@ func TestStartIOTIOBusy(t *testing.T) {
 func TestStartIOReadProt(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x10 {
@@ -1659,7 +1664,7 @@ func TestStartIOReadProt(t *testing.T) {
 	mem.SetMemory(0x4008, 0x8f9fafbf)
 	mem.SetMemory(0x400c, 0xcfdfefff)
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Read Prot expected %d got: %d", 0, cc)
 	}
@@ -1690,7 +1695,7 @@ func TestStartIOReadProt(t *testing.T) {
 func TestStartIOWriteProt(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x10 {
@@ -1713,7 +1718,7 @@ func TestStartIOWriteProt(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Write Prot expected %d got: %d", 0, cc)
 	}
@@ -1740,11 +1745,11 @@ func TestStartIOWriteProt(t *testing.T) {
 	mem.PutKey(0x4000, 0x0)
 }
 
-// Read Protection check
+// Read Protection check.
 func TestStartIOReadProt2(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x10 {
@@ -1765,7 +1770,7 @@ func TestStartIOReadProt2(t *testing.T) {
 	mem.SetMemory(0x4008, 0x8f9fafbf)
 	mem.SetMemory(0x400c, 0xcfdfefff)
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Read Prot expected %d got: %d", 0, cc)
 	}
@@ -1796,7 +1801,7 @@ func TestStartIOReadProt2(t *testing.T) {
 func TestStartIOWriteProt2(t *testing.T) {
 	var v uint32
 
-	d := setup(0xf)
+	d := setup()
 
 	// Load Data
 	for i := range 0x10 {
@@ -1819,7 +1824,7 @@ func TestStartIOWriteProt2(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cc := StartIO(0x00f)
+	cc := Ch.StartIO(0x00f)
 	if cc != 0 {
 		t.Errorf("Start I/O Write Prot expected %d got: %d", 0, cc)
 	}

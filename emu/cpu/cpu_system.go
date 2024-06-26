@@ -24,6 +24,7 @@
 package cpu
 
 import (
+	dev "github.com/rcornwell/S370/emu/device"
 	"github.com/rcornwell/S370/emu/memory"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
 )
@@ -628,12 +629,12 @@ func (cpu *cpu) opB2(step *stepInfo) uint16 {
 		c := uint16(step.address1 & HMASK)
 		r := uint32(0)
 		switch ch.GetType(c) {
-		case ch.TypeUNA:
+		case dev.TypeUNA:
 			cpu.cc = 3
 			return 0
-		case ch.TypeMux:
+		case dev.TypeMux:
 			r = uint32(0x10000000)
-		case ch.TypeBMux:
+		case dev.TypeBMux:
 			r = uint32(0x20000000)
 		default:
 			// Nop

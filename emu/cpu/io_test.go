@@ -28,17 +28,19 @@ package cpu
 import (
 	"testing"
 
+	dev "github.com/rcornwell/S370/emu/device"
 	ev "github.com/rcornwell/S370/emu/event"
 	mem "github.com/rcornwell/S370/emu/memory"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
+	Td "github.com/rcornwell/S370/emu/test_dev"
 )
 
-func ioSetup(devNum uint16) *TestDev {
+func ioSetup() *Td.TestDev {
 	setup()
 	ch.InitializeChannels()
-	ch.AddChannel(0, ch.TypeMux, 192)
-	d := &TestDev{Addr: devNum, Mask: 0xff}
-	ch.AddDevice(d, devNum)
+	ch.AddChannel(0, dev.TypeMux, 192)
+	d := &Td.TestDev{Addr: 0xf, Mask: 0xff}
+	ch.AddDevice(d, 0xf)
 	_ = d.InitDev()
 	for i := range 0x10 {
 		d.Data[i] = uint8(0xf0 + i)
@@ -66,8 +68,8 @@ func setMemByte(addr uint32, data uint32) {
 func (cpu *cpu) iotestInst(mask uint8, steps int) {
 	cpu.PC = 0x400
 	cpu.progMask = mask & 0xf
-	cpu.sysMask = 0xff00
-	cpu.irqEnb = true
+	cpu.sysMask = 0x0000
+	cpu.irqEnb = false
 	mem.SetMemory(0x68, 0)
 	mem.SetMemory(0x6c, 0x800)
 	trapFlag = false
@@ -96,7 +98,7 @@ func (cpu *cpu) iotestInst(mask uint8, steps int) {
 
 // Debug channel test.
 func TestCycleTch(t *testing.T) {
-	ioSetup(0x00f)
+	ioSetup()
 	mem.SetMemory(0x400, 0x9f00040f)
 	mem.SetMemory(0x404, 0)
 	cpuState.iotestInst(0, 20)
@@ -112,7 +114,7 @@ func TestCycleTch(t *testing.T) {
 }
 
 func TestTestIO(t *testing.T) {
-	_ = ioSetup(0x00f)
+	_ = ioSetup()
 	mem.SetMemory(0x400, 0x9d00000f)
 	mem.SetMemory(0x404, 0)
 	cpuState.iotestInst(0, 20)
@@ -130,7 +132,7 @@ func TestTestIO(t *testing.T) {
 func TestCycleSIO(t *testing.T) {
 	var v uint32
 
-	td := ioSetup(0xf)
+	td := ioSetup()
 	mem.SetMemory(0x40, 0)
 	mem.SetMemory(0x44, 0)
 	mem.SetMemory(0x78, 0)
@@ -233,7 +235,7 @@ func TestCycleSIO(t *testing.T) {
 func TestCycleSense(t *testing.T) {
 	var v uint32
 
-	_ = ioSetup(0xf)
+	_ = ioSetup()
 	mem.SetMemory(0x40, 0)
 	mem.SetMemory(0x44, 0)
 	mem.SetMemory(0x78, 0)
@@ -270,7 +272,7 @@ func TestCycleSense(t *testing.T) {
 func TestCycleNop(t *testing.T) {
 	var v uint32
 
-	_ = ioSetup(0xf)
+	_ = ioSetup()
 	mem.SetMemory(0x40, 0xffffffff)
 	mem.SetMemory(0x44, 0xffffffff)
 	mem.SetMemory(0x78, 0)
@@ -343,7 +345,7 @@ func TestCycleNop(t *testing.T) {
 func TestCycleCEOnly(t *testing.T) {
 	var v uint32
 
-	_ = ioSetup(0xf)
+	_ = ioSetup()
 	mem.SetMemory(0x40, 0xffffffff)
 	mem.SetMemory(0x44, 0xffffffff)
 	mem.SetMemory(0x78, 0)
@@ -396,7 +398,7 @@ func TestCycleCEOnly(t *testing.T) {
 func TestCycleCCNop(t *testing.T) {
 	var v uint32
 
-	_ = ioSetup(0xf)
+	_ = ioSetup()
 	mem.SetMemory(0x40, 0xffffffff)
 	mem.SetMemory(0x44, 0xffffffff)
 	mem.SetMemory(0x78, 0)
@@ -451,7 +453,7 @@ func TestCycleCCNop(t *testing.T) {
 func TestCycleRead(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x10 + i)
@@ -508,7 +510,7 @@ func TestCycleRead(t *testing.T) {
 func TestCycleReadShort(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x10 + i)
@@ -565,7 +567,7 @@ func TestCycleReadShort(t *testing.T) {
 func TestCycleReadShortSLI(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x10 + i)
@@ -621,7 +623,7 @@ func TestCycleReadShortSLI(t *testing.T) {
 func TestCycleWrite(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x55)
@@ -675,7 +677,7 @@ func TestCycleWrite(t *testing.T) {
 func TestCycleWriteShort(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x55)
@@ -734,7 +736,7 @@ func TestCycleWriteShort(t *testing.T) {
 func TestCycleWriteShortSLI(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x55)
@@ -792,7 +794,7 @@ func TestCycleWriteShortSLI(t *testing.T) {
 func TestCycleReadCDA(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x10 + i)
@@ -857,7 +859,7 @@ func TestCycleReadCDA(t *testing.T) {
 func TestCycleWriteCDA(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = 0x55
@@ -922,7 +924,7 @@ func TestCycleWriteCDA(t *testing.T) {
 func TestCycleReadCDASkip(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x10 + i)
@@ -983,7 +985,7 @@ func TestCycleReadCDASkip(t *testing.T) {
 func TestCycleReadBkwd(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x10 {
@@ -1037,7 +1039,7 @@ func TestCycleReadBkwd(t *testing.T) {
 func TestCycleCChain(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -1099,7 +1101,7 @@ func TestCycleCChain(t *testing.T) {
 func TestCycleCChainSLI(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -1162,7 +1164,7 @@ func TestCycleCChainSLI(t *testing.T) {
 func TestCycleCChainNop(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -1205,7 +1207,7 @@ func TestCycleCChainNop(t *testing.T) {
 func TestStartIOTic(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -1271,7 +1273,7 @@ func TestStartIOTic(t *testing.T) {
 func TestCycleTicTic(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -1337,7 +1339,7 @@ func TestCycleTicTic(t *testing.T) {
 func TestCycleTicError(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -1386,7 +1388,7 @@ func TestCycleTicError(t *testing.T) {
 func TestCycleSMSTic(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x20 {
@@ -1458,7 +1460,7 @@ func TestCycleSMSTic(t *testing.T) {
 func TestCyclePCI(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x40 {
@@ -1535,7 +1537,7 @@ func TestCyclePCI(t *testing.T) {
 }
 
 func TestCycleHaltIO1(t *testing.T) {
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x40 {
@@ -1564,7 +1566,7 @@ func TestCycleHaltIO1(t *testing.T) {
 func TestCycleHaltIO2(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x80 {
@@ -1612,7 +1614,7 @@ func TestCycleHaltIO2(t *testing.T) {
 	}
 
 	v = mem.GetMemory(0x40)
-	if v != 0x00000508 {
+	if v != 0x00000510 {
 		t.Errorf("Start I/O Haltio2 CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
 	v = mem.GetMemory(0x44) & 0xffbf0000
@@ -1628,7 +1630,7 @@ func TestCycleHaltIO2(t *testing.T) {
 func TestCycleTIOBusy(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x80 {
@@ -1687,7 +1689,7 @@ func TestCycleTIOBusy(t *testing.T) {
 func TestCycleReadProt(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x10 {
@@ -1742,7 +1744,7 @@ func TestCycleReadProt(t *testing.T) {
 func TestCycleWriteProt(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x10 {
@@ -1798,7 +1800,7 @@ func TestCycleWriteProt(t *testing.T) {
 func TestCycleReadProt2(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x10 {
@@ -1853,7 +1855,7 @@ func TestCycleReadProt2(t *testing.T) {
 func TestCycleWriteProt2(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 
 	// Load Data
 	for i := range 0x10 {
@@ -1909,7 +1911,7 @@ func TestCycleWriteProt2(t *testing.T) {
 func TestCycleBusy(t *testing.T) {
 	var v uint32
 
-	d := ioSetup(0xf)
+	d := ioSetup()
 	d.Max = 0x10
 
 	mem.SetMemory(0x40, 0xffffffff)

@@ -32,6 +32,7 @@
 package model2540p
 
 import (
+	dev "github.com/rcornwell/S370/emu/device"
 	ev "github.com/rcornwell/S370/emu/event"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
 	card "github.com/rcornwell/S370/util/card"
@@ -62,7 +63,7 @@ func (d *Model2540Pctx) StartCmd(cmd uint8) uint8 {
 
 	// If busy return busy status right away
 	if d.busy {
-		return ch.CStatusBusy
+		return dev.CStatusBusy
 	}
 
 	// Decode command
@@ -70,44 +71,44 @@ func (d *Model2540Pctx) StartCmd(cmd uint8) uint8 {
 	case 0:
 		return 0
 	// Punch a card.
-	case ch.CmdWrite:
+	case dev.CmdWrite:
 		d.halt = false
 		d.col = 0
 		d.sense = 0
 		d.rdy = false
 		if !d.ctx.Attached() {
-			d.sense = ch.SenseINTVENT
-			r = ch.CStatusChnEnd | ch.CStatusDevEnd
+			d.sense = dev.SenseINTVENT
+			r = dev.CStatusChnEnd | dev.CStatusDevEnd
 		} else {
 			d.busy = true
 			ev.AddEvent(d, d.callback, 100, int(cmd))
 		}
 
 	// Queue up sense command
-	case ch.CmdSense:
-		if cmd != ch.CmdSense {
-			d.sense |= ch.SenseCMDREJ
+	case dev.CmdSense:
+		if cmd != dev.CmdSense {
+			d.sense |= dev.SenseCMDREJ
 		} else {
 			d.busy = true
 			ev.AddEvent(d, d.callback, 10, int(cmd))
 			r = 0
 		}
-	case ch.CmdCTL:
+	case dev.CmdCTL:
 		d.sense = 0
-		r = ch.CStatusChnEnd | ch.CStatusDevEnd
-		if cmd != ch.CmdCTL {
-			d.sense |= ch.SenseCMDREJ
+		r = dev.CStatusChnEnd | dev.CStatusDevEnd
+		if cmd != dev.CmdCTL {
+			d.sense |= dev.SenseCMDREJ
 		}
 		if !d.ctx.Attached() {
-			d.sense = ch.SenseINTVENT
+			d.sense = dev.SenseINTVENT
 		}
 
 	default:
-		d.sense = ch.SenseCMDREJ
+		d.sense = dev.SenseCMDREJ
 	}
 
 	if d.sense != 0 {
-		r = ch.CStatusChnEnd | ch.CStatusDevEnd | ch.CStatusCheck
+		r = dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck
 	}
 	d.halt = false
 	return r
@@ -132,11 +133,11 @@ func (d *Model2540Pctx) InitDev() uint8 {
 
 // Process card punch operations.
 func (d *Model2540Pctx) callback(cmd int) {
-	if cmd == int(ch.CmdSense) {
+	if cmd == int(dev.CmdSense) {
 		d.busy = false
 		d.halt = false
 		_ = ch.ChanWriteByte(d.addr, d.sense)
-		ch.ChanEnd(d.addr, (ch.CStatusChnEnd | ch.CStatusDevEnd))
+		ch.ChanEnd(d.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd))
 		return
 	}
 
@@ -144,9 +145,9 @@ func (d *Model2540Pctx) callback(cmd int) {
 	if d.rdy {
 		switch d.ctx.PunchCard(d.image) {
 		case card.CardOK:
-			ch.SetDevAttn(d.addr, ch.CStatusDevEnd)
+			ch.SetDevAttn(d.addr, dev.CStatusDevEnd)
 		default:
-			ch.SetDevAttn(d.addr, ch.CStatusDevEnd|ch.CStatusCheck)
+			ch.SetDevAttn(d.addr, dev.CStatusDevEnd|dev.CStatusCheck)
 		}
 		d.col = 0
 		d.rdy = false
@@ -171,7 +172,7 @@ func (d *Model2540Pctx) callback(cmd int) {
 		}
 	}
 	if d.rdy {
-		ch.ChanEnd(d.addr, ch.CStatusChnEnd)
+		ch.ChanEnd(d.addr, dev.CStatusChnEnd)
 		ev.AddEvent(d, d.callback, 1000, cmd)
 		d.rdy = true
 	} else {

@@ -26,6 +26,7 @@ package cpu
 import (
 	"time"
 
+	Dv "github.com/rcornwell/S370/emu/device"
 	mem "github.com/rcornwell/S370/emu/memory"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
 )
@@ -157,9 +158,9 @@ func CycleCPU() int {
 
 	// Check if we should see if an IRQ is pending
 	irq := ch.ChanScan(cpuState.sysMask, cpuState.irqEnb)
-	if irq != ch.NoDev {
+	if irq != Dv.NoDev {
 		cpuState.ilc = 0
-		if ch.Loading == ch.NoDev {
+		if ch.Loading == Dv.NoDev {
 			cpuState.suppress(oIOPSW, irq)
 		}
 		return memCycle
@@ -194,7 +195,7 @@ func CycleCPU() int {
 	}
 
 	/* If we have wait flag or loading, nothing more to do */
-	if ch.Loading != ch.NoDev || (cpuState.flags&wait) != 0 {
+	if ch.Loading != Dv.NoDev || (cpuState.flags&wait) != 0 {
 		/* CPU IDLE */
 		if !cpuState.irqEnb && !cpuState.extEnb {
 			return memCycle

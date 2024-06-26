@@ -242,7 +242,7 @@ func (ctx *CardContext) ReadCard() (Card, int) {
 	if (c.Image[0] & flagERR) != 0 {
 		return emptyCard, CardError
 	}
-	c.Image[0] &= 07777
+	c.Image[0] &= 0o7777
 	return c, CardOK
 }
 
@@ -399,7 +399,7 @@ func (ctx *CardContext) PunchCard(img Card) int {
 				out[i] = 0o77
 			}
 		}
-		out[0] |= 0200
+		out[0] |= 0o200
 	case ModeEBCDIC:
 		out = out[0:80]
 		for i := range 80 {
@@ -505,12 +505,12 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 			var odd, even int
 			// Check all chars for correct parity
 			for i = 0; i < buf.len && i < 160; i++ {
-				ch = buf.buffer[i] & 0177
+				ch = buf.buffer[i] & 0o177
 				// Try matching parity
-				if xlat.ParityTable[ch&077] == (ch & 0100) {
+				if xlat.ParityTable[ch&0o77] == (ch & 0o100) {
 					even++
 				}
-				if xlat.ParityTable[ch&077] != (ch & 0100) {
+				if xlat.ParityTable[ch&0o77] != (ch & 0o100) {
 					odd++
 				}
 				// Check if we hit end of record.
@@ -560,16 +560,18 @@ func (ctx *CardContext) parseCard(buf *cardBuffer) {
 			}
 			if cmpCard(buf, "RAW") {
 				var j int
+				eol := false
 				col = 0
-				for i := 4; col < 80 && i < buf.len; i++ {
+				for i := 4; col < 80 && i < buf.len && !eol; i++ {
 					ch = buf.buffer[i]
-					if ch >= '0' && ch <= '7' {
+					switch ch {
+					case '0', '1', '2', '3', '4', '5', '6', '7':
 						c.Image[col] = (c.Image[col] << 3) | (uint16(ch - '0'))
 						j++
 						p++
-					} else if ch == '\n' || ch == '\r' {
-						break
-					} else {
+					case '\n', '\r':
+						eol = true
+					default:
 						c.Image[0] = flagERR
 					}
 					if j == 4 {
