@@ -25,22 +25,18 @@ package cpu
 
 // Load decimal number into temp storage
 // return error or zero.
-func (cpu *cpu) decLoad(data *[32]uint8, addr uint32, length uint8, sign *bool) uint16 {
+func (cpu *cpu) decLoad(data *[32]uint8, addr uint32, length int, sign *bool) uint16 {
 	var err uint16
+	var errm uint16
 	var t uint32
 
 	a := addr + uint32(length)
-	// Clear result
-	for i := range length {
-		data[i] = 0
-	}
-
 	j := 0
 	// Read into data backwards
-	for range length {
-		t, err = cpu.readByte(a)
-		if err != 0 {
-			return err
+	for i := 0; i <= length; i++ {
+		t, errm = cpu.readByte(a)
+		if errm != 0 {
+			return errm
 		}
 		t2 := uint8(t & 0xf)
 		if j != 0 && t2 > 0x9 {
@@ -62,19 +58,19 @@ func (cpu *cpu) decLoad(data *[32]uint8, addr uint32, length uint8, sign *bool) 
 		*sign = true
 	} else {
 		*sign = false
-	}
-	if data[0] < 0xa {
-		err = ircData
+		if data[0] < 0xa {
+			return ircData
+		}
 	}
 	return err
 }
 
 // Store decimal number into memory
 // return error code.
-func (cpu *cpu) decStore(data [32]uint8, addr uint32, length uint8) uint16 {
+func (cpu *cpu) decStore(data [32]uint8, addr uint32, length int) uint16 {
 	a := addr + uint32(length)
 	j := 0
-	for range length {
+	for i := 0; i <= length; i++ {
 		t := data[j] & 0xf
 		j++
 		t |= (data[j] & 0xf) << 4
@@ -88,7 +84,7 @@ func (cpu *cpu) decStore(data [32]uint8, addr uint32, length uint8) uint16 {
 }
 
 // Add or subtract a pair of BCD numbers.
-func decAdd(l uint8, addsub bool, v1 *[32]uint8, v2 *[32]uint8) (uint8, bool) {
+func decAdd(l int, addsub bool, v1 *[32]uint8, v2 *[32]uint8) (uint8, bool) {
 	var cy uint8
 	var z bool
 	if addsub {
@@ -97,8 +93,8 @@ func decAdd(l uint8, addsub bool, v1 *[32]uint8, v2 *[32]uint8) (uint8, bool) {
 		cy = 0
 	}
 	z = true
-	for i := 1; i <= int(l); i++ {
-		d := v1[1]
+	for i := 1; i <= l; i++ {
+		d := v1[i]
 		if addsub {
 			d = 0x9 - d
 		}
@@ -116,11 +112,11 @@ func decAdd(l uint8, addsub bool, v1 *[32]uint8, v2 *[32]uint8) (uint8, bool) {
 }
 
 // Recomplement a number for decimal add.
-func decRecomp(l uint8, v1 *[32]uint8) bool {
+func decRecomp(l int, v1 *[32]uint8) bool {
 	// We need to recomplent the result
 	cy := uint8(1)
 	z := true
-	for i := 1; i <= int(l); i++ {
+	for i := 1; i <= l; i++ {
 		acc := (0x9 - v1[i]) + cy
 		if acc > 0x9 {
 			acc += 0x6
@@ -144,26 +140,27 @@ func (cpu *cpu) opDecAdd(step *stepInfo) uint16 {
 	var v1 [32]uint8
 	var v2 [32]uint8
 	var s1, s2 bool
-	var addsub bool
-	var cy uint8
-	var z bool
+	// var addsub bool
+	//	var cy uint8
+	//	var z bool
 	var ov bool
 
-	ov = false
 	a1 := step.address1
 	a2 := step.address2
-	l1 := step.R1
-	l2 := step.R2
+	l1 := int(step.R1)
+	l2 := int(step.R2)
 
 	l := l1
 	if l2 > l1 {
 		l = l2
 	}
 	// Always load second operand
-	if err = cpu.decLoad(&v2, a2, l2, &s2); err != 0 {
+	err = cpu.decLoad(&v2, a2, l2, &s2)
+	if err != 0 {
 		return err
 	}
 
+	// Subtract, change the sign
 	if (step.opcode & 1) != 0 {
 		s2 = !s2
 	}
@@ -172,22 +169,21 @@ func (cpu *cpu) opDecAdd(step *stepInfo) uint16 {
 	l = 2*(l+1) - 1
 	// On all but ZAP load first operand
 	if (step.opcode & 3) != 0 {
-		if err = cpu.decLoad(&v1, a1, l1, &s1); err != 0 {
+		err = cpu.decLoad(&v1, a1, l1, &s1)
+		if err != 0 {
 			return err
 		}
-		for i := range 32 {
-			v1[i] = 0
-		}
+	} else {
+		// For ZAP clear everything
+		// for i := range 32 {
+		// 	v1[i] = 0
+		// }
 		s1 = false
 	}
 
-	if s1 != s2 {
-		addsub = true
-	} else {
-		addsub = false
-	}
+	addsub := s1 != s2
 
-	cy, z = decAdd(l, addsub, &v1, &v2)
+	cy, z := decAdd(l, addsub, &v1, &v2)
 	if cy != 0 {
 		if addsub {
 			s1 = !s1
@@ -214,29 +210,37 @@ func (cpu *cpu) opDecAdd(step *stepInfo) uint16 {
 		}
 	}
 
-	if (step.opcode & 3) != 1 {
-		if !z && !ov {
-			// Start at l1 and go to l2 and see if any non-zero digits
-			for i := (l1 + 1) * 2; i <= l; i++ {
-				if v1[i] != 0 {
-					ov = true
-					break
-				}
+	// Do not store results for compare
+	if step.opcode == OpCP {
+		return err
+	}
+
+	// Not compare set status.
+	if !z && !ov {
+		// Start at l1 and go to l2 and see if any non-zero digits
+		for i := (l1 + 1) * 2; i <= l; i++ {
+			if v1[i] != 0 {
+				ov = true
+				break
 			}
 		}
-		if s1 {
-			v1[0] = 0xd
-		} else {
-			v1[0] = 0xc
-		}
-		if err = cpu.decStore(v1, a1, l1); err != 0 {
-			return err
-		}
-		if ov {
-			cpu.cc = 3
-			if (cpu.progMask & DECOVER) != 0 {
-				err = ircDecOver
-			}
+	}
+	// Set sign
+	if s1 {
+		v1[0] = 0xd
+	} else {
+		v1[0] = 0xc
+	}
+	// Store result
+	err = cpu.decStore(v1, a1, l1)
+	if err != 0 {
+		return err
+	}
+	// If overflow, set CC 3, if want overflows trigger trap
+	if ov {
+		cpu.cc = 3
+		if (cpu.progMask & DECOVER) != 0 {
+			err = ircDecOver
 		}
 	}
 	return err
@@ -253,11 +257,12 @@ func (cpu *cpu) opSRP(step *stepInfo) uint16 {
 	ov := false
 	z := true
 	a1 := step.address1
-	l1 := step.R1
+	l1 := int(step.R1)
 	shift := int(step.address2 & 0x3f)
 
 	// Load operand
-	if err = cpu.decLoad(&v1, a1, l1, &s1); err != 0 {
+	err = cpu.decLoad(&v1, a1, l1, &s1)
+	if err != 0 {
 		return err
 	}
 
@@ -267,9 +272,9 @@ func (cpu *cpu) opSRP(step *stepInfo) uint16 {
 			cy = 1
 		}
 		j = shift + 1
-		for i = 1; i < int(l1); i++ {
+		for i = 1; i < l1; i++ {
 			var acc uint8
-			if j > int(l1) {
+			if j > l1 {
 				acc = cy
 			} else {
 				acc = v1[j] + cy
@@ -286,13 +291,13 @@ func (cpu *cpu) opSRP(step *stepInfo) uint16 {
 		}
 	} else if shift != 0 { // Shift to left
 		// Check if we would move out of any non-zero digits
-		for j = int(l1); j > shift; j-- {
+		for j = l1; j > shift; j-- {
 			if v1[j] != 0 {
 				ov = true
 			}
 		}
 		// Now shift digits
-		for i = int(l1); j > 0; i-- {
+		for i = l1; j > 0; i-- {
 			v1[i] = v1[j]
 			if v1[i] != 0 {
 				z = false
@@ -306,7 +311,7 @@ func (cpu *cpu) opSRP(step *stepInfo) uint16 {
 		}
 	} else {
 		// Check if number is zero
-		for i = 1; i < int(l1); i++ {
+		for i = 1; i < l1; i++ {
 			if v1[i] != 0 {
 				z = false
 				break
@@ -330,7 +335,8 @@ func (cpu *cpu) opSRP(step *stepInfo) uint16 {
 	} else {
 		v1[0] = 0xc
 	}
-	if err = cpu.decStore(v1, a1, l1); err != 0 {
+	err = cpu.decStore(v1, a1, l1)
+	if err != 0 {
 		return err
 	}
 	if ov {
@@ -366,22 +372,26 @@ func (cpu *cpu) opMP(step *stepInfo) uint16 {
 	var v2 [32]uint8
 	var s1, s2 bool
 
-	if step.R2 == step.R1 {
+	l1 := int(step.R1)
+	l2 := int(step.R2)
+
+	err = cpu.decLoad(&v2, step.address2, l2, &s2)
+	if err != 0 {
+		return err
+	}
+	err = cpu.decLoad(&v1, step.address1, l1, &s1)
+	if err != 0 {
+		return err
+	}
+
+	if l2 == l1 {
 		return ircSpec
 	}
 
-	if step.R2 > 7 || step.R2 >= step.R1 {
+	if l2 > 7 || l2 >= l1 {
 		return ircData
 	}
-	if err = cpu.decLoad(&v2, step.address2, step.R2, &s2); err != 0 {
-		return err
-	}
-	if err = cpu.decLoad(&v1, step.address1, step.R1, &s1); err != 0 {
-		return err
-	}
 
-	l1 := int(step.R1)
-	l2 := int(step.R2)
 	l1 = (l1 + 1) * 2
 	l2 = (l2 + 1) * 2
 
@@ -412,7 +422,7 @@ func (cpu *cpu) opMP(step *stepInfo) uint16 {
 	} else {
 		v1[0] = 0xc
 	}
-	return cpu.decStore(v1, step.address1, uint8(l1))
+	return cpu.decStore(v1, step.address1, int(step.R1))
 }
 
 // BCD Packed Divide instruction.
@@ -420,44 +430,48 @@ func (cpu *cpu) opDP(step *stepInfo) uint16 {
 	var err uint16
 	var v1 [32]uint8
 	var v2 [32]uint8
-	var r [32]uint8
+	var r [32]uint8 // Restore holder
 	var s1, s2 bool
 	var cy uint8
 
-	if step.R2 > 7 || step.R2 >= step.R1 {
-		return ircData
+	l1 := int(step.R1)
+	l2 := int(step.R2)
+	if l2 > 7 || l2 >= l1 {
+		return ircSpec
 	}
-	if err = cpu.decLoad(&v2, step.address2, step.R2, &s2); err != 0 {
+
+	err = cpu.decLoad(&v2, step.address2, l2, &s2)
+	if err != 0 {
 		return err
 	}
-	if err = cpu.decLoad(&v1, step.address1, step.R1, &s1); err != 0 {
+
+	err = cpu.decLoad(&v1, step.address1, l1, &s1)
+	if err != 0 {
 		return err
 	}
 
 	// Clear result
-	for i := range 32 {
-		r[i] = 0
-	}
+	// for i := range 32 {
+	// 	r[i] = 0
+	// }
 
-	l1 := int(step.R1)
-	l2 := int(step.R2)
 	l1 = (l1 + 1) * 2
 	l2 = (l2 + 1) * 2
 
 	// Compute sign
-	if s2 {
-		s1 = !s1
+	if s1 {
+		s2 = !s2
 	}
 
 	for j := l1 - l2; j > 0; j-- {
 		var k int
 		q := uint8(0)
-		cy = 1
-		for cy != 0 {
+		for {
 			// Subtract divisor
 			cy = 1
 			i := j
-			for k = 1; k < l2; k++ {
+			k = 1
+			for k < l2 {
 				r[i] = v1[i] // Save if we divide too far
 				acc := v1[i] + (0x9 - v2[k]) + cy
 				if acc > 0x9 {
@@ -465,6 +479,7 @@ func (cpu *cpu) opDP(step *stepInfo) uint16 {
 				}
 				v1[i] = acc & 0xf
 				cy = (acc >> 4) & 0xf
+				k++
 				i++
 			}
 			// Plus one more digit
@@ -479,12 +494,15 @@ func (cpu *cpu) opDP(step *stepInfo) uint16 {
 			// If no borrow, so we are done with this digit
 			if cy == 0 {
 				// It is a no-no to have non-zero digit above size
-				if q > 0 && (i+1) > l1 {
+				if q > 0 && (i+1) >= l1 {
 					return ircDecDiv
 				}
-				v1[i+1] = q // Save quotient digit
+				if i < 31 {
+					v1[i+1] = q // Save quotient digit
+				}
 				for i := j; k > 1; i++ {
 					v1[i] = r[i] // Restore previous
+					k--
 				}
 			} else {
 				q++
@@ -492,19 +510,22 @@ func (cpu *cpu) opDP(step *stepInfo) uint16 {
 			if q > 9 {
 				return ircDecDiv
 			}
+			if cy == 0 {
+				break
+			}
 		}
 	}
-	// Set sign of quotient
+	// Set sign of quotient.
 	if s2 {
 		v1[l2] = 0xd
 	} else {
 		v1[l2] = 0xc
 	}
-
+	// Set sign of remainder.
 	if s1 {
 		v1[0] = 0xd
 	} else {
 		v1[0] = 0xc
 	}
-	return cpu.decStore(v1, step.address1, uint8(l1))
+	return cpu.decStore(v1, step.address1, int(step.R1))
 }

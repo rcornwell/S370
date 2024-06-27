@@ -27,6 +27,7 @@
 package cpu
 
 import (
+	"encoding/hex"
 	"math/rand"
 	"testing"
 
@@ -3639,7 +3640,7 @@ func TestCyclePACK(t *testing.T) {
 	}
 }
 
-// Unpack
+// Unpack.
 func TestCycleUNPK(t *testing.T) {
 	setup()
 
@@ -4886,5 +4887,595 @@ func TestCycleCLCL(t *testing.T) {
 
 	if cpuState.regs[5] != 0xf500000e {
 		t.Errorf("CLCL R5 not correct got: %x wanted: %x", cpuState.regs[5], 0xf500000e)
+	}
+}
+
+// Basic Add Packed Decimal tests.
+func TestCycleAP(t *testing.T) {
+	setup()
+
+	// Short field
+	memory.SetMemory(0x100, 0x0000002c) // 2+
+	memory.SetMemory(0x200, 0x00003c00) // 3+
+	memory.SetMemory(0x400, 0xfa000103) // AP 103(1,0),202(1,0)
+	memory.SetMemory(0x404, 0x02020000)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x100)
+	mv := uint32(0x0000005c)
+	if v != mv {
+		t.Errorf("AP Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("AP CC not correct got: %x wanted: %x", cpuState.cc, 2)
+	}
+
+	// Add one
+	memory.SetMemory(0x100, 0x2888011c) // 2888011+
+	memory.SetMemory(0x200, 0x1112292c) // 1112292+
+	memory.SetMemory(0x400, 0xfa330100) // AP 100(4,0),200(4,0)
+	memory.SetMemory(0x404, 0x02000000)
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x100)
+	mv = uint32(0x4000303c)
+	if v != mv {
+		t.Errorf("AP Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("AP CC not correct got: %x wanted: %x", cpuState.cc, 2)
+	}
+
+	// Add one
+	memory.SetMemory(0x100, 0x0000002c) // 2+
+	memory.SetMemory(0x200, 0x0000003c) // 3+
+	memory.SetMemory(0x400, 0xfa330100) // AP 100(4,0),200(4,0)
+	memory.SetMemory(0x404, 0x02000000)
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x100)
+	mv = uint32(0x0000005c)
+	if v != mv {
+		t.Errorf("AP Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("AP CC not correct got: %x wanted: %x", cpuState.cc, 2)
+	}
+
+	// Add packed with offset
+	memory.SetMemory(0x100, 0x0043212c) // 2+
+	memory.SetMemory(0x200, 0x0023413c) // 3+
+	memory.SetMemory(0x400, 0xfa220101) // AP 101(3,0),201(3,0)
+	memory.SetMemory(0x404, 0x02010000)
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x100)
+	mv = uint32(0x0066625c)
+	if v != mv {
+		t.Errorf("AP Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("AP CC not correct got: %x wanted: %x", cpuState.cc, 2)
+	}
+
+	// Add packed no offset
+	memory.SetMemory(0x100, 0x0043212c) // 2+
+	memory.SetMemory(0x200, 0x0023413c) // 3+
+	memory.SetMemory(0x400, 0xfa330100) // AP 100(4,0),200(4,0)
+	memory.SetMemory(0x404, 0x02000000)
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x100)
+	mv = uint32(0x0066625c)
+	if v != mv {
+		t.Errorf("AP Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("AP CC not correct got: %x wanted: %x", cpuState.cc, 2)
+	}
+
+	// Add packed offset
+	// Example from Princ Ops p136.2
+	cpuState.regs[12] = 0x00002000
+	cpuState.regs[13] = 0x000004fd
+	memory.SetMemory(0x2000, 0x38460d00) // 38460-
+	memory.SetMemory(0x500, 0x0112345c)  // 112345+
+	memory.SetMemory(0x400, 0xfa23c000)  // AP 0(3,12),3(4,13)
+	memory.SetMemory(0x404, 0xd0030000)
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x2000)
+	mv = uint32(0x73885c00)
+	if v != mv {
+		t.Errorf("AP Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("AP CC not correct got: %x wanted: %x", cpuState.cc, 2)
+	}
+
+	// Add packed
+	// Example from Princ Ops p136.2
+	cpuState.regs[12] = 0x00002000
+	cpuState.regs[13] = 0x000004fd
+	memory.SetMemory(0x2000, 0x0038460d)
+	memory.SetMemory(0x500, 0x0112345c)
+	memory.SetMemory(0x400, 0xfa33c000)
+	memory.SetMemory(0x404, 0xd0030000) // AP 0(4, 12), 3(4, 13)
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x2000)
+	mv = uint32(0x0073885c)
+	if v != mv {
+		t.Errorf("AP Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("AP CC not correct got: %x wanted: %x", cpuState.cc, 2)
+	}
+}
+
+// Basic Zero Add Packed Decimal tests.
+func TestCycleZAP(t *testing.T) {
+	setup()
+
+	cpuState.regs[9] = 0x00004000
+	memory.SetMemory(0x4000, 0x12345678)
+	memory.SetMemory(0x4004, 0x90aaaaaa)
+	memory.SetMemory(0x4500, 0x38460dff)
+	memory.SetMemory(0x400, 0xf8429000)
+	memory.SetMemory(0x404, 0x95000000) // ZAP 0(5, 9), 500(3, 9)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x4000)
+	mv := uint32(0x00003846)
+	if v != mv {
+		t.Errorf("ZAP Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x4004)
+	mv = uint32(0x0daaaaaa)
+	if v != mv {
+		t.Errorf("ZAP Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("ZAP CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+
+	// Zap short field
+	memory.SetMemory(0x100, 0x2a000000) // 2+
+	memory.SetMemory(0x200, 0x3a000000) // 3+
+	memory.SetMemory(0x400, 0xf8000100)
+	memory.SetMemory(0x404, 0x02000000) // ZAP 100(1, 0), 200(1, 0)
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x100)
+	mv = uint32(0x3c000000)
+	if v != mv {
+		t.Errorf("ZAP Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("ZAP CC not correct got: %x wanted: %x", cpuState.cc, 2)
+	}
+
+	// Zap with offset
+	memory.SetMemory(0x100, 0x002a0000) // 2+
+	memory.SetMemory(0x200, 0x00003a00) // 3+
+	memory.SetMemory(0x400, 0xf8000101)
+	memory.SetMemory(0x404, 0x02020000) // ZAP 101(1, 0), 202(1, 0)
+	cpuState.testInst(0)
+	v = memory.GetMemory(0x100)
+	mv = uint32(0x003c0000)
+	if v != mv {
+		t.Errorf("ZAP Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("ZAP CC not correct got: %x wanted: %x", cpuState.cc, 2)
+	}
+}
+
+// Compare packed.
+func TestCycleCP(t *testing.T) {
+	setup()
+
+	// Princ Op page 150
+	cpuState.regs[12] = 0x00000600
+	cpuState.regs[13] = 0x00000400
+	memory.SetMemory(0x700, 0x1725356d)
+	memory.SetMemory(0x500, 0x0672142d)
+	memory.SetMemory(0x400, 0xf933c100)
+	memory.SetMemory(0x404, 0xd1000000) // CP 100(4, 12), 100(4, 13)
+	cpuState.testInst(0)
+	if cpuState.cc != 1 {
+		t.Errorf("CP CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+
+	// Compare packed  equal
+	cpuState.regs[12] = 0x00000600
+	cpuState.regs[13] = 0x00000400
+	memory.SetMemory(0x700, 0x1725356d)
+	memory.SetMemory(0x500, 0x00172535)
+	memory.SetMemory(0x504, 0x6d000000)
+	memory.SetMemory(0x400, 0xf933c100)
+	memory.SetMemory(0x404, 0xd1010000) // CP 100(4, 12), 101(4, 13)
+	cpuState.testInst(0)
+
+	if cpuState.cc != 0 {
+		t.Errorf("CP CC not correct got: %x wanted: %x", cpuState.cc, 0)
+	}
+
+	// Compare packed first higher
+	cpuState.regs[12] = 0x00000600
+	cpuState.regs[13] = 0x00000400
+	memory.SetMemory(0x700, 0x1725346d)
+	memory.SetMemory(0x500, 0x00172535)
+	memory.SetMemory(0x504, 0x6d000000)
+	memory.SetMemory(0x400, 0xf933c100)
+	memory.SetMemory(0x404, 0xd1010000) // CP 100(4, 12), 101(4, 13)
+	cpuState.testInst(0)
+	if cpuState.cc != 2 {
+		t.Errorf("CP CC not correct got: %x wanted: %x", cpuState.cc, 2)
+	}
+}
+
+// Subtract packed.
+func TestCycleSP(t *testing.T) {
+	setup()
+
+	cpuState.regs[12] = 0x00002000
+	cpuState.regs[13] = 0x000004fc
+	memory.SetMemory(0x2000, 0x0038460c)
+	memory.SetMemory(0x500, 0x0112345c)
+	memory.SetMemory(0x400, 0xfb33c000)
+	memory.SetMemory(0x404, 0xd0040000) // SP 0(4, 12), 3(4, 13)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x2000)
+	mv := uint32(0x0073885d)
+	if v != mv {
+		t.Errorf("SP Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("SP CC not correct got: %x wanted: %x", cpuState.cc, 1)
+	}
+}
+
+// Multiply packed.
+func TestCycleMP(t *testing.T) {
+	setup()
+
+	cpuState.regs[4] = 0x00001200
+	cpuState.regs[6] = 0x00000500
+	memory.SetMemory(0x1300, 0x00003846)
+	memory.SetMemory(0x1304, 0x0cffffff)
+	memory.SetMemory(0x500, 0x321dffff)
+	memory.SetMemory(0x400, 0xfc414100)
+	memory.SetMemory(0x404, 0x60000000) // MP 100(5, 4), 0(2, 6)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x1300)
+	mv := uint32(0x01234566)
+	if v != mv {
+		t.Errorf("MP Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x1304)
+	mv = uint32(0x0dffffff)
+	if v != mv {
+		t.Errorf("MP Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Divide packed.
+func TestCycleDP(t *testing.T) {
+	setup()
+
+	cpuState.regs[12] = 0x00002000
+	cpuState.regs[13] = 0x00003000
+	memory.SetMemory(0x2000, 0x01234567)
+	memory.SetMemory(0x2004, 0x8cffffff)
+	memory.SetMemory(0x3000, 0x321dffff)
+	memory.SetMemory(0x400, 0xfd41c000)
+	memory.SetMemory(0x404, 0xd0000000) // DP 0(5, 12), 0(2, 13)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x2000)
+	mv := uint32(0x38460d01)
+	if v != mv {
+		t.Errorf("DP Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x2004)
+	mv = uint32(0x8cffffff)
+	if v != mv {
+		t.Errorf("DP Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Do a bunch of canned tests with Packed Decimal instructions.
+var hexDigits = "0123456789abcdef"
+
+type decCase struct {
+	op  uint8
+	i1  string
+	i2  string
+	out string
+	cc  uint8
+	ex  uint8
+}
+
+var cases = []decCase{
+	{OpAP, "2c", "3c", "5c", 2, 0},
+	{OpSP, "1c", "7c", "6d", 1, 0},
+	{OpAP, "1c", "7c", "8c", 2, 0},
+	{OpSP, "9c", "5c", "4c", 2, 0},
+	{OpAP, "9c", "5c", "4c", 3, 10},
+	{OpSP, "009c", "5d", "014c", 2, 0},
+	{OpSP, "1d", "1d", "0c", 0, 0},
+	{OpAP, "12345c", "54321c", "66666c", 2, 0},
+	{OpSP, "12345c", "54321c", "41976d", 1, 0},
+	{OpSP, "54321c", "12345c", "41976c", 2, 0},
+	{OpSP, "54321c", "01234d", "55555c", 2, 0},
+	{OpSP, "12345c", "54321d", "66666c", 2, 0},
+	{OpAP, "12345d", "54321d", "66666d", 1, 0},
+	{OpAP, "012c", "052c", "064c", 2, 0},
+	{OpAP, "072c", "012c", "084c", 2, 0},
+	{OpAP, "095c", "023c", "118c", 2, 0},
+	{OpSP, "095c", "023d", "118c", 2, 0},
+	{OpSP, "012c", "532c", "520d", 1, 0},
+	{OpAP, "171c", "053c", "224c", 2, 0},
+	{OpSP, "171d", "053c", "224d", 1, 0},
+	{OpAP, "053d", "171d", "224d", 1, 0},
+	{OpAP, "1c", "2c", "3c", 2, 0},
+	{OpAP, "072c", "025d", "047c", 2, 0},
+	{OpAP, "072d", "080c", "008c", 2, 0},
+	{OpSP, "77532c", "12345c", "65187c", 2, 0},
+	{OpAP, "9c", "018d", "9d", 1, 0},
+	{OpSP, "6c", "014c", "8d", 1, 0},
+	{OpSP, "8d", "019d", "1c", 3, 10},
+	{OpAP, "7d", "016c", "9c", 2, 0},
+	{OpMP, "0000125c", "752c", "0094000c", 2, 0},
+	{OpMP, "012345", "654321", "012345", 0, 7},
+	{OpMP, "5c", "5c", "5c", 0, 6},
+	{OpMP, "005c", "5c", "025c", 0, 0},
+	{OpMP, "005c", "005c", "025c", 0, 6},
+	{OpMP, "005c", "012c", "005c", 0, 6},
+	{OpMP, "006c", "013c", "006c", 0, 6},
+	{OpMP, "00004c", "017c", "00068c", 0, 0},
+	{OpMP, "005c", "215c", "005c", 0, 6},
+	{OpMP, "00006c", "135c", "00810c", 0, 0},
+	{OpMP, "00004c", "023c", "00092c", 0, 0},
+	{OpMP, "007c", "9c", "063c", 0, 0},
+	{OpMP, "009d", "8c", "072d", 0, 0},
+	{OpMP, "018c", "2c", "036c", 0, 7},
+	{OpMP, "008d", "3d", "024c", 0, 0},
+	{OpMP, "001d", "0c", "000d", 0, 0},
+	{OpMP, "000c", "052d", "000c", 0, 6},
+	{OpMP, "00000014142c", "14142c", "00199996164c", 0, 0},
+	{OpMP, "00000017320c", "17320c", "00299982400c", 0, 0},
+	{OpMP, "0000000223607d", "0223607c", "0000000223607d", 0, 7},
+	{OpMP, "002236067977499c", "3d", "006708203932497d", 0, 0},
+	{OpMP, "001414213562373d", "2d", "002828427124746c", 0, 0},
+	{OpMP, "022360679774997c", "3d", "022360679774997c", 0, 7},
+	{OpMP, "014142135623730d", "2d", "014142135623730d", 0, 7},
+	{OpMP, "002236067977499c", "029d", "002236067977499c", 0, 7},
+	{OpMP, "001414213562373d", "021d", "001414213562373d", 0, 7},
+	{OpMP, "000223606797749c", "029d", "000223606797749c", 0, 7},
+	{OpMP, "000141421356237d", "021d", "000141421356237d", 0, 7},
+	{OpMP, "022360697774997c", "9d", "022360697774997c", 0, 7},
+	{OpMP, "074142315623730d", "8d", "074142315623730d", 0, 7},
+	{OpMP, "000000000000005c", "0123456c", "000000000617280c", 0, 0},
+	{OpMP, "000000000000005c", "1234567c", "000000006172835c", 0, 0},
+	{OpMP, "000000000000003c", "012345678c", "000000037037034c", 0, 0},
+	{OpMP, "000000000000015c", "0123456c", "000000001851840c", 0, 0},
+	{OpMP, "000000000000025c", "1234567c", "000000030864175c", 0, 0},
+	{OpMP, "000000000000093c", "012345678c", "000001148148054c", 0, 0},
+	{OpMP, "000000001234567c", "1234567c", "001524155677489c", 0, 0},
+	{OpMP, "000000001234567c", "012345678c", "000000001234567c", 0, 7},
+	{OpMP, "000000001234567c", "123456789c", "000000001234567c", 0, 7},
+	{OpMP, "0001234c", "025c", "0001234c", 0, 7},
+	{OpMP, "0001243d", "017c", "0001243d", 0, 7},
+	{OpMP, "0005432c", "071d", "0005432c", 0, 7},
+	{OpMP, "0000123d", "176d", "0021648c", 0, 0},
+	{OpMP, "0000512c", "01068c", "0000512c", 0, 7},
+	{OpMP, "002c", "2c", "004c", 0, 0},
+	{OpMP, "004c", "4c", "016c", 0, 0},
+	{OpMP, "008c", "8c", "064c", 0, 0},
+	{OpMP, "00016c", "016c", "00016c", 0, 7},
+	{OpMP, "0000032c", "032c", "0001024c", 0, 0},
+	{OpMP, "0000064c", "064c", "0004096c", 0, 0},
+	{OpMP, "0000128c", "128c", "0016384c", 0, 0},
+	{OpMP, "0000256c", "256c", "0065536c", 0, 0},
+	{OpMP, "0000512c", "512c", "0262144c", 0, 0},
+	{OpMP, "00000001024c", "01024c", "00001048576c", 0, 0},
+	{OpMP, "00000002048c", "02048c", "00004194304c", 0, 0},
+	{OpMP, "00000004096c", "04096c", "00016777216c", 0, 0},
+	{OpMP, "00000008192c", "08192c", "00067108864c", 0, 0},
+	{OpMP, "00000016384c", "16384c", "00268435456c", 0, 0},
+	{OpMP, "00000032768c", "32768c", "01073741824c", 0, 0},
+	{OpMP, "00000065536c", "65536c", "04294967296c", 0, 0},
+	{OpMP, "000000000131072c", "0131072c", "000017179869184c", 0, 0},
+	{OpMP, "000000000524288c", "0524288c", "000274877906944c", 0, 0},
+	{OpMP, "000000002097152c", "0131072c", "000274877906944c", 0, 0},
+	{OpMP, "000000002097152c", "65536c", "000137438953472c", 0, 0},
+	{OpMP, "000000002097152c", "2097152c", "004398046511104c", 0, 0},
+	{OpMP, "000002147483646c", "512c", "001099511626752c", 0, 0},
+	{OpMP, "000002147483646c", "08192c", "000002147483646c", 0, 7},
+	{OpMP, "000002147483646c", "16384c", "000002147483646c", 0, 7},
+	{OpMP, "000002147483646c", "65536c", "000002147483646c", 0, 7},
+	{OpMP, "004398046511104c", "8c", "035184372088832c", 0, 0},
+	{OpMP, "004398046511104c", "064c", "004398046511104c", 0, 7},
+	{OpMP, "000549755813888c", "08192c", "000549755813888c", 0, 7},
+	{OpMP, "000549755813888c", "512c", "000549755813888c", 0, 7},
+	{OpMP, "000549755813888c", "064c", "000549755813888c", 0, 7},
+	{OpMP, "000549755813888c", "8c", "004398046511104c", 0, 0},
+	{OpMP, "000068719476736c", "16384c", "000068719476736c", 0, 7},
+	{OpMP, "000068719476736c", "04096c", "000068719476736c", 0, 7},
+	{OpMP, "000068719476736c", "512c", "035184372088832c", 0, 0},
+	{OpMP, "7c", "7d", "7c", 0, 6},
+	{OpMP, "025c", "3d", "025c", 0, 7},
+	{OpMP, "7d", "8d", "7d", 0, 6},
+	{OpDP, "77325c", "025c", "77325c", 0, 11},
+	{OpDP, "066c", "1c", "066c", 0, 11},
+	{OpDP, "072c", "3d", "072c", 0, 11},
+	{OpDP, "066d", "2c", "066d", 0, 11},
+	{OpDP, "072c", "1c", "072c", 0, 11},
+	{OpDP, "072c", "0c", "072c", 0, 11},
+	{OpDP, "000077325c", "025c", "03093c000c", 0, 0},
+	{OpDP, "0000066c", "2c", "00033c0c", 0, 0},
+	{OpDP, "00066c", "2c", "033c0c", 0, 0},
+	{OpDP, "00066c", "2c", "033c0c", 0, 0},
+	{OpDP, "066c", "2c", "066c", 0, 11},
+	{OpDP, "0123456c", "072c", "0123456c", 0, 11},
+	{OpDP, "0123456c", "072c", "0123456c", 0, 11},
+	{OpDP, "000123456c", "072c", "01714c048c", 0, 0},
+	{OpDP, "000123456c", "072c", "01714c048c", 0, 0},
+	{OpDP, "00000123456c", "072c", "0001714c048c", 0, 0},
+	{OpDP, "00004398046511104c", "064c", "0068719476736c000c", 0, 0},
+	{OpDP, "00004398046511104c", "064c", "0068719476736c000c", 0, 0},
+	{OpDP, "004398046511104c", "064c", "68719476736c000c", 0, 0},
+	{OpDP, "004398046511104c", "064c", "68719476736c000c", 0, 0},
+	{OpDP, "00000043980465111c", "653c", "0000067351401c258c", 0, 0},
+	{OpDP, "00000439804651110c", "653c", "0000673514013c621c", 0, 0},
+	{OpDP, "00004398046511104c", "653c", "0006735140139c337c", 0, 0},
+	{OpDP, "00004398046511104c", "653c", "0006735140139c337c", 0, 0},
+	{OpDP, "004398046511104c", "653c", "06735140139c337c", 0, 0},
+	{OpDP, "043980465111040c", "653c", "67351401395c105c", 0, 0},
+	{OpDP, "439804651110400c", "653c", "439804651110400c", 0, 11},
+	{OpDP, "0000435d", "7c", "00062d1d", 0, 0},
+	{OpDP, "0000435c", "7d", "00062d1c", 0, 0},
+	{OpDP, "0000435d", "7d", "00062c1d", 0, 0},
+	{OpDP, "0000251d", "7d", "00035c6d", 0, 0},
+	{OpDP, "0000252d", "7d", "00036c0d", 0, 0},
+	{OpDP, "0000253d", "7d", "00036c1d", 0, 0},
+	{OpDP, "00000d", "1c", "000d0d", 0, 0},
+	{OpDP, "00001d", "1c", "001d0d", 0, 0},
+	{OpDP, "00001c", "1c", "001c0c", 0, 0},
+	{OpDP, "00000c", "1d", "000d0c", 0, 0},
+	{OpDP, "00000c", "1c", "000c0c", 0, 0},
+	{OpDP, "00000c", "0c", "00000c", 0, 11},
+	{OpDP, "0000000000725c", "1234567c", "00000c0000725c", 0, 0},
+	{OpDP, "0000000000725c", "012345678c", "000c000000725c", 0, 0},
+	{OpDP, "1234567c", "1234567c", "1234567c", 0, 6},
+	{OpDP, "012345678c", "1234567c", "012345678c", 0, 11},
+	{OpDP, "000000008c", "1234567c", "0c0000008c", 0, 0},
+	{OpDP, "000000008c", "0123456c", "0c0000008c", 0, 0},
+	{OpDP, "000000008c", "12345c", "000c00008c", 0, 0},
+	{OpDP, "0000000000000006543210987654321c", "123456789012345c", "000000000000053c000001170000036c", 0, 0},
+	{OpDP, "0000000000006543210987654321000c", "123456789012345c", "000000000053000c001170000036000c", 0, 0},
+	{OpDP, "0000000006543210987654321000111c", "123456789012345c", "000000053000009c058888934889006c", 0, 0},
+	{OpDP, "0000006543210987654321000111222c", "123456789012345c", "000053000009477c000046530117657c", 0, 0},
+	{OpDP, "0000043210987654321000111222333c", "123456789012345c", "000350009003150c010253617335583c", 0, 0},
+	{OpDP, "0000543210987654321000111222333c", "123456789012345c", "004400009039600c013044117360333c", 0, 0},
+	{OpDP, "0006543210987654321000111222333c", "123456789012345c", "053000009477000c046530117657333c", 0, 0},
+	{OpDP, "0076543210987654321000111222333c", "123456789012345c", "620000014580003c066829754085298c", 0, 0},
+	{OpDP, "0876543210987654321000111222333c", "123456789012345c", "0876543210987654321000111222333c", 0, 11},
+	{OpDP, "6543210987654321000111222333444c", "123456789012345c", "6543210987654321000111222333444c", 0, 11},
+	{OpDP, "0000000000000000000000000000000c", "123456789012345c", "000000000000000c000000000000000c", 0, 0},
+	{OpDP, "0000000000000000000000000000000c", "01234567890123456c", "0000000000000000000000000000000c", 0, 6},
+	{OpMVO, "512c", "001068", "068c", 0, 0},
+	{OpMVO, "7788990c", "123456", "0123456c", 0, 0},
+	{OpMVO, "0001234c", "025c", "000025cc", 0, 0},
+	{OpMVO, "0001243d", "017c", "000017cd", 0, 0},
+	{OpMVO, "0005432c", "071d", "000071dc", 0, 0},
+	{OpMVO, "0000123d", "176d", "000176dd", 0, 0},
+	{OpMVO, "0000512c", "01068c", "001068cc", 0, 0},
+	{OpMVO, "002c", "2c", "02cc", 0, 0},
+	{OpMVO, "004c", "4c", "04cc", 0, 0},
+	{OpMVO, "008c", "8c", "08cc", 0, 0},
+	{OpMVO, "512c", "00068c", "68cc", 0, 0},
+	{OpZAP, "0001234c", "025c", "0000025c", 2, 0},
+	{OpZAP, "0001243d", "017c", "0000017c", 2, 0},
+	{OpZAP, "0005432c", "071d", "0000071d", 1, 0},
+	{OpZAP, "0000123d", "176d", "0000176d", 1, 0},
+	{OpZAP, "0000512c", "01068c", "0001068c", 2, 0},
+	{OpZAP, "002c", "2c", "002c", 2, 0},
+	{OpZAP, "004c", "4c", "004c", 2, 0},
+	{OpZAP, "008c", "8c", "008c", 2, 0},
+	{OpZAP, "512c", "01068c", "068c", 3, 10},
+	{OpZAP, "512c", "00068c", "068c", 2, 0},
+	{OpCP, "0c", "000d", "0c", 0, 0},
+	{OpCP, "1c", "5c", "1c", 1, 0},
+	{OpCP, "9c", "9c", "9c", 0, 0},
+	{OpCP, "9c", "9d", "9c", 2, 0},
+	{OpCP, "017c", "4d", "017c", 2, 0},
+	{OpCP, "1c", "034d", "1c", 2, 0},
+	{OpCP, "027c", "000000235d", "027c", 2, 0},
+	{OpCP, "5c", "000000235d", "5c", 2, 0},
+	{OpCP, "12345c", "54321c", "12345c", 1, 0},
+	{OpED, "20204021", "a0", "fa204021", 0, 7},
+	{OpED, "ee2020202120", "00023c", "eeeeeeeef2f3", 2, 0},
+	{OpED, "ee2020202120", "0c1c012c", "eeeef1eef1f2", 2, 0},
+	{OpED, "ee2020202120", "0d1d012d", "eeeef1f0f1f2", 1, 0},
+	{OpED, "ee202022202120", "0c1c012e", "eeeef1eeeef1f2", 2, 0},
+	{OpED, "ee202020", "00b0", "eeeeee20", 0, 7},
+	{OpED, "ee202020", "00c0", "eeeeee20", 0, 7},
+	{OpED, "ee212020", "000f", "eeeef0f0", 0, 0},
+	{OpED, "ee2020202020202020202020202020", "013b026c00129c789a", "eeeef1f3f0f2f6eeeef1f2f9f7f8f9", 2, 0},
+	{OpED, "402020402120", "X1", "40f4f040f2f0", 1, 0},
+	{OpAP, "3c", "5c", "8c", 2, 0},
+}
+
+// Run group of decimal test cases.
+func TestCycleDecimalTest(t *testing.T) {
+	setup()
+
+	for i, test := range cases {
+		var res [256]byte
+		addr := uint32(0x1000)
+		cpuState.regs[10] = addr
+		arg, _ := hex.DecodeString(test.i1)
+		for i, v := range arg {
+			setMemByte(addr+uint32(i), uint32(v))
+		}
+		l1 := len(arg)
+		l2 := 0
+		// Overlap data fields
+		if test.i2[0] == 'X' {
+			o := test.i2[1] - '0'
+			cpuState.regs[12] = addr
+			cpuState.regs[10] = addr + uint32(o)
+		} else {
+			addr2 := uint32(0x2000)
+			cpuState.regs[12] = addr2
+			arg, _ := hex.DecodeString(test.i2)
+			for i, v := range arg {
+				setMemByte(addr2+uint32(i), uint32(v))
+			}
+			l2 = len(arg)
+		}
+		inst := (uint32(test.op) << 24) | 0xa000
+		if test.op == OpED {
+			inst |= uint32(l1-1) << 16
+		} else {
+			inst |= uint32(l1-1) << 20
+			inst |= uint32(l2-1) << 16
+		}
+		memory.SetMemory(0x400, inst)
+		memory.SetMemory(0x404, 0xc0000000)
+		memory.SetMemory(0x800, 0)
+		memory.SetMemory(0x28, 0)
+		memory.SetMemory(0x2c, 0)
+		cpuState.testInst(0x4)
+		addr = 0x1000
+		var data uint8
+		// Convert result to hex string for compare.
+		for j := range len(test.out) {
+			if (j & 1) != 0 {
+				addr++
+				res[j] = hexDigits[data&0xf]
+			} else {
+				data = getMemByte(addr)
+				res[j] = hexDigits[(data>>4)&0xf]
+			}
+		}
+		result := string(res[:len(test.out)])
+
+		if test.ex != 0 {
+			if !trapFlag {
+				t.Errorf("Test %d did not trap", i)
+			}
+			v := memory.GetMemory(0x28) & 0xffff
+			if v != uint32(test.ex) {
+				t.Errorf("Test %d did not trap correctly got: %04x expected: %04x", i, v, test.ex)
+			}
+		} else {
+			if result != test.out {
+				t.Errorf("Test %d did get correct result got: %s expected: %s", i, result, test.out)
+			}
+			if cpuState.cc != test.cc {
+				t.Errorf("Test %d did not get correct CC got: %x expected: %x", i, cpuState.cc, test.cc)
+			}
+			if trapFlag {
+				t.Errorf("Test %d traped", i)
+			}
+			v := memory.GetMemory(0x28) & 0xffff
+			if v != uint32(test.ex) {
+				t.Errorf("Test %d did reported incorrect trap got: %04x expected: %04x", i, v, test.ex)
+			}
+		}
 	}
 }
