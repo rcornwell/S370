@@ -424,11 +424,12 @@ func (cpu *cpu) opDiv(step *stepInfo) uint16 {
 	if step.src2 == 0 {
 		return ircFixDiv
 	}
-	sign := 0
+	var s1 bool
+	var s2 bool
 	srcl := cpu.regs[step.R1]
 	srch := cpu.regs[step.R1|1]
 	if (srcl & MSIGN) != 0 {
-		sign = 3
+		s1 = true
 		srch ^= FMASK
 		srcl ^= FMASK
 		if srch == FMASK {
@@ -437,12 +438,13 @@ func (cpu *cpu) opDiv(step *stepInfo) uint16 {
 		srch++
 	}
 	if (step.src2 & MSIGN) != 0 {
-		sign ^= 1
+		s2 = true
 		step.src2 = (step.src2 ^ FMASK) + 1
 	}
 	var result uint32
 	result = 0
 	for range 32 {
+		// Shift left by one
 		srcl <<= 1
 		if (srch & MSIGN) != 0 {
 			srcl |= 1
@@ -459,10 +461,10 @@ func (cpu *cpu) opDiv(step *stepInfo) uint16 {
 	if (result&MSIGN) != 0 && result != MSIGN {
 		return ircFixDiv
 	}
-	if (sign & 1) != 0 {
+	if s1 != s2 {
 		result = (result ^ FMASK) + 1
 	}
-	if (sign & 2) != 0 {
+	if s1 {
 		srcl = (srcl ^ FMASK) + 1
 	}
 	cpu.regs[step.R1] = srcl
@@ -1093,11 +1095,11 @@ func (cpu *cpu) opMVCIN(step *stepInfo) uint16 {
 	}
 
 	for {
-		t, err := cpu.readByte(step.address1)
+		t, err := cpu.readByte(step.address2)
 		if err != 0 {
 			return err
 		}
-		err = cpu.writeByte(step.address2, t)
+		err = cpu.writeByte(step.address1, t)
 		if err != 0 {
 			return err
 		}

@@ -344,7 +344,7 @@ func (cpu *cpu) execute(step *stepInfo) uint16 {
 
 			// Check for long
 			if (step.opcode & 0x10) == 0 {
-				src2, err = cpu.readFull(step.address2)
+				src2, err = cpu.readFull(step.address1 + 4)
 				if err != 0 {
 					return err
 				}

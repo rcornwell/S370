@@ -143,12 +143,14 @@ func (cpu *cpu) opCE(step *stepInfo) uint16 {
 			// Shift v2 right if v1 larger expo - expo
 			v2 >>= 4 * t
 		}
-	} else if t < 0 {
-		if t < -8 {
-			v1 = 0
-		} else {
-			// Shift v1 right if v2 larger expo - expo
-			v1 >>= 4 * -t
+	} else {
+		if t < 0 {
+			if t < -8 {
+				v1 = 0
+			} else {
+				// Shift v1 right if v2 larger expo - expo
+				v1 >>= 4 * -t
+			}
 		}
 	}
 
@@ -303,7 +305,7 @@ func (cpu *cpu) opFPAdd(step *stepInfo) uint16 {
 		if cpu.cc != 0 { // Only if non-zero result
 			for (r & SNMASK) == 0 {
 				r <<= 4
-				e1 = 0
+				e1--
 			}
 			// Check if underflow
 			if e1 < 0 {
@@ -315,10 +317,11 @@ func (cpu *cpu) opFPAdd(step *stepInfo) uint16 {
 				e1 = 0
 			}
 		}
-
-		// Remove guard digit
-		r >>= 4
 	}
+
+	// Remove guard digit
+	r >>= 4
+
 	r |= uint32(e1<<24) & EMASK
 	if cpu.cc != 0 && s1 {
 		r |= MSIGN
@@ -343,6 +346,11 @@ func (cpu *cpu) opCD(step *stepInfo) uint16 {
 	v1 := step.fsrc1 & MMASKL
 	v2 := step.fsrc2 & MMASKL
 
+	// Add guard digit
+	v1 <<= 4
+	v2 <<= 4
+
+	// Align based on exponent difference
 	t := e1 - e2
 	if t > 0 {
 		if t > 17 {
@@ -364,7 +372,7 @@ func (cpu *cpu) opCD(step *stepInfo) uint16 {
 
 	// Subtract results
 	var d uint64
-	if s1 != s2 {
+	if s1 == s2 {
 		// Same signs do subtract
 		v2 ^= XMASKL
 		d = v1 + v2 + 1
@@ -380,9 +388,9 @@ func (cpu *cpu) opCD(step *stepInfo) uint16 {
 	}
 
 	// If v1 not normal shift left + expo
-	if (d & CMASKL) != 0 {
-		d >>= 4
-	}
+	// if (d & CMASKL) != 0 {
+	// 	d >>= 4
+	// }
 
 	// Set condition code
 	cpu.cc = 0
@@ -422,6 +430,11 @@ func (cpu *cpu) opFPAddD(step *stepInfo) uint16 {
 	v1 := step.fsrc1 & MMASKL
 	v2 := step.fsrc2 & MMASKL
 
+	// Add guard digit
+	v1 <<= 4
+	v2 <<= 4
+
+	// Align based on exponent difference
 	t := e1 - e2
 	if t > 0 {
 		if t > 17 {
@@ -484,7 +497,7 @@ func (cpu *cpu) opFPAddD(step *stepInfo) uint16 {
 			s1 = false
 		}
 	} else {
-		if (r & 0xffffff0) != 0 {
+		if (r & UMASKL) != 0 {
 			if s1 {
 				cpu.cc = 1
 			} else {
@@ -503,13 +516,15 @@ func (cpu *cpu) opFPAddD(step *stepInfo) uint16 {
 	// Check signifigance exceptions
 	if cpu.cc == 0 && (cpu.progMask&SIGMASK) != 0 {
 		err = ircSignif
-	} else
+		goto fpstore
+	}
+
 	// Check if we are normalized addition
 	if (step.opcode & 0x0e) != 0x0e {
 		if cpu.cc != 0 { // Only if non-zero result
-			for (r & UMASKL) == 0 {
+			for (r & SNMASKL) == 0 {
 				r <<= 4
-				e1 = 0
+				e1--
 			}
 			// Check if underflow
 			if e1 < 0 {
@@ -521,10 +536,19 @@ func (cpu *cpu) opFPAddD(step *stepInfo) uint16 {
 				e1 = 0
 			}
 		}
-
-		// Remove guard digit
-		r >>= 4
 	}
+
+	// Return true zero
+	if cpu.cc == 0 {
+		s1 = false
+		r = 0
+	}
+
+	// Remove guard digit
+	r >>= 4
+
+fpstore:
+	// Save result
 	r |= uint64(e1<<56) & EMASKL
 	if cpu.cc != 0 && s1 {
 		r |= MSIGNL
@@ -599,7 +623,8 @@ func (cpu *cpu) opFPMul(step *stepInfo) uint16 {
 		for (r & NMASKL) == 0 {
 			r <<= 4
 			e1--
-		} // Make 32 bit and create guard digit
+		}
+
 		// Check if underflow
 		if e1 < 0 {
 			if (cpu.progMask & EXPUNDER) != 0 {
@@ -609,10 +634,10 @@ func (cpu *cpu) opFPMul(step *stepInfo) uint16 {
 				s1 = false
 				e1 = 0
 			}
-		} else {
-			e1 = 0
-			s1 = false
 		}
+	} else {
+		e1 = 0
+		s1 = false
 	}
 
 	// Store result'
@@ -620,11 +645,7 @@ func (cpu *cpu) opFPMul(step *stepInfo) uint16 {
 	if s1 {
 		r |= MSIGNL
 	}
-	if (step.opcode&0x10) == 0 || (step.opcode&0xf) == 0xc {
-		cpu.fpregs[step.R1] = r
-	} else {
-		cpu.fpregs[step.R1] = (r & HMASKL) | (cpu.fpregs[step.R1] & LMASKL)
-	}
+	cpu.fpregs[step.R1] = r
 	return err
 }
 
@@ -716,7 +737,8 @@ func (cpu *cpu) opFPDiv(step *stepInfo) uint16 {
 		for (r & NMASKL) == 0 {
 			r <<= 4
 			e1--
-		} // Make 32 bit and create guard digit
+		}
+
 		// Check if underflow
 		if e1 < 0 {
 			if (cpu.progMask & EXPUNDER) != 0 {
@@ -726,18 +748,19 @@ func (cpu *cpu) opFPDiv(step *stepInfo) uint16 {
 				s1 = false
 				e1 = 0
 			}
-		} else {
-			e1 = 0
-			s1 = false
 		}
+	} else {
+		e1 = 0
+		s1 = false
 	}
 
-	// Store results
+	// Store result'
 	r |= (uint64(e1) << 56) & EMASKL
 	if s1 {
 		r |= MSIGNL
 	}
-	if (step.opcode&0x10) == 0 || (step.opcode&0xf) == 0xc {
+
+	if (step.opcode & 0x10) == 0 {
 		cpu.fpregs[step.R1] = r
 	} else {
 		cpu.fpregs[step.R1] = (r & HMASKL) | (cpu.fpregs[step.R1] & LMASKL)

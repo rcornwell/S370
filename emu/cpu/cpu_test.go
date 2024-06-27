@@ -28,6 +28,7 @@ package cpu
 
 import (
 	"encoding/hex"
+	"math"
 	"math/rand"
 	"testing"
 
@@ -35,154 +36,275 @@ import (
 )
 
 const (
-	testCycles int    = 100
+	testCycles int    = 1000
 	HDMASK     uint64 = 0xffffffff80000000
 	FDMASK     uint64 = 0x00000000ffffffff
 )
 
-//  CTEST( instruct, fp_conversion) {
-// 	ASSERT_EQUAL(0, floatToFpreg(0, 0.0))
-// 	ASSERT_EQUAL(0, get_fpreg_s(0))
-// 	ASSERT_EQUAL(0, get_fpreg_s(1))
+// Get a short floating point register.
+func getFloatShort(num int) uint32 {
+	v := cpuState.fpregs[num&0x6]
+	if (num & 1) == 0 {
+		v >>= 32
+	}
+	return uint32(v & LMASKL)
+}
 
-// 	// From Princ Ops page 157
-// 	ASSERT_EQUAL(0, floatToFpreg(0, 1.0))
-// 	ASSERT_EQUAL_X(0x41100000, get_fpreg_s(0))
-// 	ASSERT_EQUAL(0, get_fpreg_s(1))
+// Set a short floating point register.
+func setFloatShort(num int, v uint32) {
+	n := num & 6
+	if (num & 1) == 0 {
+		cpuState.fpregs[n] = (uint64(v) << 32) | (cpuState.fpregs[n] & LMASKL)
+	} else {
+		cpuState.fpregs[n] = (cpuState.fpregs[n] & HMASKL) | uint64(v)
+	}
+}
 
-// 	ASSERT_EQUAL(0, floatToFpreg(0, 0.5))
-// 	ASSERT_EQUAL_X(0x40800000, get_fpreg_s(0))
-// 	ASSERT_EQUAL(0, get_fpreg_s(1))
+// Get load floating point register.
+func getFloatLong(num int) uint64 {
+	return cpuState.fpregs[num]
+}
 
-// 	ASSERT_EQUAL(0, floatToFpreg(0, 1.0/64.0))
-// 	ASSERT_EQUAL_X(0x3f400000, get_fpreg_s(0))
-// 	ASSERT_EQUAL(0, get_fpreg_s(1))
+// Get load floating point register.
+func setFloatLong(num int, v uint64) {
+	cpuState.fpregs[num] = v
+}
 
-// 	ASSERT_EQUAL(0, floatToFpreg(0, -15.0))
-// 	ASSERT_EQUAL_X(0xc1f00000, get_fpreg_s(0))
-// 	ASSERT_EQUAL(0, get_fpreg_s(1))
-// }
+// Convert a floating point value to a 64-bit FP register.
+func floatToFpreg(num int, val float64) bool {
+	var s uint64
+	var char uint8 = 64
 
-// CTEST(instruct, fp_32_conversion) {
-// 	int   i
+	// Quick exit if zero
+	if val == 0 {
+		setFloatLong(num, 0)
+		return true
+	}
 
-// 	ASSERT_EQUAL(0, floatToFpreg(0, 0.0))
+	// Extract sign
+	if val < 0 {
+		s = MSIGNL
+		val = -val
+	}
 
-// 	set_fpreg_s(0, 0xff000000)
-// 	ASSERT_EQUAL(0.0, cnvt_32_float(0))
+	// Determine exponent
+	for val >= 1 && char < 128 {
+		char++
+		val /= 16
+	}
 
-// 	set_fpreg_s(0, 0x41100000)
-// 	ASSERT_EQUAL(1.0, cnvt_32_float(0))
+	for val < 1/16. && char >= 0 {
+		char--
+		val *= 16
+	}
 
-// 	set_fpreg_s(0, 0x40800000)
-// 	ASSERT_EQUAL(0.5, cnvt_32_float(0))
+	if char < 0 || char >= 128 {
+		return false
+	}
 
-// 	set_fpreg_s(0, 0x3f400000)
-// 	ASSERT_EQUAL(1.0/64.0, cnvt_32_float(0))
+	val *= 1 << 24
+	f := s | (uint64(char) << 56) | (uint64(val) << 32)
+	f |= uint64((val - float64(uint32(val))) * float64((uint64(1) << 32)))
+	setFloatLong(num, f)
+	return true
+}
 
-// 	set_fpreg_s(0, 0xc1f00000)
-// 	ASSERT_EQUAL(-15.0, cnvt_32_float(0))
+// load floating point short register as float64
+func cnvtShortFloat(num int) float64 {
+	t64 := getFloatLong(num)
+	e := float64((t64>>56)&0x7f) - 64.0
+	d := float64(0x00ffffff00000000 & t64)
+	d *= math.Exp2(-56.0 + 4.0*e)
+	if (MSIGNL & t64) != 0 {
+		d *= -1.0
+	}
+	return d
+}
 
-// 	srand(1)
-// 	for (i = 0 i < 20 i++) {
-// 		double f = rand() / (double)(RAND_MAX)
-// 		int p = (rand() / (double)(RAND_MAX) * 400) - 200
-// 		double fp, ratio
-// 		f = f * pow(2, p)
-// 		if (rand() & 1) {
-// 			f = -f
-// 		}
-// 		(void)floatToFpreg(0, f)
-// 		fp = cnvt_32_float(0)
-// 		// Compare within tolerance
-// 		ratio = fabs((fp - f) / f)
-// 		ASSERT_TRUE(ratio < .000001)
-// 	}
-// }
+// load floating point long register as float64
+func cnvtLongFloat(num int) float64 {
+	t64 := getFloatLong(num)
+	e := float64((t64>>56)&0x7f) - 64.0
+	d := float64(MMASKL & t64)
+	d *= math.Exp2(-56.0 + 4.0*e)
+	if (MSIGNL & t64) != 0 {
+		d *= -1.0
+	}
+	return d
+}
 
-// CTEST(instruct, fp_64_conversion) {
-// 	int   i
-// 	ASSERT_EQUAL(0, floatToFpreg(0, 0.0))
+func TestFloatConv(t *testing.T) {
+	err := floatToFpreg(0, 0.0)
+	if !err {
+		t.Error("Unable to convert 0.0")
+	}
+	r := getFloatLong(0)
+	if r != 0 {
+		t.Errorf("Wrong conversion of 0.0 got: %016x", r)
+	}
+	err = floatToFpreg(0, 1.0)
+	if !err {
+		t.Error("Unable to convert 1.0")
+	}
+	r = getFloatLong(0)
+	if r != 0x4110000000000000 {
+		t.Errorf("Wrong conversion of 1.0 got: %016x", r)
+	}
+	err = floatToFpreg(0, 0.5)
+	if !err {
+		t.Error("Unable to convert 0.5")
+	}
+	r = getFloatLong(0)
+	if r != 0x4080000000000000 {
+		t.Errorf("Wrong conversion of 0.5 got: %016x", r)
+	}
+	err = floatToFpreg(0, 1.0/64.0)
+	if !err {
+		t.Error("Unable to convert 1/64")
+	}
+	r = getFloatLong(0)
+	if r != 0x3f40000000000000 {
+		t.Errorf("Wrong conversion of 1/64 got: %016x", r)
+	}
+	err = floatToFpreg(0, -15.0)
+	if !err {
+		t.Error("Unable to convert -15.0")
+	}
+	r = getFloatLong(0)
+	if r != 0xc1f0000000000000 {
+		t.Errorf("Wrong conversion of -15.0 got: %016x", r)
+	}
+}
 
-// 	set_fpreg_s(0, 0xff000000)
-// 	set_fpreg_s(1, 0)
-// 	ASSERT_EQUAL(0.0, cnvt_64_float(0))
+func TestShortConv(t *testing.T) {
+	setFloatShort(0, 0xff000000)
+	setFloatShort(1, 0)
+	r := cnvtShortFloat(0)
+	if r != 0.0 {
+		t.Errorf("Wrong conversion of 0.0 got: %f", r)
+	}
+	setFloatShort(0, 0x41100000)
+	r = cnvtShortFloat(0)
+	setFloatShort(1, 0)
+	if r != 1.0 {
+		t.Errorf("Wrong conversion of 1.0 got: %f", r)
+	}
+	setFloatShort(0, 0x40800000)
+	r = cnvtShortFloat(0)
+	if r != 0.5 {
+		t.Errorf("Wrong conversion of 0.5 got: %f", r)
+	}
+	setFloatShort(0, 0x3f400000)
+	r = cnvtShortFloat(0)
+	if r != (1.0 / 64.0) {
+		t.Errorf("Wrong conversion of 1.0/64.0 got: %f", r)
+	}
+	setFloatShort(0, 0xc1f00000)
+	r = cnvtShortFloat(0)
+	if r != -15.0 {
+		t.Errorf("Wrong conversion of -15.0 got: %f", r)
+	}
 
-// 	set_fpreg_s(0, 0x41100000)
-// 	set_fpreg_s(1, 0)
-// 	ASSERT_EQUAL(1.0, cnvt_64_float(0))
+	rnum := rand.New(rand.NewSource(125))
+	for range testCycles {
+		f := rnum.NormFloat64()
+		scale := rnum.Intn(100) - 50
+		f = math.Ldexp(f, scale)
+		err := floatToFpreg(0, f)
+		if !err {
+			t.Errorf("Unable to set register to %f", f)
+		}
+		r := cnvtShortFloat(0)
+		ratio := math.Abs((r - f) / f)
+		if ratio > 0.000001 {
+			t.Errorf("Conversion short failed got: %f expected: %f", r, f)
+		}
+	}
+}
 
-// 	set_fpreg_s(0, 0x40800000)
-// 	set_fpreg_s(1, 0)
-// 	ASSERT_EQUAL(0.5, cnvt_64_float(0))
+func TestLongConv(t *testing.T) {
+	setFloatShort(0, 0xff000000)
+	setFloatShort(1, 0)
+	r := cnvtLongFloat(0)
+	if r != 0.0 {
+		t.Errorf("Wrong conversion of 0.0 got: %f", r)
+	}
+	setFloatShort(0, 0x41100000)
+	r = cnvtLongFloat(0)
+	if r != 1.0 {
+		t.Errorf("Wrong conversion of 1.0 got: %f", r)
+	}
+	setFloatShort(0, 0x40800000)
+	r = cnvtLongFloat(0)
+	if r != 0.5 {
+		t.Errorf("Wrong conversion of 0.5 got: %f", r)
+	}
+	setFloatShort(0, 0x3f400000)
+	r = cnvtLongFloat(0)
+	if r != (1.0 / 64.0) {
+		t.Errorf("Wrong conversion of 1.0/64.0 got: %f", r)
+	}
+	setFloatShort(0, 0xc1f00000)
+	r = cnvtLongFloat(0)
+	if r != -15.0 {
+		t.Errorf("Wrong conversion of -15.0 got: %f", r)
+	}
 
-// 	set_fpreg_s(0, 0x3f400000)
-// 	set_fpreg_s(1, 0)
-// 	ASSERT_EQUAL(1.0/64.0, cnvt_64_float(0))
+	rnum := rand.New(rand.NewSource(125))
+	for range testCycles {
+		f := rnum.NormFloat64()
+		scale := rnum.Intn(100) - 50
+		f = math.Ldexp(f, scale)
+		err := floatToFpreg(0, f)
+		if !err {
+			t.Errorf("Unable to set register to %f", f)
+		}
+		r := cnvtLongFloat(0)
+		ratio := math.Abs((r - f) / f)
+		if ratio > 0.000001 {
+			t.Errorf("Conversion long failed got: %f expected: %f", r, f)
+		}
+	}
+}
 
-// 	set_fpreg_s(0, 0xc1f00000)
-// 	set_fpreg_s(1, 0)
-// 	ASSERT_EQUAL(-15.0, cnvt_64_float(0))
+// Roughly test characteristics of random number generator
+func TestRandFloat(t *testing.T) {
+	pos := 0
+	neg := 0
+	big := 0
+	small := 0
 
-// 	srand(1)
-// 	for (i = 0 i < 20 i++) {
-// 		double f = rand() / (double)(RAND_MAX)
-// 		int p = (rand() / (double)(RAND_MAX) * 400) - 200
-// 		double fp
-// 		f = f * pow(2, p)
-// 		if (rand() & 1) {
-// 			f = -f
-// 		}
-// 		(void)floatToFpreg(0, f)
-// 		fp = cnvt_64_float(0)
-// 		ASSERT_EQUAL(f, fp)
-// 	}
-// }
+	// Test add logical with random values
+	rnum := rand.New(rand.NewSource(125))
+	for range testCycles {
+		f := rnum.NormFloat64()
+		scale := rnum.Intn(100) - 50
+		f = math.Ldexp(f, scale)
+		if f < 0.0 {
+			neg++
+		} else {
+			pos++
+		}
+		if math.Abs(f) > math.Pow(2.0, 20.0) {
+			big++
+		} else if math.Abs(f) < math.Pow(2.0, -20.0) {
+			small++
+		}
+	}
 
-// // Roughly test characteristics of random number generator
-// CTEST(instruct, randfloat) {
-// 	int pos = 0, neg = 0
-// 	int big = 0, small = 0
-// 	int i
-
-// 	srand(5)
-// 	for (int i = 0 i < 100 i++) {
-// 		double f = randfloat(200)
-// 		if (f < 0) {
-// 			neg ++
-// 		} else {
-// 			pos ++
-// 		}
-// 		if (fabs(f) > pow(2, 100)) {
-// 			big++
-// 		} else if (fabs(f) < pow(2, -100)) {
-// 			small++
-// 		}
-// 	}
-// 	ASSERT_TRUE(pos > 30)
-// 	ASSERT_TRUE(neg > 30)
-// 	ASSERT_TRUE(big > 15)
-// 	ASSERT_TRUE(small > 15)
-
-//		// Test scaling
-//		big = 0
-//		small = 0
-//		for (i = 0 i < 100 i++) {
-//			double f = randfloat(10)
-//			if (f < 0) {
-//				neg ++
-//			} else {
-//				pos ++
-//			}
-//			if (fabs(f) > pow(2, 10)) {
-//				big++
-//			} else if (fabs(f) < pow(2, -10)) {
-//				small++
-//			}
-//		}
-//		ASSERT_TRUE(big < 8)
-//		ASSERT_TRUE(small < 8)
-//	}
+	if big < 200 {
+		t.Errorf("Less then 200 big numbers: %d", big)
+	}
+	if small < 200 {
+		t.Errorf("Less then 200 small numbers: %d", small)
+	}
+	if pos < 400 {
+		t.Errorf("Less then 400 pos numbers: %d", pos)
+	}
+	if neg < 400 {
+		t.Errorf("Less then 400 neg numbers: %d", neg)
+	}
+}
 
 var trapFlag bool
 
@@ -1519,6 +1641,7 @@ func TestCycleD(t *testing.T) {
 
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0x5d256200) // D 2,200(5,6)
+	memory.SetMemory(0x404, 0x00000000)
 	memory.SetMemory(0x500, 0x73456789)
 	cpuState.regs[2] = 0x12345678
 	cpuState.regs[3] = 0x9abcdef0
@@ -1538,6 +1661,8 @@ func TestCycleD(t *testing.T) {
 	// Divide overflow
 	cpuState.cc = 3
 	memory.SetMemory(0x400, 0x5d256200) // D 2,200(5,6)
+	memory.SetMemory(0x404, 0x00000000)
+	memory.SetMemory(0x800, 0x00000000)
 	memory.SetMemory(0x500, 0x23456789)
 	cpuState.regs[2] = 0x12345678
 	cpuState.regs[3] = 0x9abcdef0
@@ -1560,36 +1685,41 @@ func TestCycleD(t *testing.T) {
 	for range testCycles {
 		cpuState.cc = 3
 		dividend := rnum.Int63() / 1000
-		divisor := rand.Int31()
+		divisor := rnum.Int31()
 		q := dividend / int64(divisor)
 		r := dividend % int64(divisor)
 
 		cpuState.regs[2] = uint32(dividend >> 32)
-		cpuState.regs[3] = uint32(dividend & int64(FMASK))
+		cpuState.regs[3] = uint32(uint64(dividend) & LMASKL)
 		memory.SetMemory(0x100, uint32(divisor))
 		memory.SetMemory(0x400, 0x5d200100) // D 2,100(0,0)
+		memory.SetMemory(0x404, 0x00000000)
+		memory.SetMemory(0x800, 0x00000000)
 		cpuState.testInst(0)
 
 		if divisor < 0 {
 			r = -r
 		}
+
+		// Check if we should overflow.
 		if (q & 0x7fffffff) != q {
 			if !trapFlag {
 				t.Errorf("D rand over did not trap")
 			}
 		} else {
 			if trapFlag {
-				t.Errorf("D rand no over did trap")
+				t.Errorf("D rand no over trap")
 			}
-		}
-		if cpuState.regs[2] != uint32(r) {
-			t.Errorf("D rand register 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], uint32(r))
-		}
-		if cpuState.regs[3] != uint32(q) {
-			t.Errorf("D rand register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], uint32(q))
-		}
-		if cpuState.cc != 3 {
-			t.Errorf("D rand CC not correct got: %x wanted: %x", cpuState.cc, 3)
+			if cpuState.regs[2] != uint32(r) {
+				t.Logf("D %016x / %08x = %08x (%08x) %t", dividend, divisor, q, r, trapFlag)
+				t.Errorf("D rand register 2 was incorrect got: %08x wanted: %08x", cpuState.regs[2], uint32(r))
+			}
+			if cpuState.regs[3] != uint32(q) {
+				t.Errorf("D rand register 3 was incorrect got: %08x wanted: %08x", cpuState.regs[3], uint32(q))
+			}
+			if cpuState.cc != 3 {
+				t.Errorf("D rand CC not correct got: %x wanted: %x", cpuState.cc, 3)
+			}
 		}
 	}
 }
@@ -3617,6 +3747,36 @@ func TestCycleMVO(t *testing.T) {
 	}
 }
 
+// Move inverse.
+func TestCycleMVIN(t *testing.T) {
+	setup()
+
+	memory.SetMemory(0x200, 0xC1C2C3C4)
+	memory.SetMemory(0x204, 0xC5C6C7C8)
+	memory.SetMemory(0x208, 0xC9CACB00)
+	memory.SetMemory(0x300, 0xF1F2F3F4)
+	memory.SetMemory(0x304, 0xF5F6F7F8)
+	memory.SetMemory(0x308, 0xF9000000)
+	memory.SetMemory(0x400, 0xe8070200) // MVINV 200(7),300
+	memory.SetMemory(0x404, 0x03070000)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x200)
+	mv := uint32(0xF8F7F6F5)
+	if v != mv {
+		t.Errorf("MVIN Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x204)
+	mv = uint32(0xF4F3F2F1)
+	if v != mv {
+		t.Errorf("MVIN Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x208)
+	mv = uint32(0xC9CACB00)
+	if v != mv {
+		t.Errorf("MVIN Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
 // Pack instruction.
 func TestCyclePACK(t *testing.T) {
 	setup()
@@ -5477,5 +5637,1161 @@ func TestCycleDecimalTest(t *testing.T) {
 				t.Errorf("Test %d did reported incorrect trap got: %04x expected: %04x", i, v, test.ex)
 			}
 		}
+	}
+}
+
+// Test floating point store double.
+func TestCycleSTD(t *testing.T) {
+	setup()
+
+	setFloatShort(0, 0x12345678)
+	setFloatShort(1, 0xaabbccdd)
+	cpuState.regs[1] = 0x100
+	cpuState.regs[2] = 0x300
+	memory.SetMemory(0x400, 0x60012100) // STD 0,100(1,2)
+	memory.SetMemory(0x404, 0x0)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x500)
+	mv := uint32(0x12345678)
+	if v != mv {
+		t.Errorf("STD Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x504)
+	mv = uint32(0xaabbccdd)
+	if v != mv {
+		t.Errorf("STD Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Test floating point load double.
+func TestCycleLD(t *testing.T) {
+	setup()
+
+	memory.SetMemory(0x100, 0x12345678)
+	memory.SetMemory(0x104, 0xaabbccdd)
+	memory.SetMemory(0x400, 0x68000100) //  LD 0,100(0,0)
+	memory.SetMemory(0x404, 0x0)
+	setFloatShort(0, 0xffffffff)
+	setFloatShort(1, 0xffffffff)
+	cpuState.testInst(0)
+	v := getFloatShort(0)
+	mv := uint32(0x12345678)
+	if v != mv {
+		t.Errorf("LD Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(1)
+	mv = uint32(0xaabbccdd)
+	if v != mv {
+		t.Errorf("LD Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+
+	memory.SetMemory(0x100, 0x44000000)
+	memory.SetMemory(0x104, 0xaabbccdd)
+	memory.SetMemory(0x400, 0x68000100) //  LD 0,100(0,0)
+	setFloatShort(0, 0xffffffff)
+	setFloatShort(1, 0xffffffff)
+	cpuState.testInst(0)
+	v = getFloatShort(0)
+	mv = uint32(0x44000000) // Stays unnormalized
+	if v != mv {
+		t.Errorf("LD Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(1)
+	mv = uint32(0xaabbccdd)
+	if v != mv {
+		t.Errorf("LD Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Load complement LCDR - LCDR 2,4.
+func TestCycleLCDR(t *testing.T) {
+	setup()
+
+	memory.SetMemory(0x400, 0x23240000) // LCDR 2,4
+	memory.SetMemory(0x404, 0x0)
+
+	// Test positive number
+	setFloatShort(4, 0x12345678)
+	setFloatShort(5, 0xaabbccdd)
+	cpuState.testInst(0)
+	v := getFloatShort(2)
+	mv := uint32(0x92345678)
+	if v != mv {
+		t.Errorf("LCDR Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(3)
+	mv = uint32(0xaabbccdd)
+	if v != mv {
+		t.Errorf("LCDR Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("LCDR CC not set correctly got: %d wanted: %d", cpuState.cc, 1)
+	}
+
+	// Test negative number
+	setFloatShort(4, 0x92345678)
+	setFloatShort(5, 0xaabbccdd)
+	cpuState.testInst(0)
+	v = getFloatShort(2)
+	mv = uint32(0x12345678)
+	if v != mv {
+		t.Errorf("LCDR Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(3)
+	mv = uint32(0xaabbccdd)
+	if v != mv {
+		t.Errorf("LCDR Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("LCDR CC not set correctly got: %d wanted: %d", cpuState.cc, 2)
+	}
+
+	// Test zero
+	setFloatShort(4, 0x00000000)
+	setFloatShort(5, 0x00000000)
+	cpuState.testInst(0)
+	v = getFloatShort(2)
+	mv = uint32(0x80000000)
+	if v != mv {
+		t.Errorf("LCDR Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(3)
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("LCDR Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 0 {
+		t.Errorf("LCDR CC not set correctly got: %d wanted: %d", cpuState.cc, 0)
+	}
+
+	// Test overflow
+	setFloatShort(4, 0x80000000)
+	setFloatShort(5, 0x00000000)
+	cpuState.testInst(0)
+	v = getFloatShort(2)
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("LCDR Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(3)
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("LCDR Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 0 {
+		t.Errorf("LCDR CC not set correctly got: %d wanted: %d", cpuState.cc, 0)
+	}
+}
+
+// Load Positive LPDR - LPDR 3,4.
+func TestCycleLPDR(t *testing.T) {
+	setup()
+
+	memory.SetMemory(0x400, 0x20240000) // LPDR 2,4
+	memory.SetMemory(0x404, 0x0)
+
+	setFloatShort(4, 0xffffffff)
+	setFloatShort(5, 0xffffffff)
+	cpuState.testInst(0)
+	v := getFloatShort(2)
+	mv := uint32(0x7fffffff)
+	if v != mv {
+		t.Errorf("LPDR Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(3)
+	mv = uint32(0xffffffff)
+	if v != mv {
+		t.Errorf("LPDR Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("LPDR CC not set correctly got: %d wanted: %d", cpuState.cc, 2)
+	}
+
+	// Test positive
+	setFloatShort(4, 0x12345678)
+	setFloatShort(5, 0x00000000)
+	cpuState.testInst(0)
+	v = getFloatShort(2)
+	mv = uint32(0x12345678)
+	if v != mv {
+		t.Errorf("LPDR Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(3)
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("LPDR Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("LPDR CC not set correctly got: %d wanted: %d", cpuState.cc, 2)
+	}
+
+	// Test zero
+	setFloatShort(4, 0x00000000)
+	setFloatShort(5, 0x00000000)
+	cpuState.testInst(0)
+	v = getFloatShort(2)
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("LPDR Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(3)
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("LPDR Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 0 {
+		t.Errorf("LPDR CC not set correctly got: %d wanted: %d", cpuState.cc, 0)
+	}
+
+	// Test negative number
+	setFloatShort(4, 0x92345678)
+	setFloatShort(5, 0x00000000)
+	cpuState.testInst(0)
+	v = getFloatShort(2)
+	mv = uint32(0x12345678)
+	if v != mv {
+		t.Errorf("LPDR Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(3)
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("LPDR Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("LPDR CC not set correctly got: %d wanted: %d", cpuState.cc, 2)
+	}
+
+	// Test overflow
+	setFloatShort(4, 0x80000000)
+	setFloatShort(5, 0x00000000)
+	cpuState.testInst(0)
+	v = getFloatShort(2)
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("LPDR Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(3)
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("LPDR Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 0 {
+		t.Errorf("LPDR CC not set correctly got: %d wanted: %d", cpuState.cc, 0)
+	}
+}
+
+// Load negative LNDR - LNDR 3,4.
+func TestCycleLNDR(t *testing.T) {
+	setup()
+
+	memory.SetMemory(0x400, 0x21240000) // LNDR 2,4
+	memory.SetMemory(0x404, 0x0)
+	setFloatShort(4, 0xffffffff)
+	setFloatShort(5, 0xffffffff)
+
+	cpuState.testInst(0)
+	v := getFloatShort(2)
+	mv := uint32(0xffffffff)
+	if v != mv {
+		t.Errorf("LNDR Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(3)
+	mv = uint32(0xffffffff)
+	if v != mv {
+		t.Errorf("LNDR Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("LNDR CC not set correctly got: %d wanted: %d", cpuState.cc, 1)
+	}
+
+	// Test positive
+	setFloatShort(4, 0x12345678)
+	setFloatShort(5, 0x00000000)
+	cpuState.testInst(0)
+	v = getFloatShort(2)
+	mv = uint32(0x92345678)
+	if v != mv {
+		t.Errorf("LNDR Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(3)
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("LNDR Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("LNDR CC not set correctly got: %d wanted: %d", cpuState.cc, 1)
+	}
+
+	// Test zero
+	setFloatShort(4, 0x00000000)
+	setFloatShort(5, 0x00000000)
+	cpuState.testInst(0)
+	v = getFloatShort(2)
+	mv = uint32(0x80000000)
+	if v != mv {
+		t.Errorf("LNDR Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(3)
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("LNDR Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 0 {
+		t.Errorf("LNDR CC not set correctly got: %d wanted: %d", cpuState.cc, 0)
+	}
+
+	// Test negative number
+	setFloatShort(4, 0x92345678)
+	setFloatShort(5, 0x00000000)
+	cpuState.testInst(0)
+	v = getFloatShort(2)
+	mv = uint32(0x92345678)
+	if v != mv {
+		t.Errorf("LNDR Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(3)
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("LNDR Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 1 {
+		t.Errorf("LNDR CC not set correctly got: %d wanted: %d", cpuState.cc, 1)
+	}
+
+	// Test overflow
+	setFloatShort(4, 0x80000000)
+	setFloatShort(5, 0x00000000)
+	cpuState.testInst(0)
+	v = getFloatShort(2)
+	mv = uint32(0x80000000)
+	if v != mv {
+		t.Errorf("LNDR Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(3)
+	mv = uint32(0x00000000)
+	if v != mv {
+		t.Errorf("LNDR Register 3 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 0 {
+		t.Errorf("LNDR CC not set correctly got: %d wanted: %d", cpuState.cc, 0)
+	}
+}
+
+// Test compare double.
+func TestCycleCD(t *testing.T) {
+	setup()
+
+	// Check results
+	setFloatShort(0, 0x43000000)
+	setFloatShort(1, 0x00000000)
+	memory.SetMemory(0x100, 0x32123456)
+	memory.SetMemory(0x104, 0x789ABCDE)
+	memory.SetMemory(0x400, 0x69000100) // CD 0,100(0,0)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
+	if cpuState.cc != 0 {
+		t.Errorf("CD CC not set correctly got: %d wanted: %d", cpuState.cc, 0)
+	}
+
+	setFloatShort(0, 0x12345678)
+	setFloatShort(1, 0xaabbccdd)
+	memory.SetMemory(0x100, 0x44000000)
+	memory.SetMemory(0x104, 0xaabbccdd)
+	memory.SetMemory(0x400, 0x69000100) // CD 0,100(0,0)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
+	if cpuState.cc != 1 {
+		t.Errorf("CD CC not set correctly got: %d wanted: %d", cpuState.cc, 1)
+	}
+
+	setFloatShort(0, 0x43082100)
+	setFloatShort(1, 0xaabbccdd)
+	memory.SetMemory(0x100, 0x43082100)
+	memory.SetMemory(0x104, 0xaabbccdd)
+	memory.SetMemory(0x400, 0x69000100) // CD 0,100(0,0)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
+	if cpuState.cc != 0 {
+		t.Errorf("CD CC not set correctly got: %d wanted: %d", cpuState.cc, 0)
+	}
+}
+
+// Half instruct rand.
+func TestCycleHD(t *testing.T) {
+	setup()
+	rnum := rand.New(rand.NewSource(125))
+	for range testCycles {
+		f := rnum.NormFloat64()
+		scale := rnum.Intn(100) - 50
+		f = math.Ldexp(f, scale)
+		err := floatToFpreg(2, f)
+		if !err {
+			t.Errorf("HDR Unable to set register to %f", f)
+		}
+		mb := f / 2.0
+		memory.SetMemory(0x400, 0x24020000) // HDR 0,2
+		cpuState.testInst(0)
+		v := cnvtLongFloat(0)
+		ratio := math.Abs((v - mb) / mb)
+		if ratio > 0.000001 {
+			t.Errorf("HDR difference too large got: %f expected: %f", v, mb)
+		}
+	}
+}
+
+// Add double.
+func TestCycleAD(t *testing.T) {
+	setup()
+
+	setFloatShort(6, 0x43082100)
+	setFloatShort(7, 0x00000000)
+	memory.SetMemory(0x2000, 0x41123456)
+	memory.SetMemory(0x2004, 0x00000000)
+	cpuState.regs[13] = 0x00002000
+	memory.SetMemory(0x400, 0x6a60d000) // AD 6,0(0, 13)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
+
+	v := getFloatShort(6)
+	mv := uint32(0x42833345)
+	if v != mv {
+		t.Errorf("AD Register 6 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(7)
+	mv = uint32(0x60000000)
+	if v != mv {
+		t.Errorf("AD Register 7 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("AD CC not set correctly got: %d wanted: %d", cpuState.cc, 2)
+	}
+
+	rnum := rand.New(rand.NewSource(125))
+	for range testCycles {
+		f1 := rnum.NormFloat64()
+		scale := rnum.Intn(100) - 50
+		f1 = math.Ldexp(f1, scale)
+		f2 := rnum.NormFloat64()
+		scale = rnum.Intn(100) - 50
+		f2 = math.Ldexp(f2, scale)
+		err := floatToFpreg(0, f1)
+		if !err {
+			t.Errorf("Unable to set register to %f", f1)
+		}
+		err = floatToFpreg(2, f2)
+		if !err {
+			t.Errorf("Unable to set register to %f", f2)
+		}
+		mb := f1 + f2
+		memory.SetMemory(0x400, 0x2a020000) // ADR 0,2
+		cpuState.testInst(0)
+		v := cnvtLongFloat(0)
+		ratio := math.Abs((v - mb) / mb)
+		if ratio > 0.000001 {
+			t.Errorf("AD difference too large got: %f expected: %f", v, mb)
+		}
+		cc := uint8(0)
+		if mb != 0.0 {
+			if mb < 0.0 {
+				cc = 1
+			} else {
+				cc = 2
+			}
+		}
+		if cpuState.cc != cc {
+			t.Errorf("AD CC not set correctly got: %d wanted: %d", cpuState.cc, cc)
+		}
+	}
+}
+
+// Subtract double.
+func TestCycleSD(t *testing.T) {
+	setup()
+
+	setFloatShort(6, 0x43082100)
+	setFloatShort(7, 0x00000000)
+	memory.SetMemory(0x2000, 0x41123456)
+	memory.SetMemory(0x2004, 0x00000000)
+	cpuState.regs[13] = 0x00002000
+	memory.SetMemory(0x400, 0x6b60d000) // SD 6,0(0, 13)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
+
+	v := getFloatShort(6)
+	mv := uint32(0x4280ECBA)
+	if v != mv {
+		t.Errorf("SD Register 6 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(7)
+	mv = uint32(0xA0000000)
+	if v != mv {
+		t.Errorf("SD Register 7 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("SD CC not set correctly got: %d wanted: %d", cpuState.cc, 2)
+	}
+
+	rnum := rand.New(rand.NewSource(125))
+	for range testCycles {
+		f1 := rnum.NormFloat64()
+		scale := rnum.Intn(100) - 50
+		f1 = math.Ldexp(f1, scale)
+		f2 := rnum.NormFloat64()
+		scale = rnum.Intn(100) - 50
+		f2 = math.Ldexp(f2, scale)
+		err := floatToFpreg(0, f1)
+		if !err {
+			continue
+		}
+		err = floatToFpreg(2, f2)
+		if !err {
+			continue
+		}
+		mb := f1 - f2
+		memory.SetMemory(0x400, 0x2b020000) // SDR 0,2
+		cpuState.testInst(0)
+		v := cnvtLongFloat(0)
+		ratio := math.Abs((v - mb) / mb)
+		if ratio > 0.000001 {
+			t.Errorf("SD difference too large got: %f expected: %f", v, mb)
+		}
+		cc := uint8(0)
+		if mb != 0.0 {
+			if mb < 0.0 {
+				cc = 1
+			} else {
+				cc = 2
+			}
+		}
+		if cpuState.cc != cc {
+			t.Errorf("SD CC not set correctly got: %d wanted: %d", cpuState.cc, cc)
+		}
+	}
+}
+
+// Multiply double.
+func TestCyclMD(t *testing.T) {
+	setup()
+
+	setFloatShort(6, 0x43082100)
+	setFloatShort(7, 0x00000000)
+	memory.SetMemory(0x2000, 0x41123456)
+	memory.SetMemory(0x2004, 0x00000000)
+	cpuState.regs[13] = 0x00002000
+	memory.SetMemory(0x400, 0x6c60d000) // MD 6,0(0, 13)
+	cpuState.testInst(0)
+
+	v := getFloatShort(6)
+	mv := uint32(0x4293fb6f)
+	if v != mv {
+		t.Errorf("MD Register 6 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(7)
+	mv = uint32(0x16000000)
+	if v != mv {
+		t.Errorf("MD Register 7 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 3 {
+		t.Errorf("MD CC not set correctly got: %d wanted: %d", cpuState.cc, 3)
+	}
+
+	rnum := rand.New(rand.NewSource(125))
+	for range testCycles {
+		f1 := rnum.NormFloat64()
+		scale := rnum.Intn(100) - 50
+		f1 = math.Ldexp(f1, scale)
+		f2 := rnum.NormFloat64()
+		scale = rnum.Intn(100) - 50
+		f2 = math.Ldexp(f2, scale)
+		if !floatToFpreg(0, f1) {
+			continue
+		}
+		if !floatToFpreg(2, f2) {
+			continue
+		}
+		mb := f1 * f2
+		memory.SetMemory(0x400, 0x2c020000) // MDR 0,2
+		cpuState.testInst(0)
+		if math.Abs(mb) < 5.4e-79 || math.Abs(mb) > 7.2e75 {
+			if !trapFlag {
+				t.Error("MD did not trap")
+			}
+		} else {
+			if trapFlag {
+				t.Error("MD should not have trapped")
+			}
+			v := cnvtLongFloat(0)
+			ratio := math.Abs((v - mb) / mb)
+			if ratio > 0.000001 {
+				t.Errorf("MD difference too large got: %f expected: %f", v, mb)
+			}
+		}
+	}
+}
+
+// Divide double.
+func TestCyclDD(t *testing.T) {
+	setup()
+
+	setFloatShort(6, 0x43082100)
+	setFloatShort(7, 0x00000000)
+	memory.SetMemory(0x2000, 0x41123456)
+	memory.SetMemory(0x2004, 0x00000000)
+	cpuState.regs[13] = 0x00002000
+	memory.SetMemory(0x400, 0x6d60d000) // DD 6,0(0, 13)
+	// 	cpuState.testInst(0,20)
+	// 	ASSERT_EQUAL_X(0x42725012, get_fpreg_s(6))
+	// 	ASSERT_EQUAL_X(0xf5527d99, get_fpreg_s(7))
+	cpuState.testInst(0)
+
+	v := getFloatShort(6)
+	mv := uint32(0x42725012)
+	if v != mv {
+		t.Errorf("DD Register 6 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(7)
+	mv = uint32(0xf5527d99)
+	if v != mv {
+		t.Errorf("DD Register 7 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 3 {
+		t.Errorf("DD CC not set correctly got: %d wanted: %d", cpuState.cc, 3)
+	}
+
+	rnum := rand.New(rand.NewSource(125))
+	for range testCycles {
+		f1 := rnum.NormFloat64()
+		scale := rnum.Intn(100) - 50
+		f1 = math.Ldexp(f1, scale)
+		f2 := rnum.NormFloat64()
+		scale = rnum.Intn(100) - 50
+		f2 = math.Ldexp(f2, scale)
+		if !floatToFpreg(0, f1) {
+			continue
+		}
+		if !floatToFpreg(2, f2) {
+			continue
+		}
+		mb := f1 / f2
+		memory.SetMemory(0x400, 0x2d020000) // DDR 0,2
+		cpuState.testInst(0)
+		if math.Abs(mb) < 5.4e-79 || math.Abs(mb) > 7.2e75 {
+			if !trapFlag {
+				t.Error("DD did not trap")
+			}
+		} else {
+			if trapFlag {
+				t.Error("DD should not have trapped")
+			}
+			v := cnvtLongFloat(0)
+			ratio := math.Abs((v - mb) / mb)
+			if ratio > 0.000001 {
+				t.Errorf("DD difference too large got: %f expected: %f", v, mb)
+			}
+		}
+	}
+}
+
+// Add double unnormalized.
+func TestCycleAW(t *testing.T) {
+	setup()
+
+	setFloatShort(6, 0x43082100)
+	setFloatShort(7, 0x00000000)
+	memory.SetMemory(0x2000, 0x41123456)
+	memory.SetMemory(0x2004, 0x00000000)
+	cpuState.regs[13] = 0x00002000
+	memory.SetMemory(0x400, 0x6e60d000) // AU 6,0(0, 13)
+	cpuState.testInst(0)
+	v := getFloatShort(6)
+	mv := uint32(0x43083334)
+	if v != mv {
+		t.Errorf("AW Register 6 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(7)
+	mv = uint32(0x56000000)
+	if v != mv {
+		t.Errorf("AW Register 7 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("AW CC not set correctly got: %d wanted: %d", cpuState.cc, 2)
+	}
+}
+
+// Subtract double unnormalized.
+func TestCycleSW(t *testing.T) {
+	setup()
+
+	setFloatShort(6, 0x43082100)
+	setFloatShort(7, 0x00000000)
+	memory.SetMemory(0x2000, 0x41123456)
+	memory.SetMemory(0x2004, 0x00000000)
+	cpuState.regs[13] = 0x00002000
+	memory.SetMemory(0x400, 0x6f60d000) // SU 6,0(0, 13)
+	cpuState.testInst(0)
+	v := getFloatShort(6)
+	mv := uint32(0x43080ecb)
+	if v != mv {
+		t.Errorf("SW Register 6 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(7)
+	mv = uint32(0xaa000000)
+	if v != mv {
+		t.Errorf("SW Register 7 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("SW CC not set correctly got: %d wanted: %d", cpuState.cc, 2)
+	}
+}
+
+// Store float point
+func TestCycleSTE(t *testing.T) {
+	setup()
+
+	setFloatShort(0, 0x12345678)
+	setFloatShort(1, 0xaabbccdd)
+	cpuState.regs[1] = 0x100
+	cpuState.regs[2] = 0x300
+	memory.SetMemory(0x404, 0x11223344)
+	memory.SetMemory(0x400, 0x70012100) // STE 0,100(1,2)
+	memory.SetMemory(0x500, 0xaabbccdd)
+	memory.SetMemory(0x505, 0x11223344)
+	cpuState.testInst(0)
+	v := memory.GetMemory(0x500)
+	mv := uint32(0x12345678)
+	if v != mv {
+		t.Errorf("STE Memory 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = memory.GetMemory(0x504)
+	mv = uint32(0x11223344)
+	if v != mv {
+		t.Errorf("STE Memory 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Test floating point load short.
+func TestCycleLE(t *testing.T) {
+	setup()
+
+	setFloatShort(0, 0x12345678)
+	setFloatShort(1, 0xaabbccdd)
+	cpuState.regs[1] = 0x100
+	cpuState.regs[2] = 0x300
+	memory.SetMemory(0x500, 0x11223344)
+	memory.SetMemory(0x505, 0x11223344)
+	memory.SetMemory(0x400, 0x78012100) // LE 0,100(1,2)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
+	v := getFloatShort(0)
+	mv := uint32(0x11223344)
+	if v != mv {
+		t.Errorf("LE Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(1)
+	mv = uint32(0xaabbccdd)
+	if v != mv {
+		t.Errorf("LE Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+
+	memory.SetMemory(0x100, 0x44000000)
+	memory.SetMemory(0x104, 0xaabbccdd)
+	memory.SetMemory(0x400, 0x78000100) //  LE 0,100(0,0)
+	memory.SetMemory(0x404, 0x00000000)
+	setFloatShort(0, 0xffffffff)
+	setFloatShort(1, 0xffffffff)
+	cpuState.testInst(0)
+	v = getFloatShort(0)
+	mv = uint32(0x44000000) // Stays unnormalized
+	if v != mv {
+		t.Errorf("LE Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(1)
+	mv = uint32(0xffffffff)
+	if v != mv {
+		t.Errorf("LE Register 2 not correct got: %08x wanted: %08x", v, mv)
+	}
+}
+
+// Test compare short.
+func TestCycleCE(t *testing.T) {
+	setup()
+
+	// Check results
+	setFloatShort(0, 0x12345678)
+	setFloatShort(1, 0xaabbccdd)
+	cpuState.regs[1] = 0x100
+	cpuState.regs[2] = 0x300
+	memory.SetMemory(0x500, 0x11223344)
+	memory.SetMemory(0x400, 0x79012100) // CE 0,100(1,2)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
+	if cpuState.cc != 2 {
+		t.Errorf("CE CC not set correctly got: %d wanted: %d", cpuState.cc, 2)
+	}
+
+	setFloatShort(0, 0x34100000)
+	setFloatShort(1, 0x00000000)
+	memory.SetMemory(0x100, 0x32123456)
+	memory.SetMemory(0x104, 0x789ABCDE)
+	memory.SetMemory(0x400, 0x79000100) // CE 0,100(0,0)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
+	if cpuState.cc != 2 {
+		t.Errorf("CE CC not set correctly got: %d wanted: %d", cpuState.cc, 2)
+	}
+
+	setFloatShort(0, 0x12345678)
+	setFloatShort(1, 0xaabbccdd)
+	memory.SetMemory(0x100, 0x14100000)
+	memory.SetMemory(0x104, 0xaabbccdd)
+	memory.SetMemory(0x400, 0x79000100) // CE 0,100(0,0)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
+	if cpuState.cc != 1 {
+		t.Errorf("CE CC not set correctly got: %d wanted: %d", cpuState.cc, 1)
+	}
+
+	setFloatShort(0, 0x43082100)
+	setFloatShort(1, 0xaabbccdd)
+	memory.SetMemory(0x100, 0x43082100)
+	memory.SetMemory(0x104, 0xaabbccdd)
+	memory.SetMemory(0x400, 0x79000100) // CE 0,100(0,0)
+	memory.SetMemory(0x404, 0x00000000)
+	cpuState.testInst(0)
+	if cpuState.cc != 0 {
+		t.Errorf("CE CC not set correctly got: %d wanted: %d", cpuState.cc, 0)
+	}
+}
+
+// Half instruct rand.
+func TestCycleHE(t *testing.T) {
+	setup()
+	rnum := rand.New(rand.NewSource(125))
+	for range testCycles {
+		f := rnum.NormFloat64()
+		scale := rnum.Intn(100) - 50
+		f = math.Ldexp(f, scale)
+		low := rnum.Uint32()
+		if !floatToFpreg(2, f) {
+			continue
+		}
+		setFloatShort(1, low)
+		mb := f / 2.0
+		memory.SetMemory(0x400, 0x34020000) // HER 0,2
+		cpuState.testInst(0)
+		v := cnvtShortFloat(0)
+		ratio := math.Abs((v - mb) / mb)
+		if ratio > 0.000001 {
+			t.Errorf("HER difference too large got: %f expected: %f", v, mb)
+		}
+		if low != getFloatShort(1) {
+			t.Errorf("HER modified lower regiser got: %08x expected: %08x", getFloatShort(1), low)
+		}
+	}
+}
+
+// Add short.
+func TestCycleAE(t *testing.T) {
+	setup()
+
+	setFloatShort(0, 0x12345678)
+	setFloatShort(1, 0xaabbccdd)
+	cpuState.regs[1] = 0x100
+	cpuState.regs[2] = 0x300
+	memory.SetMemory(0x500, 0x11223344)
+	memory.SetMemory(0x400, 0x7a012100) // AE 0,100(1,2)
+	cpuState.testInst(0)
+
+	v := getFloatShort(0)
+	mv := uint32(0x123679ac)
+	if v != mv {
+		t.Errorf("AE Register 0 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(1)
+	mv = uint32(0xaabbccdd)
+	if v != mv {
+		t.Errorf("AE Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("AE CC not set correctly got: %d wanted: %d", cpuState.cc, 2)
+	}
+
+	rnum := rand.New(rand.NewSource(125))
+	for range testCycles {
+		f1 := rnum.NormFloat64()
+		scale := rnum.Intn(100) - 50
+		f1 = math.Ldexp(f1, scale)
+		f2 := rnum.NormFloat64()
+		scale = rnum.Intn(100) - 50
+		f2 = math.Ldexp(f2, scale)
+		low := rnum.Uint32()
+		if floatToFpreg(0, f1) {
+			continue
+		}
+		if floatToFpreg(2, f2) {
+			continue
+		}
+		mb := f1 + f2
+		setFloatShort(1, low)
+		setFloatShort(3, ^low)
+		memory.SetMemory(0x400, 0x3a020000) // AER 0,2
+		cpuState.testInst(0)
+		v := cnvtShortFloat(0)
+		ratio := math.Abs((v - mb) / mb)
+		if ratio > 0.000001 {
+			t.Errorf("AE difference too large got: %f expected: %f", v, mb)
+		}
+		cc := uint8(0)
+		if mb != 0.0 {
+			if mb < 0.0 {
+				cc = 1
+			} else {
+				cc = 2
+			}
+		}
+		if cpuState.cc != cc {
+			t.Errorf("AE CC not set correctly got: %d wanted: %d", cpuState.cc, cc)
+		}
+		if low != getFloatShort(1) {
+			t.Errorf("AE modified lower regiser got: %08x expected: %08x", getFloatShort(1), low)
+		}
+	}
+}
+
+// Subtract short.
+func TestCycleSE(t *testing.T) {
+	setup()
+
+	setFloatShort(0, 0x12345678)
+	setFloatShort(1, 0xaabbccdd)
+	cpuState.regs[1] = 0x100
+	cpuState.regs[2] = 0x300
+	memory.SetMemory(0x500, 0x11223344)
+	memory.SetMemory(0x400, 0x7b012100) // SE 0,100(1,2)
+	cpuState.testInst(0)
+	v := getFloatShort(0)
+	mv := uint32(0x12323343)
+	if v != mv {
+		t.Errorf("SE Register 0 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(1)
+	mv = uint32(0xaabbccdd)
+	if v != mv {
+		t.Errorf("SE Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("SE CC not set correctly got: %d wanted: %d", cpuState.cc, 2)
+	}
+
+	rnum := rand.New(rand.NewSource(125))
+	for range testCycles {
+		f1 := rnum.NormFloat64()
+		scale := rnum.Intn(100) - 50
+		f1 = math.Ldexp(f1, scale)
+		f2 := rnum.NormFloat64()
+		scale = rnum.Intn(100) - 50
+		f2 = math.Ldexp(f2, scale)
+		low := rnum.Uint32()
+		if floatToFpreg(0, f1) {
+			continue
+		}
+		if floatToFpreg(2, f2) {
+			continue
+		}
+		mb := f1 - f2
+		setFloatShort(1, low)
+		setFloatShort(3, ^low)
+		memory.SetMemory(0x400, 0x3b020000) // SER 0,2
+		cpuState.testInst(0)
+		v := cnvtShortFloat(0)
+		ratio := math.Abs((v - mb) / mb)
+		if ratio > 0.000001 {
+			t.Errorf("SE difference too large got: %f expected: %f", v, mb)
+		}
+		cc := uint8(0)
+		if mb != 0.0 {
+			if mb < 0.0 {
+				cc = 1
+			} else {
+				cc = 2
+			}
+		}
+		if cpuState.cc != cc {
+			t.Errorf("SE CC not set correctly got: %d wanted: %d", cpuState.cc, cc)
+		}
+		if low != getFloatShort(1) {
+			t.Errorf("SE modified lower regiser got: %08x expected: %08x", getFloatShort(1), low)
+		}
+	}
+}
+
+// Multiply short.
+func TestCyclME(t *testing.T) {
+	setup()
+
+	setFloatShort(0, 0x43082100)
+	setFloatShort(1, 0xaabbccdd)
+	memory.SetMemory(0x500, 0x41123456)
+	cpuState.regs[1] = 0x100
+	cpuState.regs[2] = 0x300
+	memory.SetMemory(0x400, 0x7c012100) // ME 0,100(1,2)
+	cpuState.testInst(0)
+
+	v := getFloatLong(0)
+	mv := uint64(0x4293fb6f16000000)
+	if v != mv {
+		t.Errorf("ME Register 0 not correct got: %016x wanted: %016x", v, mv)
+	}
+	if cpuState.cc != 3 {
+		t.Errorf("ME CC not set correctly got: %d wanted: %d", cpuState.cc, 3)
+	}
+
+	rnum := rand.New(rand.NewSource(125))
+	for range testCycles {
+		f1 := rnum.NormFloat64()
+		scale := rnum.Intn(100) - 50
+		f1 = math.Ldexp(f1, scale)
+		f2 := rnum.NormFloat64()
+		scale = rnum.Intn(100) - 50
+		f2 = math.Ldexp(f2, scale)
+		low := rnum.Uint32()
+		if floatToFpreg(0, f1) {
+			continue
+		}
+		if floatToFpreg(2, f2) {
+			continue
+		}
+		setFloatShort(1, low)
+		setFloatShort(3, ^low)
+		mb := f1 * f2
+		memory.SetMemory(0x400, 0x3c020000) // MER 0,2
+		cpuState.testInst(0)
+		if math.Abs(mb) < 5.4e-79 || math.Abs(mb) > 7.2e75 {
+			if !trapFlag {
+				t.Error("ME did not trap")
+			}
+		} else {
+			if trapFlag {
+				t.Error("ME should not have trapped")
+			}
+			v := cnvtLongFloat(0)
+			ratio := math.Abs((v - mb) / mb)
+			if ratio > 0.000001 {
+				t.Errorf("ME difference too large got: %f expected: %f", v, mb)
+			}
+		}
+	}
+}
+
+// Divide short.
+func TestCyclDE(t *testing.T) {
+	setup()
+
+	setFloatShort(0, 0x43082100)
+	setFloatShort(1, 0xaabbccdd)
+	memory.SetMemory(0x500, 0x41123456)
+	cpuState.regs[1] = 0x100
+	cpuState.regs[2] = 0x300
+	memory.SetMemory(0x400, 0x7d012100) // DE 0,100(1,2)
+	// 	cpuState.testInst(0,20)
+	// 	ASSERT_EQUAL_X(0x42725012, get_fpreg_s(0))
+	cpuState.testInst(0)
+
+	v := getFloatShort(0)
+	mv := uint32(0x42725012)
+	if v != mv {
+		t.Errorf("DE Register 0 not correct got: %08x wanted: %08x", v, mv)
+	}
+	v = getFloatShort(1)
+	mv = uint32(0xaabbccdd)
+	if v != mv {
+		t.Errorf("DE Register 1 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 3 {
+		t.Errorf("DE CC not set correctly got: %d wanted: %d", cpuState.cc, 3)
+	}
+
+	rnum := rand.New(rand.NewSource(125))
+	for range testCycles {
+		f1 := rnum.NormFloat64()
+		scale := rnum.Intn(100) - 50
+		f1 = math.Ldexp(f1, scale)
+		f2 := rnum.NormFloat64()
+		scale = rnum.Intn(100) - 50
+		f2 = math.Ldexp(f2, scale)
+		low := rnum.Uint32()
+		if floatToFpreg(0, f1) {
+			continue
+		}
+		if floatToFpreg(2, f2) {
+			continue
+		}
+		mb := f1 / f2
+		setFloatShort(1, low)
+		setFloatShort(3, ^low)
+		memory.SetMemory(0x400, 0x3d020000) // DER 0,2
+		cpuState.testInst(0)
+		v := cnvtShortFloat(0)
+		ratio := math.Abs((v - mb) / mb)
+		if ratio > 0.000001 {
+			t.Errorf("DE difference too large got: %f expected: %f", v, mb)
+		}
+		cc := uint8(0)
+		if mb != 0.0 {
+			if mb < 0.0 {
+				cc = 1
+			} else {
+				cc = 2
+			}
+		}
+		if cpuState.cc != cc {
+			t.Errorf("DE CC not set correctly got: %d wanted: %d", cpuState.cc, cc)
+		}
+		if low != getFloatShort(1) {
+			t.Errorf("DE modified lower regiser got: %08x expected: %08x", getFloatShort(1), low)
+		}
+	}
+}
+
+// Add short unnormalized.
+func TestCycleAU(t *testing.T) {
+	setup()
+	// Princ Ops 153
+
+	setFloatShort(6, 0x43082100)
+	setFloatShort(7, 0x00000000)
+	memory.SetMemory(0x2000, 0x41123456)
+	memory.SetMemory(0x2004, 0x00000000)
+	cpuState.regs[13] = 0x00002000
+	memory.SetMemory(0x400, 0x7e60d000) // AU 6,0(0, 13)
+	cpuState.testInst(0)
+	v := getFloatShort(6)
+	mv := uint32(0x43083334)
+	if v != mv {
+		t.Errorf("AW Register 6 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("AW CC not set correctly got: %d wanted: %d", cpuState.cc, 2)
+	}
+}
+
+// Subtract short unnormalized.
+func TestCycleSU(t *testing.T) {
+	setup()
+
+	setFloatShort(6, 0x43082100)
+	setFloatShort(7, 0x00000000)
+	memory.SetMemory(0x2000, 0x41123456)
+	memory.SetMemory(0x2004, 0x00000000)
+	cpuState.regs[13] = 0x00002000
+	memory.SetMemory(0x400, 0x7f60d000) // SU 6,0(0, 13)
+	cpuState.testInst(0)
+	v := getFloatShort(6)
+	mv := uint32(0x43080ecb)
+	if v != mv {
+		t.Errorf("SE Register 6 not correct got: %08x wanted: %08x", v, mv)
+	}
+	if cpuState.cc != 2 {
+		t.Errorf("SW CC not set correctly got: %d wanted: %d", cpuState.cc, 2)
 	}
 }
