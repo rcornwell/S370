@@ -805,7 +805,6 @@ func (cpu *cpu) opLRDR(step *stepInfo) uint16 {
 	var err uint16
 	v := cpu.fpregs[step.R2]
 	if (cpu.fpregs[step.R2|2] & 0x0080000000000000) != 0 {
-
 		// Extract numbers and adjust
 		e := int((v & EMASKL) >> 56)
 		s := (v & MSIGNL) != 0
