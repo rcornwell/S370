@@ -73,7 +73,7 @@ func setFloatLong(num int, v uint64) {
 // Convert a floating point value to a 64-bit FP register.
 func floatToFpreg(num int, val float64) bool {
 	var s uint64
-	var char uint8 = 64
+	var char int = 64
 
 	// Quick exit if zero
 	if val == 0 {
@@ -109,7 +109,7 @@ func floatToFpreg(num int, val float64) bool {
 	return true
 }
 
-// load floating point short register as float64
+// load floating point short register as float64.
 func cnvtShortFloat(num int) float64 {
 	t64 := getFloatLong(num)
 	e := float64((t64>>56)&0x7f) - 64.0
@@ -121,7 +121,7 @@ func cnvtShortFloat(num int) float64 {
 	return d
 }
 
-// load floating point long register as float64
+// load floating point long register as float64.
 func cnvtLongFloat(num int) float64 {
 	t64 := getFloatLong(num)
 	e := float64((t64>>56)&0x7f) - 64.0
@@ -1337,7 +1337,6 @@ func TestCycleCL(t *testing.T) {
 	if cpuState.cc != 0 {
 		t.Errorf("CL CC not correct got: %x wanted: %x", cpuState.cc, 0)
 	}
-
 }
 
 // Test CH instruction.
@@ -3270,7 +3269,7 @@ func TestCycleTM(t *testing.T) {
 	}
 }
 
-// Test to convert to binary
+// Test to convert to binary.
 func TestCycleCVB(t *testing.T) {
 	setup()
 
@@ -4300,7 +4299,7 @@ func TestCycleISK(t *testing.T) {
 	}
 }
 
-// Protection check. unmatched key
+// Protection check. unmatched key.
 func TestCycleProt(t *testing.T) {
 	setup()
 
@@ -6344,7 +6343,7 @@ func TestCycleSW(t *testing.T) {
 	}
 }
 
-// Store float point
+// Store float point.
 func TestCycleSTE(t *testing.T) {
 	setup()
 

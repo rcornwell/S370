@@ -33,36 +33,35 @@ package model2540p
 
 import (
 	dev "github.com/rcornwell/S370/emu/device"
-	ev "github.com/rcornwell/S370/emu/event"
-	ch "github.com/rcornwell/S370/emu/sys_channel"
+	"github.com/rcornwell/S370/emu/event"
+	sys_channel "github.com/rcornwell/S370/emu/sys_channel"
 	card "github.com/rcornwell/S370/util/card"
 )
 
 type Model2540Pctx struct {
-	addr  uint16            // Current device address
-	col   int               // Current column
-	busy  bool              // Reader busy
-	eof   bool              // EOF pending
-	err   bool              // Error pending
-	rdy   bool              // Have card ready to punch
-	halt  bool              // Signal halt requested
-	count int               // Pointer to input/output
-	sense uint8             // Current sense byte
-	image card.Card         // Current card image
-	ctx   *card.CardContext // Context for card reader.
+	addr       uint16            // Current device address
+	currentCol int               // Current column
+	busy       bool              // Reader busy
+	eof        bool              // EOF pending
+	err        bool              // Error pending
+	ready      bool              // Have card ready to punch
+	halt       bool              // Signal halt requested
+	sense      uint8             // Current sense byte
+	image      card.Card         // Current card image
+	context    *card.CardContext // Context for card reader.
 }
 
 // Handle start of CCW chain.
-func (d *Model2540Pctx) StartIO() uint8 {
+func (device *Model2540Pctx) StartIO() uint8 {
 	return 0
 }
 
 // Start the card punch to punch one card.
-func (d *Model2540Pctx) StartCmd(cmd uint8) uint8 {
-	var r uint8
+func (device *Model2540Pctx) StartCmd(cmd uint8) uint8 {
+	var status uint8
 
 	// If busy return busy status right away
-	if d.busy {
+	if device.busy {
 		return dev.CStatusBusy
 	}
 
@@ -72,110 +71,109 @@ func (d *Model2540Pctx) StartCmd(cmd uint8) uint8 {
 		return 0
 	// Punch a card.
 	case dev.CmdWrite:
-		d.halt = false
-		d.col = 0
-		d.sense = 0
-		d.rdy = false
-		if !d.ctx.Attached() {
-			d.sense = dev.SenseINTVENT
-			r = dev.CStatusChnEnd | dev.CStatusDevEnd
+		device.halt = false
+		device.currentCol = 0
+		device.sense = 0
+		device.ready = false
+		if !device.context.Attached() {
+			device.sense = dev.SenseINTVENT
+			status = dev.CStatusChnEnd | dev.CStatusDevEnd
 		} else {
-			d.busy = true
-			ev.AddEvent(d, d.callback, 100, int(cmd))
+			device.busy = true
+			event.AddEvent(device, device.callback, 100, int(cmd))
 		}
 
 	// Queue up sense command
 	case dev.CmdSense:
 		if cmd != dev.CmdSense {
-			d.sense |= dev.SenseCMDREJ
+			device.sense |= dev.SenseCMDREJ
 		} else {
-			d.busy = true
-			ev.AddEvent(d, d.callback, 10, int(cmd))
-			r = 0
+			device.busy = true
+			event.AddEvent(device, device.callback, 10, int(cmd))
+			status = 0
 		}
 	case dev.CmdCTL:
-		d.sense = 0
-		r = dev.CStatusChnEnd | dev.CStatusDevEnd
+		device.sense = 0
+		status = dev.CStatusChnEnd | dev.CStatusDevEnd
 		if cmd != dev.CmdCTL {
-			d.sense |= dev.SenseCMDREJ
+			device.sense |= dev.SenseCMDREJ
 		}
-		if !d.ctx.Attached() {
-			d.sense = dev.SenseINTVENT
+		if !device.context.Attached() {
+			device.sense = dev.SenseINTVENT
 		}
 
 	default:
-		d.sense = dev.SenseCMDREJ
+		device.sense = dev.SenseCMDREJ
 	}
 
-	if d.sense != 0 {
-		r = dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck
+	if device.sense != 0 {
+		status = dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck
 	}
-	d.halt = false
-	return r
+	device.halt = false
+	return status
 }
 
 // Handle HIO instruction.
-func (d *Model2540Pctx) HaltIO() uint8 {
-	d.halt = true
+func (device *Model2540Pctx) HaltIO() uint8 {
+	device.halt = true
 	return 1
 }
 
 // Initialize a device.
-func (d *Model2540Pctx) InitDev() uint8 {
-	d.count = 0
-	d.sense = 0
-	d.busy = false
-	d.halt = false
-	d.eof = false
-	d.err = false
+func (device *Model2540Pctx) InitDev() uint8 {
+	device.sense = 0
+	device.busy = false
+	device.halt = false
+	device.eof = false
+	device.err = false
 	return 0
 }
 
 // Process card punch operations.
-func (d *Model2540Pctx) callback(cmd int) {
+func (device *Model2540Pctx) callback(cmd int) {
 	if cmd == int(dev.CmdSense) {
-		d.busy = false
-		d.halt = false
-		_ = ch.ChanWriteByte(d.addr, d.sense)
-		ch.ChanEnd(d.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd))
+		device.busy = false
+		device.halt = false
+		_ = sys_channel.ChanWriteByte(device.addr, device.sense)
+		sys_channel.ChanEnd(device.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd))
 		return
 	}
 
 	// If ready, punch out current card.
-	if d.rdy {
-		switch d.ctx.PunchCard(d.image) {
+	if device.ready {
+		switch device.context.PunchCard(device.image) {
 		case card.CardOK:
-			ch.SetDevAttn(d.addr, dev.CStatusDevEnd)
+			sys_channel.SetDevAttn(device.addr, dev.CStatusDevEnd)
 		default:
-			ch.SetDevAttn(d.addr, dev.CStatusDevEnd|dev.CStatusCheck)
+			sys_channel.SetDevAttn(device.addr, dev.CStatusDevEnd|dev.CStatusCheck)
 		}
-		d.col = 0
-		d.rdy = false
-		d.busy = false
+		device.currentCol = 0
+		device.ready = false
+		device.busy = false
 		return
 	}
 
 	// Add next byte to image.
-	if d.col < 80 {
-		var c uint8
+	if device.currentCol < 80 {
+		var char uint8
 		var err bool
 
-		c, err = ch.ChanReadByte(d.addr)
+		char, err = sys_channel.ChanReadByte(device.addr)
 		if err {
-			d.rdy = false
+			device.ready = false
 		} else {
-			d.image.Image[d.col] = card.EBCDICToHol(c)
-			d.col++
-			if d.col == 80 {
-				d.rdy = true
+			device.image.Image[device.currentCol] = card.EBCDICToHol(char)
+			device.currentCol++
+			if device.currentCol == 80 {
+				device.ready = true
 			}
 		}
 	}
-	if d.rdy {
-		ch.ChanEnd(d.addr, dev.CStatusChnEnd)
-		ev.AddEvent(d, d.callback, 1000, cmd)
-		d.rdy = true
+	if device.ready {
+		sys_channel.ChanEnd(device.addr, dev.CStatusChnEnd)
+		event.AddEvent(device, device.callback, 1000, cmd)
+		device.ready = true
 	} else {
-		ev.AddEvent(d, d.callback, 100, cmd)
+		event.AddEvent(device, device.callback, 100, cmd)
 	}
 }

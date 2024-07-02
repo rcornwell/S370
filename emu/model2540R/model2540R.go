@@ -33,8 +33,8 @@ package model2540r
 
 import (
 	dev "github.com/rcornwell/S370/emu/device"
-	ev "github.com/rcornwell/S370/emu/event"
-	ch "github.com/rcornwell/S370/emu/sys_channel"
+	"github.com/rcornwell/S370/emu/event"
+	sys_channel "github.com/rcornwell/S370/emu/sys_channel"
 	card "github.com/rcornwell/S370/util/card"
 )
 
@@ -44,29 +44,29 @@ const (
 )
 
 type Model2540Rctx struct {
-	addr  uint16            // Current device address
-	col   int               // Current column
-	busy  bool              // Reader busy
-	eof   bool              // EOF pending
-	err   bool              // Error pending
-	rdy   bool              // Have card ready to read
-	halt  bool              // Signal halt requested
-	sense uint8             // Current sense byte
-	image card.Card         // Current card image
-	ctx   *card.CardContext // Context for card reader.
+	addr       uint16            // Current device address
+	currentCol int               // Current column
+	busy       bool              // Reader busy
+	eof        bool              // EOF pending
+	err        bool              // Error pending
+	ready      bool              // Have card ready to read
+	halt       bool              // Signal halt requested
+	sense      uint8             // Current sense byte
+	image      card.Card         // Current card image
+	context    *card.CardContext // Context for card reader.
 }
 
 // Handle start of CCW chain.
-func (d *Model2540Rctx) StartIO() uint8 {
+func (device *Model2540Rctx) StartIO() uint8 {
 	return 0
 }
 
 // Handle start of new command.
-func (d *Model2540Rctx) StartCmd(cmd uint8) uint8 {
+func (device *Model2540Rctx) StartCmd(cmd uint8) uint8 {
 	var r uint8
 
 	// If busy return busy status right away
-	if d.busy {
+	if device.busy {
 		return dev.CStatusBusy
 	}
 
@@ -76,178 +76,181 @@ func (d *Model2540Rctx) StartCmd(cmd uint8) uint8 {
 		return 0
 	case dev.CmdRead:
 		var err int
-		if !d.ctx.Attached() {
-			d.halt = false
-			d.sense = dev.SenseINTVENT
+		if !device.context.Attached() {
+			device.halt = false
+			device.sense = dev.SenseINTVENT
 			return dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck
 		}
-		d.sense = 0
-		d.col = 0
-		if d.eof {
-			d.eof = false
-			d.err = false
+		device.sense = 0
+		device.currentCol = 0
+		if device.eof {
+			device.eof = false
+			device.err = false
 
 			// Read next card.
-			d.image, err = d.ctx.ReadCard()
+			device.image, err = device.context.ReadCard()
 			switch err {
 			case card.CardOK:
-				d.rdy = true
+				device.ready = true
 			case card.CardEOF:
-				d.eof = true
+				device.eof = true
 			case card.CardEmpty:
 			case card.CardError:
-				d.err = true
-				d.rdy = true
+				device.err = true
+				device.ready = true
 			}
 			r = dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusExpt
 		}
 		// Check if no more cards left in deck
-		if !d.rdy {
-			d.sense = dev.SenseINTVENT
+		if !device.ready {
+			device.sense = dev.SenseINTVENT
 		} else {
-			d.busy = true
-			ev.AddEvent(d, d.callback, 100, int(cmd))
+			device.busy = true
+			event.AddEvent(device, device.callback, 100, int(cmd))
 			return 0
 		}
 		// Queue up sense command
 	case dev.CmdSense:
 		if cmd != dev.CmdSense {
-			d.sense |= dev.SenseCMDREJ
+			device.sense |= dev.SenseCMDREJ
 		} else {
-			d.busy = true
-			ev.AddEvent(d, d.callback, 10, int(cmd))
+			device.busy = true
+			event.AddEvent(device, device.callback, 10, int(cmd))
 			r = 0
 		}
 	case dev.CmdCTL:
-		d.sense = 0
+		device.sense = 0
 		if cmd == dev.CmdCTL {
 			r = dev.CStatusChnEnd | dev.CStatusDevEnd
 			break
 		}
 		if (cmd&0x30) != 0x20 || (cmd&maskStack) == maskStack {
-			d.sense |= dev.SenseCMDREJ
+			device.sense |= dev.SenseCMDREJ
 			r = dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck
 		} else {
-			d.busy = true
-			ev.AddEvent(d, d.callback, 1000, int(cmd))
+			device.busy = true
+			event.AddEvent(device, device.callback, 1000, int(cmd))
 			r = dev.CStatusChnEnd
 		}
 
 	default:
-		d.sense = dev.SenseCMDREJ
+		device.sense = dev.SenseCMDREJ
 	}
 
-	if d.sense != 0 {
+	if device.sense != 0 {
 		r = dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck
 	}
-	d.halt = false
+	device.halt = false
 	return r
 }
 
 // Handle HIO instruction.
-func (d *Model2540Rctx) HaltIO() uint8 {
-	d.halt = true
+func (device *Model2540Rctx) HaltIO() uint8 {
+	device.halt = true
 	return 1
 }
 
 // Initialize a device.
-func (d *Model2540Rctx) InitDev() uint8 {
-	d.col = 0
-	d.sense = 0
-	d.busy = false
-	d.halt = false
-	d.eof = false
-	d.err = false
+func (device *Model2540Rctx) InitDev() uint8 {
+	device.currentCol = 0
+	device.sense = 0
+	device.busy = false
+	device.halt = false
+	device.eof = false
+	device.err = false
 	return 0
 }
 
 // Handle channel operations.
-func (d *Model2540Rctx) callback(cmd int) {
-	var r uint8
+func (device *Model2540Rctx) callback(cmd int) {
+	var status uint8
 	var err int
 	var xlat uint16
 
 	if cmd == int(dev.CmdSense) {
-		d.busy = false
-		d.halt = false
-		_ = ch.ChanWriteByte(d.addr, d.sense)
-		ch.ChanEnd(d.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd))
+		device.busy = false
+		device.halt = false
+		_ = sys_channel.ChanWriteByte(device.addr, device.sense)
+		sys_channel.ChanEnd(device.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd))
 		return
 	}
 
 	// Handle feed end
 	if cmd == 0x100 {
-		d.busy = false
-		ch.SetDevAttn(d.addr, dev.CStatusDevEnd)
+		device.busy = false
+		sys_channel.SetDevAttn(device.addr, dev.CStatusDevEnd)
 		return
 	}
-	if d.halt {
+	if device.halt {
 		goto feed
 	}
+
 	// Check if new card requested
-	if !d.rdy {
-		if d.err {
-			r = dev.CStatusCheck
+	if !device.ready {
+		// Read next card.
+		device.image, err = device.context.ReadCard()
+		switch err {
+		case card.CardOK:
+			device.ready = true
+		case card.CardEOF:
+			device.eof = true
+			device.busy = false
+			device.halt = false
+			sys_channel.SetDevAttn(device.addr, dev.CStatusDevEnd|status)
+			return
+		case card.CardEmpty:
+			device.busy = false
+			device.halt = false
+			sys_channel.SetDevAttn(device.addr, dev.CStatusDevEnd|status)
+			return
+		case card.CardError:
+			device.err = true
+			device.ready = true
+			device.busy = false
+			device.halt = false
 		}
-	}
-	// Read next card.
-	d.image, err = d.ctx.ReadCard()
-	switch err {
-	case card.CardOK:
-		d.rdy = true
-	case card.CardEOF:
-		d.eof = true
-		d.busy = false
-		d.halt = false
-		ch.SetDevAttn(d.addr, dev.CStatusDevEnd|r)
-		return
-	case card.CardEmpty:
-		d.busy = false
-		d.halt = false
-		ch.SetDevAttn(d.addr, dev.CStatusDevEnd|r)
-		return
-	case card.CardError:
-		d.err = true
-		d.rdy = true
-		d.busy = false
-		d.halt = false
+
+		if device.err {
+			status = dev.CStatusCheck
+		}
 	}
 
 	// Copy next column of card over
 	if (cmd & maskCMD) == int(dev.CmdRead) {
-		if d.err {
-			d.sense = dev.SenseDATCHK
+		if device.err {
+			device.sense = dev.SenseDATCHK
 			goto feed
 		}
 	}
-	xlat = card.HolToEBCDIC(d.image.Image[d.col])
+	xlat = card.HolToEBCDIC(device.image.Image[device.currentCol])
 
 	if xlat == 0x100 {
-		d.sense = dev.SenseDATCHK
+		device.sense = dev.SenseDATCHK
 		xlat = 0
 	} else {
 		xlat &= 0xff
 	}
-	if ch.ChanWriteByte(d.addr, uint8(xlat)) {
+	if sys_channel.ChanWriteByte(device.addr, uint8(xlat)) {
 		goto feed
 	}
-	d.col++
-	if d.col != 80 {
-		ev.AddEvent(d, d.callback, 20, cmd)
+	device.currentCol++
+	if device.currentCol != 80 {
+		event.AddEvent(device, device.callback, 20, cmd)
 		return
 	}
+
 feed:
-	d.halt = false
+	device.halt = false
 	// If feed give, request a new card
 	if (cmd & maskStack) != maskStack {
-		d.rdy = false
-		ch.ChanEnd(d.addr, dev.CStatusChnEnd)
-		ev.AddEvent(d, d.callback, 1000, 0) // Feed the card
+		device.ready = false
+		sys_channel.ChanEnd(device.addr, dev.CStatusChnEnd)
+		event.AddEvent(device, device.callback, 1000, 0) // Feed the card
 	} else {
-		if d.err {
-			r = dev.CStatusCheck
+		if device.err {
+			status = dev.CStatusCheck
 		}
-		d.busy = false
-		ch.ChanEnd(d.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd | r))
+		device.busy = false
+		sys_channel.ChanEnd(device.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd | status))
 	}
 }

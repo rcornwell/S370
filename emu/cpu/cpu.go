@@ -213,11 +213,11 @@ func CycleCPU() int {
 		cpuState.perAddrCheck(cpuState.PC, 0x4000)
 	}
 
-	var opr, t uint32
+	var opr, word uint32
 	var step stepInfo
 
 	// Fetch the next instruction
-	t, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
+	word, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
 	if err != 0 {
 		cpuState.suppress(oPPSW, err)
 		return memCycle
@@ -225,9 +225,9 @@ func CycleCPU() int {
 
 	// Save instruction
 	if (cpuState.PC & 2) == 0 {
-		opr = (t >> 16) & 0xffff
+		opr = (word >> 16) & 0xffff
 	} else {
-		opr = t & 0xffff
+		opr = word & 0xffff
 	}
 	cpuState.perRegMod = 0
 	cpuState.perCode = 0
@@ -246,14 +246,14 @@ func CycleCPU() int {
 		cpuState.ilc++
 		// Check if we need new word?
 		if (cpuState.PC & 2) == 0 {
-			t, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
+			word, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
 			if err != 0 {
 				cpuState.suppress(oPPSW, err)
 				return memCycle
 			}
-			step.address1 = (t >> 16)
+			step.address1 = (word >> 16)
 		} else {
-			step.address1 = t
+			step.address1 = word
 		}
 		step.address1 &= 0xffff
 		cpuState.PC += 2
@@ -264,14 +264,14 @@ func CycleCPU() int {
 		cpuState.ilc++
 		// Do we need another word?
 		if (cpuState.PC & 2) == 0 {
-			t, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
+			word, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
 			if err != 0 {
 				cpuState.suppress(oPPSW, err)
 				return memCycle
 			}
-			step.address2 = (t >> 16)
+			step.address2 = (word >> 16)
 		} else {
-			step.address2 = t
+			step.address2 = word
 		}
 		step.address2 &= 0xffff
 		cpuState.PC += 2
@@ -295,10 +295,10 @@ func CycleCPU() int {
 func (cpu *cpu) execute(step *stepInfo) uint16 {
 	// Compute addresses of operands
 	if (step.opcode & 0xc0) != 0 { // RS, RX, SS
-		temp := (step.address1 >> 12) & 0xf
+		indexReg := (step.address1 >> 12) & 0xf
 		step.address1 &= 0xfff
-		if temp != 0 {
-			step.address1 += cpu.regs[temp]
+		if indexReg != 0 {
+			step.address1 += cpu.regs[indexReg]
 		}
 		step.address1 &= AMASK
 		step.src1 = step.address1
@@ -309,10 +309,10 @@ func (cpu *cpu) execute(step *stepInfo) uint16 {
 				step.address1 += cpu.regs[step.R2]
 			}
 		} else if (step.opcode & 0xc0) == 0xc0 { // SS
-			temp = (step.address2 >> 12) & 0xf
+			indexReg = (step.address2 >> 12) & 0xf
 			step.address2 &= 0xfff
-			if temp != 0 {
-				step.address2 += cpu.regs[temp]
+			if indexReg != 0 {
+				step.address2 += cpu.regs[indexReg]
 			}
 			step.address2 &= AMASK
 		}
@@ -334,7 +334,7 @@ func (cpu *cpu) execute(step *stepInfo) uint16 {
 			step.fsrc1 &= HMASKL
 		}
 
-		// RX instruction
+		// Floating point RX instruction
 		if (step.opcode & 0x40) != 0 {
 			var src1, src2 uint32
 			src1, err = cpu.readFull(step.address1)
@@ -406,10 +406,10 @@ func (cpu *cpu) createTable() {
 		cpu.opLPR, cpu.opLNR, cpu.opLTR, cpu.opLCR, cpu.opAnd, cpu.opCmpL, cpu.opOr, cpu.opXor, // 1x
 		cpu.opL, cpu.opCmp, cpu.opAdd, cpu.opSub, cpu.opMul, cpu.opDiv, cpu.opAddL, cpu.opSubL,
 
-		cpu.opLcs, cpu.opLcs, cpu.opLcs, cpu.opLcs, cpu.opFPHalf, cpu.opLRDR, cpu.opMXR, cpu.opMXD, // 2x
+		cpu.opFPLCS, cpu.opFPLCS, cpu.opFPLCS, cpu.opFPLCS, cpu.opFPHalf, cpu.opLRDR, cpu.opMXR, cpu.opMXD, // 2x
 		cpu.opFPLoad, cpu.opCD, cpu.opFPAddD, cpu.opFPAddD, cpu.opFPMul, cpu.opFPDiv, cpu.opFPAddD, cpu.opFPAddD,
 
-		cpu.opLcs, cpu.opLcs, cpu.opLcs, cpu.opLcs, cpu.opFPHalf, cpu.opLRER, cpu.opAXR, cpu.opAXR, // 3x
+		cpu.opFPLCS, cpu.opFPLCS, cpu.opFPLCS, cpu.opFPLCS, cpu.opFPHalf, cpu.opLRER, cpu.opAXR, cpu.opAXR, // 3x
 		cpu.opFPLoad, cpu.opCE, cpu.opFPAdd, cpu.opFPAdd, cpu.opFPMul, cpu.opFPDiv, cpu.opFPAdd, cpu.opFPAdd,
 
 		cpu.opSTH, cpu.opL, cpu.opSTC, cpu.opIC, cpu.opEX, cpu.opBAL, cpu.opBCT, cpu.opBC, // 4x
@@ -468,12 +468,12 @@ func (cpu *cpu) createTable() {
  */
 
 // Translate an address from virtual to physical.
-func (cpu *cpu) transAddr(va uint32) (uint32, uint16) {
+func (cpu *cpu) transAddr(virtAddr uint32) (uint32, uint16) {
 	var entry uint32
 	var err bool
 
 	// Check address in range
-	addr := va & AMASK
+	addr := virtAddr & AMASK
 
 	// If paging not enabled, return address.
 	if !cpu.pageEnb {
@@ -492,7 +492,7 @@ func (cpu *cpu) transAddr(va uint32) (uint32, uint16) {
 	// Quick check if TLB correct
 	entry = cpu.tlb[page]
 	if (entry&tlbValid) != 0 && ((entry^seg)&tlbSeg) == 0 {
-		addr = (va & cpu.pageMask) | ((entry & tlbPhy) << cpu.pageShift)
+		addr = (virtAddr & cpu.pageMask) | ((entry & tlbPhy) << cpu.pageShift)
 		return addr, 0
 	}
 
@@ -508,7 +508,7 @@ func (cpu *cpu) transAddr(va uint32) (uint32, uint16) {
 	if seg > cpu.segLen {
 		// segment above length of table,
 		// write failed address and 90, then trigger trap.
-		_ = mem.PutWord(0x90, va)
+		_ = mem.PutWord(0x90, virtAddr)
 		memCycle++
 		cpu.PC = cpu.iPC
 		return 0, ircSeg
@@ -531,7 +531,7 @@ func (cpu *cpu) transAddr(va uint32) (uint32, uint16) {
 	/* Check if entry valid and in correct length */
 	if (entry&pteValid) != 0 || (page>>cpu.pteLenShift) >= addr {
 		memCycle++
-		mem.SetMemory(0x90, va)
+		mem.SetMemory(0x90, virtAddr)
 		cpu.PC = cpu.iPC
 		if (entry & pteValid) != 0 {
 			return 0, ircSeg
@@ -555,7 +555,7 @@ func (cpu *cpu) transAddr(va uint32) (uint32, uint16) {
 
 	if (entry & cpu.pteMBZ) != 0 {
 		memCycle++
-		mem.SetMemory(0x90, va)
+		mem.SetMemory(0x90, virtAddr)
 		cpu.PC = cpu.iPC
 		return 0, ircSpec
 	}
@@ -563,19 +563,19 @@ func (cpu *cpu) transAddr(va uint32) (uint32, uint16) {
 	// Check if entry valid and in correct length
 	if (entry & cpu.pteAvail) != 0 {
 		memCycle++
-		mem.SetMemory(0x90, va)
+		mem.SetMemory(0x90, virtAddr)
 		cpu.PC = cpu.iPC
 		return 0, ircPage
 	}
 
 	// Compute correct entry
 	entry >>= cpu.pteShift // Move physical to correct spot
-	page = va >> cpu.pageShift
+	page = virtAddr >> cpu.pageShift
 	entry = entry | ((page & 0x1f00) << 4) | tlbValid
 	// Update TLB with new entry
 	cpu.tlb[page&0xff] = entry
 	// Compute physical address
-	addr = (va & cpu.pageMask) | (((entry & tlbPhy) << cpu.pageShift) & AMASK)
+	addr = (virtAddr & cpu.pageMask) | (((entry & tlbPhy) << cpu.pageShift) & AMASK)
 	return addr, 0
 }
 
@@ -660,13 +660,13 @@ func (cpu *cpu) checkProtect(addr uint32, write bool) bool {
 	if cpu.stKey == 0 {
 		return false
 	}
-	k := mem.GetKey(addr)
+	key := mem.GetKey(addr)
 	if write {
-		if (k & 0xf0) != cpu.stKey {
+		if (key & 0xf0) != cpu.stKey {
 			return true
 		}
 	} else {
-		if (k&0x8) != 0 && (k&0xf0) != cpu.stKey {
+		if (key&0x8) != 0 && (key&0xf0) != cpu.stKey {
 			return true
 		}
 	}
@@ -674,23 +674,23 @@ func (cpu *cpu) checkProtect(addr uint32, write bool) bool {
 }
 
 // * Check if we can access a range of mem.
-func (cpu *cpu) testAccess(va uint32, size uint32, write bool) uint16 {
+func (cpu *cpu) testAccess(virtAddr uint32, size uint32, write bool) uint16 {
 	// Translate address
-	pa, err := cpu.transAddr(va)
+	physAddr, err := cpu.transAddr(virtAddr)
 	if err != 0 {
 		return err
 	}
-	if cpu.checkProtect(pa, write) {
+	if cpu.checkProtect(physAddr, write) {
 		return ircProt
 	}
 
-	if size != 0 && (va&SPMASK) != ((va+size)&SPMASK) {
+	if size != 0 && (virtAddr&SPMASK) != ((virtAddr+size)&SPMASK) {
 		// Translate end address
-		pa, err := cpu.transAddr(va + size)
+		physAddr, err := cpu.transAddr(virtAddr + size)
 		if err != 0 {
 			return err
 		}
-		if cpu.checkProtect(pa, write) {
+		if cpu.checkProtect(physAddr, write) {
 			return ircProt
 		}
 	}
@@ -702,59 +702,54 @@ func (cpu *cpu) testAccess(va uint32, size uint32, write bool) uint16 {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *cpu) readFull(addr uint32) (uint32, uint16) {
-	var pa uint32
-	var v uint32
-	var err bool
-	var e uint16
-
-	offset := addr & 3
+func (cpu *cpu) readFull(virtAddr uint32) (uint32, uint16) {
+	offset := virtAddr & 3
 
 	// Validate address
-	pa, e = cpu.transAddr(addr)
-	if e != 0 {
-		return 0, e
+	physAddr, pageErr := cpu.transAddr(virtAddr)
+	if pageErr != 0 {
+		return 0, pageErr
 	}
 
-	if cpu.checkProtect(pa, false) {
+	if cpu.checkProtect(physAddr, false) {
 		return 0, ircProt
 	}
 
 	// Read actual data
 	memCycle++
-	v, err = mem.GetWord(addr)
+	word, err := mem.GetWord(virtAddr)
 	if err {
 		return 0, ircAddr
 	}
 
 	// Handle unaligned access
 	if offset != 0 {
-		addr2 := addr + 4
-		pa2 := pa + 4
+		addr2 := virtAddr + 4
+		physAddr2 := physAddr + 4
 
-		if (addr & SPMASK) != (addr2 & SPMASK) {
+		if (virtAddr & SPMASK) != (addr2 & SPMASK) {
 			// Check if possible next page
-			pa2, e = cpu.transAddr(addr2)
-			if e != 0 {
-				return 0, e
+			physAddr2, pageErr = cpu.transAddr(addr2)
+			if pageErr != 0 {
+				return 0, pageErr
 			}
 			// Check access protection
-			if cpu.checkProtect(pa2, false) {
+			if cpu.checkProtect(physAddr2, false) {
 				return 0, ircProt
 			}
 		}
 
 		memCycle++
-		t, err := mem.GetWord(pa2)
+		word2, err := mem.GetWord(physAddr2)
 		if err {
 			return 0, ircAddr
 		}
-		v <<= (8 * offset)
-		v |= (t >> (8 * (4 - offset)))
+		word <<= (8 * offset)
+		word |= (word2 >> (8 * (4 - offset)))
 	}
 
 	//	sim_debug(DEBUG_DATA, &cpu_dev, "RD A=%08x %08x\n", addr, *v)
-	return v, 0
+	return word, 0
 }
 
 /*
@@ -762,69 +757,64 @@ func (cpu *cpu) readFull(addr uint32) (uint32, uint16) {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *cpu) readHalf(addr uint32) (uint32, uint16) {
-	var pa uint32
-	var v uint32
-	var err bool
-	var e uint16
-
-	offset := addr & 3
+func (cpu *cpu) readHalf(virtAddr uint32) (uint32, uint16) {
+	offset := virtAddr & 3
 
 	/* Validate address */
-	pa, e = cpu.transAddr(addr)
-	if e != 0 {
-		return 0, e
+	physAddr, pageErr := cpu.transAddr(virtAddr)
+	if pageErr != 0 {
+		return 0, pageErr
 	}
 
 	// Check storage key
-	if cpu.checkProtect(pa, false) {
+	if cpu.checkProtect(physAddr, false) {
 		return 0, ircProt
 	}
 
 	// Get data
 	memCycle++
-	v, err = mem.GetWord(pa)
+	word, err := mem.GetWord(physAddr)
 	if err {
 		return 0, ircAddr
 	}
 
 	switch offset {
 	case 0:
-		v >>= 16
+		word >>= 16
 	case 1:
-		v >>= 8
+		word >>= 8
 	case 2:
 	case 3:
-		pa2 := pa + 1
+		physAddr2 := physAddr + 1
 		// Check if past a word
-		if (addr & SPMASK) != ((addr + 1) & SPMASK) {
+		if (virtAddr & SPMASK) != ((virtAddr + 1) & SPMASK) {
 			/* Check if possible next page */
-			pa2, e = cpu.transAddr(addr + 1)
-			if e != 0 {
-				return 0, e
+			physAddr2, pageErr = cpu.transAddr(virtAddr + 1)
+			if pageErr != 0 {
+				return 0, pageErr
 			}
 
 			// Check storage key
-			if cpu.checkProtect(pa2, false) {
+			if cpu.checkProtect(physAddr2, false) {
 				return 0, ircProt
 			}
 		}
 
 		memCycle++
-		if v2, err := mem.GetWord(pa2); err {
+		if word2, err := mem.GetWord(physAddr2); err {
 			return 0, ircAddr
 		} else {
-			v = (v & 0xff) << 8
-			v |= (v2 >> 24) & 0xff
+			word = (word & 0xff) << 8
+			word |= (word2 >> 24) & 0xff
 		}
 	}
 
 	// Sign extend the result
-	v &= LMASK
-	if (v & 0x8000) != 0 {
-		v |= 0xffff0000
+	word &= LMASK
+	if (word & 0x8000) != 0 {
+		word |= 0xffff0000
 	}
-	return v, 0
+	return word, 0
 }
 
 /*
@@ -832,52 +822,47 @@ func (cpu *cpu) readHalf(addr uint32) (uint32, uint16) {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *cpu) readByte(addr uint32) (uint32, uint16) {
-	var pa uint32
-	var v uint32
-	var err bool
-	var e uint16
-
-	offset := addr & 3
+func (cpu *cpu) readByte(virtAddr uint32) (uint32, uint16) {
+	offset := virtAddr & 3
 
 	// Validate address
-	pa, e = cpu.transAddr(addr)
-	if e != 0 {
-		return 0, e
+	physAddr, pageErr := cpu.transAddr(virtAddr)
+	if pageErr != 0 {
+		return 0, pageErr
 	}
 
-	if cpu.checkProtect(pa, false) {
+	if cpu.checkProtect(physAddr, false) {
 		return 0, ircProt
 	}
 
 	// Read actual data
 	memCycle++
-	v, err = mem.GetWord(addr)
+	word, err := mem.GetWord(virtAddr)
 	if err {
 		return 0, ircAddr
 	}
 
-	v = (v >> (8 * (3 - offset))) & 0xff
+	word = (word >> (8 * (3 - offset))) & 0xff
 	// sim_debug(DEBUG_DATA, &cpu_dev, "RD B=%08x %08x\n", addr, *v)
-	return v, 0
+	return word, 0
 }
 
-func (cpu *cpu) perAddrCheck(addr uint32, code uint16) {
+func (cpu *cpu) perAddrCheck(virtAddr uint32, code uint16) {
 	if cpu.cregs[10] <= cpu.cregs[11] {
-		if addr >= cpu.cregs[10] && addr <= cpu.cregs[11] {
+		if virtAddr >= cpu.cregs[10] && virtAddr <= cpu.cregs[11] {
 			cpu.perCode |= code
 		}
 	} else {
-		if addr >= cpu.cregs[11] || addr <= cpu.cregs[10] {
+		if virtAddr >= cpu.cregs[11] || virtAddr <= cpu.cregs[10] {
 			cpu.perCode |= code
 		}
 	}
 }
 
 // Check if address is in the range of PER modify range.
-func (cpu *cpu) perCheck(addr uint32) {
+func (cpu *cpu) perCheck(virtAddr uint32) {
 	if cpu.perEnb && cpu.perStore {
-		cpu.perAddrCheck(addr, 0x2000)
+		cpu.perAddrCheck(virtAddr, 0x2000)
 	}
 }
 
@@ -886,78 +871,76 @@ func (cpu *cpu) perCheck(addr uint32) {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *cpu) writeFull(addr, data uint32) uint16 {
-	var e uint16
-	var pa uint32
+func (cpu *cpu) writeFull(virtAddr, data uint32) uint16 {
 	var err1, err2 bool
 
-	offset := addr & 3
+	offset := virtAddr & 3
 
 	// Validate address
-	pa, e = cpu.transAddr(addr)
-	if e != 0 {
-		return e
+	physAddr, pageErr := cpu.transAddr(virtAddr)
+	if pageErr != 0 {
+		return pageErr
 	}
 
 	// Check storage key
-	if cpu.checkProtect(pa, true) {
+	if cpu.checkProtect(physAddr, true) {
 		return ircProt
 	}
 
 	// Check if in storage area
-	cpu.perCheck(addr)
+	cpu.perCheck(virtAddr)
 
-	pa2 := pa + 4
-	addr2 := (addr & 0x00fffffc) + 4
+	physAddr2 := physAddr + 4
+	virtAddr2 := (virtAddr & 0x00fffffc) + 4
 	if offset != 0 {
 
 		// Check if we handle unaligned access
-		if (addr & SPMASK) != (addr2 & SPMASK) {
+		if (virtAddr & SPMASK) != (virtAddr2 & SPMASK) {
 			// Validate address
-			pa2, e = cpu.transAddr(addr2)
-			if e != 0 {
-				return e
+			physAddr2, pageErr = cpu.transAddr(virtAddr2)
+			if pageErr != 0 {
+				return pageErr
 			}
 
 			// Check against storage key
-			if cpu.checkProtect(pa2, true) {
+			if cpu.checkProtect(physAddr2, true) {
 				return ircProt
 			}
 		}
 
 		// Check if in storage area
-		cpu.perCheck(addr2)
+		cpu.perCheck(virtAddr2)
 	}
 
 	switch offset {
 	case 0:
 		memCycle++
-		err1 = mem.PutWord(pa, data)
+		err1 = mem.PutWord(physAddr, data)
 		err2 = false
 	case 1:
 		memCycle++
-		err1 = mem.PutWordMask(pa, data>>8, 0x00ffffff)
+		err1 = mem.PutWordMask(physAddr, data>>8, 0x00ffffff)
 		memCycle++
-		err2 = mem.PutWordMask(pa2, data<<24, 0xff000000)
+		err2 = mem.PutWordMask(physAddr2, data<<24, 0xff000000)
 	case 2:
 		memCycle++
-		err1 = mem.PutWordMask(pa, data>>16, 0x0000ffff)
+		err1 = mem.PutWordMask(physAddr, data>>16, 0x0000ffff)
 		memCycle++
-		err2 = mem.PutWordMask(pa2, data<<16, 0xffff0000)
+		err2 = mem.PutWordMask(physAddr2, data<<16, 0xffff0000)
 	case 3:
 		memCycle++
-		err1 = mem.PutWordMask(pa, data>>24, 0x000000ff)
+		err1 = mem.PutWordMask(physAddr, data>>24, 0x000000ff)
 		memCycle++
-		err2 = mem.PutWordMask(pa2, data<<8, 0xffffff00)
+		err2 = mem.PutWordMask(physAddr2, data<<8, 0xffffff00)
 	}
 
 	if err1 || err2 {
-		e = ircAddr
+		pageErr = ircAddr
 	} else {
-		e = 0
+		pageErr = 0
 	}
 	//	sim_debug(DEBUG_DATA, &cpu_dev, "WR A=%08x %08x\n", addr, data)
-	return e
+	return pageErr
 }
 
 /*
@@ -965,58 +948,56 @@ func (cpu *cpu) writeFull(addr, data uint32) uint16 {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *cpu) writeHalf(addr, data uint32) uint16 {
-	var e uint16
-	var pa uint32
+func (cpu *cpu) writeHalf(virtAddr, data uint32) uint16 {
 	var err bool
 
-	offset := addr & 3
+	offset := virtAddr & 3
 
 	// Validate address			cy = dec_divstep(l int, s1 int, s2 int, v1 *[32]uint8, v2 *[32]uint8) uint8
-	pa, e = cpu.transAddr(addr)
-	if e != 0 {
-		return e
+	physAddr, pageErr := cpu.transAddr(virtAddr)
+	if pageErr != 0 {
+		return pageErr
 	}
 
-	if cpu.checkProtect(pa, true) {
+	if cpu.checkProtect(physAddr, true) {
 		return ircProt
 	}
 
-	cpu.perCheck(addr)
+	cpu.perCheck(virtAddr)
 
 	switch offset {
 	case 0:
 		memCycle++
-		err = mem.PutWordMask(pa, data<<16, 0xffff0000)
+		err = mem.PutWordMask(physAddr, data<<16, 0xffff0000)
 	case 1:
 		memCycle++
-		err = mem.PutWordMask(pa, data<<8, 0x00ffff00)
+		err = mem.PutWordMask(physAddr, data<<8, 0x00ffff00)
 	case 2:
 		memCycle++
-		err = mem.PutWordMask(pa, data, LMASK)
+		err = mem.PutWordMask(physAddr, data, LMASK)
 	case 3:
-		addr2 := addr + 1
-		pa2 := pa + 1
+		virtAddr2 := virtAddr + 1
+		physAddr2 := physAddr + 1
 
-		cpu.perCheck(addr)
+		cpu.perCheck(virtAddr)
 
-		if (addr & SPMASK) != (addr2 & SPMASK) {
+		if (virtAddr & SPMASK) != (virtAddr2 & SPMASK) {
 			// Validate address
-			pa2, e = cpu.transAddr(addr2)
-			if e != 0 {
-				return e
+			physAddr2, pageErr = cpu.transAddr(virtAddr2)
+			if pageErr != 0 {
+				return pageErr
 			}
 
 			// Check against storage key
-			if cpu.checkProtect(pa2, true) {
+			if cpu.checkProtect(physAddr2, true) {
 				return ircProt
 			}
 		}
 
 		memCycle++
 		memCycle++
-		err = mem.PutWordMask(pa, data>>8, 0x000000ff)
-		err2 := mem.PutWordMask(pa2, data<<24, 0xff000000)
+		err = mem.PutWordMask(physAddr, data>>8, 0x000000ff)
+		err2 := mem.PutWordMask(physAddr2, data<<24, 0xff000000)
 		if err || err2 {
 			return ircAddr
 		}
@@ -1032,28 +1013,26 @@ func (cpu *cpu) writeHalf(addr, data uint32) uint16 {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *cpu) writeByte(addr, data uint32) uint16 {
-	var e uint16
-	var pa uint32
+func (cpu *cpu) writeByte(virtAddr, data uint32) uint16 {
 	var err bool
 
 	// Validate address
-	pa, e = cpu.transAddr(addr)
-	if e != 0 {
-		return e
+	physAddr, pageErr := cpu.transAddr(virtAddr)
+	if pageErr != 0 {
+		return pageErr
 	}
 
-	if cpu.checkProtect(pa, true) {
+	if cpu.checkProtect(physAddr, true) {
 		return ircProt
 	}
 
-	cpu.perCheck(addr)
+	cpu.perCheck(virtAddr)
 
 	var mask uint32 = 0x000000ff
 
-	offset := 8 * (3 - (addr & 0x3))
+	offset := 8 * (3 - (virtAddr & 0x3))
 	memCycle++
-	if err = mem.PutWordMask(pa, data<<offset, mask<<offset); err {
+	if err = mem.PutWordMask(physAddr, data<<offset, mask<<offset); err {
 		return ircAddr
 	}
 	//	sim_debug(DEBUG_DATA, &cpu_dev, "WR A=%08x %02x\n", addr, data)
@@ -1115,16 +1094,16 @@ func (cpu *cpu) lpsw(src1, src2 uint32) {
 }
 
 // Load register pair into 64 bit integer.
-func (cpu *cpu) loadDouble(r uint8) uint64 {
-	t := (uint64(cpu.regs[r]) << 32) | uint64(cpu.regs[r|1])
-	return t
+func (cpu *cpu) loadDouble(reg uint8) uint64 {
+	value := (uint64(cpu.regs[reg]) << 32) | uint64(cpu.regs[reg|1])
+	return value
 }
 
 // Store a 64 bit integer in register pair.
-func (cpu *cpu) storeDouble(r uint8, v uint64) {
-	cpu.regs[r|1] = uint32(v & LMASKL)
-	cpu.regs[r] = uint32((v >> 32) & LMASKL)
-	cpu.perRegMod |= 3 << r
+func (cpu *cpu) storeDouble(reg uint8, value uint64) {
+	cpu.regs[reg|1] = uint32(value & LMASKL)
+	cpu.regs[reg] = uint32((value >> 32) & LMASKL)
+	cpu.perRegMod |= 3 << reg
 }
 
 //

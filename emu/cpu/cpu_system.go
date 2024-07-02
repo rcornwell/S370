@@ -43,8 +43,7 @@ func (cpu *cpu) opSSK(step *stepInfo) uint16 {
 	if !memory.CheckAddr(step.address1) {
 		return ircAddr
 	}
-	t := uint8(step.src1 & 0xf8)
-	memory.PutKey(step.address1, t)
+	memory.PutKey(step.address1, uint8(step.src1&0xf8))
 	return 0
 }
 
@@ -61,12 +60,12 @@ func (cpu *cpu) opISK(step *stepInfo) uint16 {
 	if !memory.CheckAddr(step.address1) {
 		return ircAddr
 	}
-	t := memory.GetKey(step.address1)
+	key := memory.GetKey(step.address1)
 	cpu.regs[step.R1] &= 0xffffff00
 	if cpu.ecMode {
-		cpu.regs[step.R1] |= uint32(t) & 0xfe
+		cpu.regs[step.R1] |= uint32(key) & 0xfe
 	} else {
-		cpu.regs[step.R1] |= uint32(t) & 0xf8
+		cpu.regs[step.R1] |= uint32(key) & 0xf8
 	}
 	cpu.perRegMod |= 1 << step.R1
 	return 0
@@ -99,30 +98,29 @@ func (cpu *cpu) opSSM(step *stepInfo) uint16 {
 	}
 
 	// Fetch new system mask
-	t, err := cpu.readByte(step.address1)
+	newSSM, err := cpu.readByte(step.address1)
 	if err != 0 {
 		return err
 	}
 
 	// If in EC Mode, update various flags.
-	sm := uint8(t)
-	cpu.extEnb = (sm & extEnable) != 0
+	cpu.extEnb = (newSSM & uint32(extEnable)) != 0
 	if cpu.ecMode {
-		if (sm & irqEnable) != 0 {
+		if (newSSM & uint32(irqEnable)) != 0 {
 			cpu.irqEnb = true
 			cpu.sysMask = uint16(cpu.cregs[2] >> 16)
 		} else {
 			cpu.irqEnb = false
 			cpu.sysMask = 0
 		}
-		cpu.pageEnb = (sm & datEnable) != 0
-		cpu.perEnb = (sm & perEnable) != 0
-		if (t & 0xb8) != 0 {
+		cpu.pageEnb = (newSSM & uint32(datEnable)) != 0
+		cpu.perEnb = (newSSM & uint32(perEnable)) != 0
+		if (newSSM & 0xb8) != 0 {
 			return ircSpec
 		}
 	} else {
-		cpu.sysMask = uint16(t&0xfc) << 8
-		if (t & 0x2) != 0 {
+		cpu.sysMask = uint16(newSSM&0xfc) << 8
+		if (newSSM & 0x2) != 0 {
 			cpu.sysMask |= uint16((cpu.cregs[2] >> 16) & 0x3ff)
 		}
 		cpu.irqEnb = cpu.sysMask != 0
@@ -315,7 +313,8 @@ func (cpu *cpu) opLRA(step *stepInfo) uint16 {
 
 // Execute instruction.
 func (cpu *cpu) opEX(step *stepInfo) uint16 {
-	var s stepInfo
+	var s stepInfo // New stepInfo
+
 	// Fetch the next instruction
 	opr, err := cpu.readHalf(step.address1)
 	if err != 0 {
@@ -390,67 +389,64 @@ func (cpu *cpu) opSTxSM(step *stepInfo) uint16 {
 		return ircPriv
 	}
 
-	ssm := uint8(0)
-	var r uint8
+	var oldSSM uint8
+	var newSSM uint8
 
 	if cpu.ecMode {
 		if cpu.pageEnb {
-			ssm |= datEnable
+			oldSSM |= datEnable
 		}
 		if cpu.irqEnb {
-			ssm |= irqEnable
+			oldSSM |= irqEnable
 		}
 		if cpu.perEnb {
-			ssm |= perEnable
+			oldSSM |= perEnable
 		}
 		if cpu.extEnb {
-			ssm |= extEnable
+			oldSSM |= extEnable
 		}
 	} else {
-		ssm = uint8((cpu.sysMask) >> 8 & 0xfe)
+		oldSSM = uint8((cpu.sysMask) >> 8 & 0xfe)
 		if cpu.extEnb {
-			ssm |= extEnable
+			oldSSM |= extEnable
 		}
 	}
 
 	// Merge mask
 	if step.opcode == OpSTNSM {
-		r = step.reg & ssm
+		newSSM = step.reg & oldSSM
 	} else {
-		r = step.reg | ssm
+		newSSM = step.reg | oldSSM
 	}
 
 	// Store original value
 
-	if err := cpu.writeByte(step.address1, uint32(r)); err != 0 {
+	if err := cpu.writeByte(step.address1, uint32(newSSM)); err != 0 {
 		return err
 	}
 
 	// Set new PSW
 	if cpu.ecMode {
-		if (r & 0xb8) != 0 {
+		if (newSSM & 0xb8) != 0 {
 			return ircSpec
 		}
-		cpu.pageEnb = (r & datEnable) != 0
-		cpu.irqEnb = (r & irqEnable) != 0
-		cpu.perEnb = (r & perEnable) != 0
+		cpu.pageEnb = (newSSM & datEnable) != 0
+		cpu.irqEnb = (newSSM & irqEnable) != 0
+		cpu.perEnb = (newSSM & perEnable) != 0
 		if cpu.irqEnb {
 			cpu.sysMask = uint16(cpu.cregs[2] >> 16)
 		} else {
 			cpu.sysMask = 0
 		}
-		if (r & 0xb8) != 0 {
-			return ircSpec
-		}
 	} else {
-		cpu.sysMask = (uint16(r) << 8) & uint16(0xfc00)
-		if (r & irqEnable) != 0 {
+		cpu.sysMask = (uint16(newSSM) << 8) & uint16(0xfc00)
+		if (newSSM & irqEnable) != 0 {
 			cpu.sysMask |= uint16(cpu.cregs[2]>>16) & uint16(0x3ff)
 		}
 		cpu.irqEnb = cpu.sysMask != 0
 	}
 	ch.IrqPending = true
-	cpu.extEnb = (r & extEnable) != 0
+	cpu.extEnb = (newSSM & extEnable) != 0
 	return 0
 }
 
@@ -516,12 +512,14 @@ func (cpu *cpu) opLCTL(step *stepInfo) uint16 {
 				^cpu.pageMask) & AMASK) >> cpu.pageShift
 			cpu.intEnb = (temp & 0x400) != 0
 			cpu.todEnb = (temp & 0x800) != 0
+
 		case 1: // Segment table address and length
 			for i := range 256 {
 				cpu.tlb[i] = 0
 			}
 			cpu.segAddr = temp & AMASK
 			cpu.segLen = (((temp >> 24) & 0xff) + 1) << 4
+
 		case 2: // Masks
 			if cpu.ecMode {
 				if cpu.irqEnb {
@@ -531,13 +529,16 @@ func (cpu *cpu) opLCTL(step *stepInfo) uint16 {
 				}
 				ch.IrqPending = true
 			}
+
 		case 6: // Assist function control
 			if cpu.vmAssist && (temp&0xc0000000) == 0x80000000 {
 				cpu.vmEnb = true
 			} else {
 				cpu.vmEnb = false
 			}
+
 		case 8: // Monitor masks
+
 		case 9: // PER general register masks
 			cpu.perBranch = (temp & 0x80000000) != 0
 			cpu.perFetch = (temp & 0x40000000) != 0
@@ -594,9 +595,6 @@ func (cpu *cpu) opDIAG(step *stepInfo) uint16 {
 
 // Handle special 370 opcodes.
 func (cpu *cpu) opB2(step *stepInfo) uint16 {
-	var t1, t2 uint32
-	var err uint16
-
 	if step.reg > 0x13 {
 		return ircOper
 	}
@@ -618,57 +616,62 @@ func (cpu *cpu) opB2(step *stepInfo) uint16 {
 		}
 	case 0x02: // STIDP
 		// Store CPUID in double word
-		t1 = uint32(100)
-		err = cpu.writeFull(step.address1, t1)
+		t1 := uint32(100)
+		err := cpu.writeFull(step.address1, t1)
 		if err != 0 {
 			return err
 		}
-		t2 = uint32(0x145) << 16
+		t2 := uint32(0x145) << 16
 		return cpu.writeFull(step.address1+4, t2)
 	case 0x03: // STIDC
 		// Store channel id
-		c := uint16(step.address1 & HMASK)
-		r := uint32(0)
-		switch ch.GetType(c) {
+		testChan := uint16(step.address1 & HMASK)
+		var result uint32
+		switch ch.GetType(testChan) {
 		case dev.TypeUNA:
 			cpu.cc = 3
 			return 0
 		case dev.TypeMux:
-			r = uint32(0x10000000)
+			result = uint32(0x10000000)
 		case dev.TypeBMux:
-			r = uint32(0x20000000)
+			result = uint32(0x20000000)
 		default:
 			// Nop
 		}
-		memory.SetMemory(0xA8, r)
+		memory.SetMemory(0xA8, result)
 		cpu.cc = 0
 		return 0
 	case 0x04: // SCK
+		var low, high uint32
+		var err uint16
+
 		// Load check with double word
-		t1, err = cpu.readFull(step.address1)
+		low, err = cpu.readFull(step.address1)
 		if err != 0 {
 			return err
 		}
-		t2, err = cpu.readFull(step.address1 + 4)
+		high, err = cpu.readFull(step.address1 + 4)
 		if err != 0 {
 			return err
 		}
-		cpu.todClock[0] = t1
-		cpu.todClock[1] = t2
+		cpu.todClock[0] = low
+		cpu.todClock[1] = high
 		cpu.todSet = true
 		// cpu.check_tod_irq()
 		cpu.cc = 0
 	case 0x05: // STCK
+		var low, high uint32
+
 		// Store TOD clock in location
-		t1 = cpu.todClock[0]
-		t2 = cpu.todClock[1]
+		low = cpu.todClock[0]
+		high = cpu.todClock[1]
 		// Update clock based on time before next irq
-		t2 &= 0xffff000
-		err = cpu.writeFull(step.address1, t1)
+		high &= 0xffff000
+		err := cpu.writeFull(step.address1, low)
 		if err != 0 {
 			return err
 		}
-		err = cpu.writeFull(step.address1+4, t2)
+		err = cpu.writeFull(step.address1+4, high)
 		if err != 0 {
 			return err
 		}
@@ -678,38 +681,50 @@ func (cpu *cpu) opB2(step *stepInfo) uint16 {
 			cpu.cc = 1
 		}
 	case 0x06: // SCKC
+		var low, high uint32
+		var err uint16
+
 		// Load Clock compare with double word
-		if t1, err = cpu.readFull(step.address1); err != 0 {
-			return err
-		}
-		if t2, err = cpu.readFull(step.address1 + 4); err != 0 {
-			return err
-		}
-		cpu.clkCmp[0] = t1
-		cpu.clkCmp[1] = t2
-		// cpu.check_tod_irq()
-	case 0x07: // STCKC
-		// Store TOD clock in location
-		t1 = cpu.clkCmp[0]
-		t2 = cpu.clkCmp[1]
-		err = cpu.writeFull(step.address1, t1)
+		low, err = cpu.readFull(step.address1)
 		if err != 0 {
 			return err
 		}
-		err = cpu.writeFull(step.address1+4, t2)
+		high, err = cpu.readFull(step.address1 + 4)
+		if err != 0 {
+			return err
+		}
+		cpu.clkCmp[0] = low
+		cpu.clkCmp[1] = high
+		// cpu.check_tod_irq()
+	case 0x07: // STCKC
+		var low, high uint32
+
+		// Store TOD clock in location
+		low = cpu.clkCmp[0]
+		high = cpu.clkCmp[1]
+		err := cpu.writeFull(step.address1, low)
+		if err != 0 {
+			return err
+		}
+		err = cpu.writeFull(step.address1+4, high)
 		if err != 0 {
 			return err
 		}
 	case 0x08: // SPT
+		var low, high uint32
+		var err uint16
+
 		// Set the CPU timer with double word
-		if t1, err = cpu.readFull(step.address1); err != 0 {
+		low, err = cpu.readFull(step.address1)
+		if err != 0 {
 			return err
 		}
-		if t2, err = cpu.readFull(step.address1 + 4); err != 0 {
+		high, err = cpu.readFull(step.address1 + 4)
+		if err != 0 {
 			return err
 		}
-		cpu.cpuTimer[0] = t1
-		cpu.cpuTimer[1] = t2
+		cpu.cpuTimer[0] = low
+		cpu.cpuTimer[1] = high
 		cpu.todSet = true
 		//                               if (sim_is_active(&cpu_unit[0])) {
 		//                                   double nus = sim_activate_time_usecs(&cpu_unit[0]);
@@ -717,15 +732,19 @@ func (cpu *cpu) opB2(step *stepInfo) uint16 {
 		//                               }
 		//                               clk_irq = (cpu_timer[0] & MSIGN) != 0;
 	case 0x09: // STPT
+		var low, high uint32
+
 		// Store the CPU timer in double word
-		t1 = cpu.cpuTimer[0]
-		t2 = cpu.cpuTimer[1]
+		low = cpu.cpuTimer[0]
+		high = cpu.cpuTimer[1]
 		// Update clock based on time before next irq
-		t2 &= 0xffff000
-		if err := cpu.writeFull(step.address1, t1); err != 0 {
+		high &= 0xffff000
+		err := cpu.writeFull(step.address1, low)
+		if err != 0 {
 			return err
 		}
-		if err := cpu.writeFull(step.address1+4, t2); err != 0 {
+		err = cpu.writeFull(step.address1+4, high)
+		if err != 0 {
 			return err
 		}
 	case 0x0a: // SPKA
@@ -745,9 +764,9 @@ func (cpu *cpu) opB2(step *stepInfo) uint16 {
 		return ircOper
 	case 0x13: // RRB
 		// Set storage block reference bit to zero
-		k := memory.GetKey(step.address1)
-		memory.PutKey(step.address1, k&0xfb)
-		cpu.cc = (k >> 1) & 0x3
+		key := memory.GetKey(step.address1)
+		memory.PutKey(step.address1, key&0xfb)
+		cpu.cc = (key >> 1) & 0x3
 	default:
 		return ircOper
 	}
