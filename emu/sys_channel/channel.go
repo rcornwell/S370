@@ -24,8 +24,12 @@
 package syschannel
 
 import (
-	D "github.com/rcornwell/S370/emu/device"
-	M "github.com/rcornwell/S370/emu/memory"
+	"fmt"
+	"net"
+
+	dev "github.com/rcornwell/S370/emu/device"
+	mem "github.com/rcornwell/S370/emu/memory"
+	tel "github.com/rcornwell/S370/telnet"
 )
 
 const (
@@ -72,44 +76,42 @@ const (
 
 // Holds individual subchannel control information.
 type chanCtl struct {
-	dev        D.Device // Pointer to device interface
-	caw        uint32   // Channel command address word
-	ccwAddr    uint32   // Channel address
-	ccwIAddr   uint32   // Channel indirect address
-	ccwCount   uint16   // Channel count
-	ccwCmd     uint8    // Channel command and flags
-	ccwKey     uint8    // Channel key
-	ccwFlags   uint16   // Channel control flags
-	chanBuffer uint32   // Channel data buffer
-	chanStatus uint16   // Channel status
-	chanDirty  bool     // Buffer has been modified
-	devAddr    uint16   // Device on channel
-	chanByte   uint8    // Current byte, dirty/full
-	chainFlg   bool     // Holding on chain
+	dev        dev.Device // Pointer to device interface
+	caw        uint32     // Channel command address word
+	ccwAddr    uint32     // Channel address
+	ccwIAddr   uint32     // Channel indirect address
+	ccwCount   uint16     // Channel count
+	ccwCmd     uint8      // Channel command and flags
+	ccwKey     uint8      // Channel key
+	ccwFlags   uint16     // Channel control flags
+	chanBuffer uint32     // Channel data buffer
+	chanStatus uint16     // Channel status
+	chanDirty  bool       // Buffer has been modified
+	devAddr    uint16     // Device on channel
+	chanByte   uint8      // Current byte, dirty/full
+	chainFlg   bool       // Holding on chain
 }
 
 // Holds channel information.
 type chanDev struct {
-	devTab     [256]D.Device // Pointer to device interfaces
-	devStatus  [256]uint8    // Status from each device
-	chanType   int           // Type of channel
-	numSubChan int           // Number of subchannels
-	irqPending bool          // Channel has pending IRQ
-	subChans   []chanCtl     // Subchannel control
+	devStatus  [256]uint8      // Status from each device
+	devTab     [256]dev.Device // Pointer to device interfaces
+	devTel     [256]tel.Telnet // Telnet device.
+	chanType   int             // Type of channel
+	numSubChan int             // Number of subchannels
+	irqPending bool            // Channel has pending IRQ
+	subChans   []chanCtl       // Subchannel control
 }
 
 var (
 	IrqPending bool
-	Loading    = D.NoDev
+	Loading    = dev.NoDev
 
 	// Hold information about channels.
 	chanUnit [16]*chanDev
 
 	// Are block multiplexer channels enabled.
 	bmuxEnable bool
-
-	// Empty device for initialization.
-	nullDev D.Device
 )
 
 // Set whether Block multiplexer is enabled or not.
@@ -121,7 +123,7 @@ func SetBMUXenable(enable bool) {
 func GetType(devNum uint16) int {
 	cUnit := chanUnit[(devNum>>8)&0xf]
 	if cUnit == nil {
-		return D.TypeUNA
+		return dev.TypeUNA
 	}
 	return cUnit.chanType
 }
@@ -138,7 +140,7 @@ func StartIO(devNum uint16) uint8 {
 	}
 
 	// If no device or channel, return CC = 3
-	if cUnit.devTab[dNum] == nullDev || subChan == nil {
+	if cUnit.devTab[dNum] == nil || subChan == nil {
 		return 3
 	}
 
@@ -154,15 +156,15 @@ func StartIO(devNum uint16) uint8 {
 	}
 
 	dStatus := cUnit.devStatus[dNum]
-	if dStatus == D.CStatusDevEnd || dStatus == (D.CStatusDevEnd|D.CStatusChnEnd) {
+	if dStatus == dev.CStatusDevEnd || dStatus == (dev.CStatusDevEnd|dev.CStatusChnEnd) {
 		cUnit.devStatus[dNum] = 0
 		dStatus = 0
 	}
 
 	// Check for any pending status for this device
 	if dStatus != 0 {
-		M.SetMemory(0x44, uint32(dStatus)<<24)
-		M.SetMemory(0x40, 0)
+		mem.SetMemory(0x44, uint32(dStatus)<<24)
+		mem.SetMemory(0x40, 0)
 		cUnit.devStatus[dNum] = 0
 		return 1
 	}
@@ -172,13 +174,13 @@ func StartIO(devNum uint16) uint8 {
 		return 2
 	}
 	if status != 0 {
-		M.PutWordMask(0x44, uint32(status)<<16, statusMask)
+		mem.PutWordMask(0x44, uint32(status)<<16, statusMask)
 		return 1
 	}
 
 	// All ok, get caw address
 	subChan.chanStatus = 0
-	subChan.caw = M.GetMemory(0x48)
+	subChan.caw = mem.GetMemory(0x48)
 	subChan.ccwKey = uint8(((subChan.caw & keyMask) >> 24) & 0xff)
 	subChan.caw &= addrMask
 	subChan.devAddr = devNum
@@ -186,10 +188,10 @@ func StartIO(devNum uint16) uint8 {
 	cUnit.devStatus[dNum] = 0
 
 	if loadCCW(cUnit, subChan, false) {
-		M.SetMemoryMask(0x44, uint32(subChan.chanStatus)<<16, statusMask)
+		mem.SetMemoryMask(0x44, uint32(subChan.chanStatus)<<16, statusMask)
 		subChan.chanStatus = 0
 		subChan.ccwCmd = 0
-		subChan.devAddr = D.NoDev
+		subChan.devAddr = dev.NoDev
 		subChan.dev = nil
 		cUnit.devStatus[dNum] = 0
 		return 1
@@ -197,10 +199,10 @@ func StartIO(devNum uint16) uint8 {
 
 	// If channel returned busy save CSW and return CC = 1
 	if (subChan.chanStatus & statusBusy) != 0 {
-		M.SetMemoryMask(0x44, uint32(subChan.chanStatus)<<16, statusMask)
+		mem.SetMemoryMask(0x44, uint32(subChan.chanStatus)<<16, statusMask)
 		subChan.chanStatus = 0
 		subChan.ccwCmd = 0
-		subChan.devAddr = D.NoDev
+		subChan.devAddr = dev.NoDev
 		subChan.dev = nil
 		cUnit.devStatus[dNum] = 0
 		return 1
@@ -213,10 +215,10 @@ func StartIO(devNum uint16) uint8 {
 		if (subChan.chanStatus & statusDevEnd) != 0 {
 			storeCSW(subChan)
 		} else {
-			M.SetMemoryMask(0x44, uint32(subChan.chanStatus)<<16, statusMask)
+			mem.SetMemoryMask(0x44, uint32(subChan.chanStatus)<<16, statusMask)
 		}
 		subChan.ccwCmd = 0
-		subChan.devAddr = D.NoDev
+		subChan.devAddr = dev.NoDev
 		subChan.dev = nil
 		cUnit.devStatus[dNum] = 0
 		subChan.chanStatus = 0
@@ -226,7 +228,7 @@ func StartIO(devNum uint16) uint8 {
 
 	// If immediate command and chaining report status, but don't clear things
 	if (subChan.chanStatus&(statusChnEnd|statusDevEnd)) == statusChnEnd && (subChan.ccwFlags&chainCmd) != 0 {
-		M.SetMemoryMask(0x44, uint32(subChan.chanStatus)<<16, statusMask)
+		mem.SetMemoryMask(0x44, uint32(subChan.chanStatus)<<16, statusMask)
 		return 1
 	}
 
@@ -246,7 +248,7 @@ func TestIO(devNum uint16) uint8 {
 	}
 
 	// If no device or channel, return CC = 3
-	if cUnit.devTab[dNum] == nullDev || subChan == nil {
+	if cUnit.devTab[dNum] == nil || subChan == nil {
 		return 3
 	}
 
@@ -264,14 +266,15 @@ func TestIO(devNum uint16) uint8 {
 	// Device finished and channel status pending return it and cc=1
 	if subChan.ccwCmd == 0 && subChan.chanStatus != 0 {
 		storeCSW(subChan)
-		subChan.devAddr = D.NoDev
+		subChan.devAddr = dev.NoDev
+		fmt.Println("TIO CSW")
 		return 1
 	}
 
 	// Device has returned a status, store the csw and return cc=1
 	if cUnit.devStatus[dNum] != 0 {
-		M.SetMemory(0x40, 0)
-		M.SetMemory(0x44, (uint32(cUnit.devStatus[dNum]) << 24))
+		mem.SetMemory(0x40, 0)
+		mem.SetMemory(0x44, (uint32(cUnit.devStatus[dNum]) << 24))
 		cUnit.devStatus[dNum] = 0
 		return 1
 	}
@@ -296,16 +299,18 @@ func TestIO(devNum uint16) uint8 {
 
 	// If we get a error, save csw and return cc = 1
 	if (status & errorStatus) != 0 {
-		M.SetMemoryMask(0x44, uint32(status)<<16, statusMask)
+		mem.SetMemoryMask(0x44, uint32(status)<<16, statusMask)
 		return 1
 	}
 
 	// Check if device BUSY
 	if (status & statusBusy) != 0 {
+		fmt.Println("TIO cc = 2")
 		return 2
 	}
 
 	// Everything ok, return cc = 0
+	fmt.Println("TIO cc = 0")
 	return 0
 }
 
@@ -322,7 +327,7 @@ func HaltIO(devNum uint16) uint8 {
 	}
 
 	// If no device or channel, return CC = 3
-	if cUnit.devTab[dNum] == nullDev || subChan == nil {
+	if cUnit.devTab[dNum] == nil || subChan == nil {
 		return 3
 	}
 
@@ -342,7 +347,7 @@ func HaltIO(devNum uint16) uint8 {
 	// Let device try to halt
 	cc := cUnit.devTab[dNum].HaltIO()
 	if cc == 1 {
-		M.SetMemoryMask(0x44, (uint32(subChan.chanStatus) << 16), statusMask)
+		mem.SetMemoryMask(0x44, (uint32(subChan.chanStatus) << 16), statusMask)
 	}
 	return cc
 }
@@ -378,12 +383,12 @@ func TestChan(devNum uint16) uint8 {
 	}
 
 	// Multiplexer channel always returns available
-	if cUnit.chanType == D.TypeMux {
+	if cUnit.chanType == dev.TypeMux {
 		return 0
 	}
 
 	// If Block Multiplexer channel operating in select mode
-	if cUnit.chanType == D.TypeBMux && bmuxEnable {
+	if cUnit.chanType == dev.TypeBMux && bmuxEnable {
 		return 0
 	}
 
@@ -451,6 +456,7 @@ func ChanReadByte(devNum uint16) (uint8, bool) {
 	subChan.ccwCount--
 	data := uint8(subChan.chanBuffer >> (8 * (3 - (subChan.chanByte & 3))) & 0xff)
 	subChan.chanByte++
+
 	// If count is zero and chaining load in new CCW
 	if subChan.ccwCount == 0 && (subChan.ccwFlags&chainData) != 0 {
 		// If chaining try and start next CCW
@@ -459,6 +465,13 @@ func ChanReadByte(devNum uint16) (uint8, bool) {
 			return data, true
 		}
 	}
+
+	// Empty buffer, try and get another.
+	// if subChan.ccwCount != 0 && subChan.chanByte == bufEmpty {
+	// 	if nextAddress(cUnit, subChan) {
+	// 		return data, true
+	// 	}
+	// }
 	return data, false
 }
 
@@ -528,6 +541,11 @@ func ChanWriteByte(devNum uint16, data uint8) bool {
 		if readBuffer(cUnit, subChan) {
 			return true
 		}
+		if (subChan.ccwFlags & flagIDA) != 0 {
+			subChan.chanByte = uint8(subChan.ccwIAddr & 3)
+		} else {
+			subChan.chanByte = uint8(subChan.ccwAddr & 3)
+		}
 	}
 
 	// Store it in buffer and adjust pointer
@@ -536,7 +554,7 @@ func ChanWriteByte(devNum uint16, data uint8) bool {
 	mask := uint32(0xff000000 >> offset)
 	subChan.chanBuffer &= ^mask
 	subChan.chanBuffer |= uint32(data) << (24 - offset)
-	if (subChan.ccwCmd & 0xf) == D.CmdRDBWD {
+	if (subChan.ccwCmd & 0xf) == dev.CmdRDBWD {
 		if (subChan.chanByte & 3) != 0 {
 			subChan.chanByte--
 		} else {
@@ -564,7 +582,7 @@ func ChanWriteByte(devNum uint16, data uint8) bool {
 // Compute address of next byte to read/write.
 func nextAddress(cUnit *chanDev, subChan *chanCtl) bool {
 	if (subChan.ccwFlags & flagIDA) != 0 {
-		if (subChan.ccwCmd & 0xf) == D.CmdRDBWD {
+		if (subChan.ccwCmd & 0xf) == dev.CmdRDBWD {
 			subChan.ccwIAddr--
 			if (subChan.ccwIAddr & 0x7ff) == 0x7ff {
 				subChan.ccwAddr += 4
@@ -572,7 +590,7 @@ func nextAddress(cUnit *chanDev, subChan *chanCtl) bool {
 				if err {
 					return true
 				}
-				subChan.ccwIAddr = word & M.AMASK
+				subChan.ccwIAddr = word & mem.AMASK
 			}
 		} else {
 			subChan.ccwIAddr++
@@ -582,24 +600,23 @@ func nextAddress(cUnit *chanDev, subChan *chanCtl) bool {
 				if err {
 					return true
 				}
-				subChan.ccwIAddr = word & M.AMASK
+				subChan.ccwIAddr = word & mem.AMASK
 			}
 		}
 		subChan.chanByte = uint8(subChan.ccwIAddr & 3)
 		return false
 	}
-	if (subChan.ccwCmd & 0xf) == D.CmdRDBWD {
+	if (subChan.ccwCmd & 0xf) == dev.CmdRDBWD {
 		subChan.ccwAddr -= 1 + (subChan.ccwAddr & 0x3)
 	} else {
 		subChan.ccwAddr += 4 - (subChan.ccwAddr & 0x3)
 	}
-	subChan.chanByte = uint8(subChan.ccwAddr & 3)
+	// subChan.chanByte = uint8(subChan.ccwAddr & 3)
 	return false
 }
 
 // Signal end of transfer by device.
 func ChanEnd(devNum uint16, flags uint8) {
-
 	// Return abort if no channel
 	subChan := findSubChannel(devNum)
 	if subChan == nil {
@@ -626,11 +643,11 @@ func ChanEnd(devNum uint16, flags uint8) {
 		subChan.chanStatus |= statusLength
 	}
 
-	if (flags & (D.CStatusAttn | D.CStatusCheck | D.CStatusExpt)) != 0 {
+	if (flags & (dev.CStatusAttn | dev.CStatusCheck | dev.CStatusExpt)) != 0 {
 		subChan.ccwFlags = 0
 	}
 
-	if (flags & D.CStatusDevEnd) != 0 {
+	if (flags & dev.CStatusDevEnd) != 0 {
 		subChan.ccwFlags &= ^(chainData | flagSLI)
 	}
 
@@ -648,11 +665,11 @@ func SetDevAttn(devNum uint16, flags uint8) {
 	ch := (devNum >> 8) & 0xf
 	cUnit := chanUnit[ch]
 	// Check if chain being held
-	if subChan.devAddr == devNum && subChan.chainFlg && (flags&D.CStatusDevEnd) != 0 {
+	if subChan.devAddr == devNum && subChan.chainFlg && (flags&dev.CStatusDevEnd) != 0 {
 		subChan.chanStatus |= uint16(flags) << 8
 	} else {
 		// Check if Device is currently on channel
-		if subChan.devAddr == devNum && (flags&D.CStatusDevEnd) != 0 &&
+		if subChan.devAddr == devNum && (flags&dev.CStatusDevEnd) != 0 &&
 			((subChan.chanStatus&statusChnEnd) != 0 || subChan.ccwCmd != 0) {
 			subChan.chanStatus |= uint16(flags) << 8
 			subChan.ccwCmd = 0
@@ -664,16 +681,49 @@ func SetDevAttn(devNum uint16, flags uint8) {
 	IrqPending = true
 }
 
+// Reset all channels.
+func ResetChannels() {
+	for i := range len(chanUnit) {
+		cUnit := chanUnit[i]
+
+		if cUnit == nil {
+			continue
+		}
+
+		// Clear all subchannels
+		for j := range cUnit.numSubChan {
+			subChan := &cUnit.subChans[j]
+			subChan.devAddr = dev.NoDev
+			subChan.ccwCmd = 0
+			subChan.ccwFlags = 0
+			subChan.chanStatus = 0
+			subChan.chanDirty = false
+			subChan.chainFlg = false
+			subChan.dev = nil
+		}
+
+		cUnit.irqPending = false
+		// Call initialize function for each device.
+		for j := range 256 {
+			if cUnit.devTab[j] != nil {
+				_ = cUnit.devTab[j].InitDev()
+			}
+			// Clear any pending status.
+			cUnit.devStatus[j] = 0
+		}
+	}
+}
+
 // Scan all channels and see if one is ready to start or has interrupt pending.
 func ChanScan(mask uint16, irqEnb bool) uint16 {
 	// Quick exit if no pending IRQ's
 	if !IrqPending {
-		return D.NoDev
+		return dev.NoDev
 	}
 
 	// Clear pending flag
 	IrqPending = false
-	pendDev := D.NoDev // Device with Pending interrupt
+	pendDev := dev.NoDev // Device with Pending interrupt
 	// Start with channel 0 and work through all channels
 	for i := range len(chanUnit) {
 		cUnit := chanUnit[i]
@@ -684,7 +734,7 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 		// Mask for this channel
 		imask := uint16(0x8000) >> i
 		numSubChan := cUnit.numSubChan
-		if cUnit.chanType == D.TypeBMux {
+		if cUnit.chanType == dev.TypeBMux {
 			if !bmuxEnable {
 				numSubChan = 1
 			}
@@ -692,7 +742,7 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 		// Scan all subchannels on this channel
 		for j := range numSubChan {
 			subChan := &cUnit.subChans[j]
-			if subChan.devAddr == D.NoDev {
+			if subChan.devAddr == dev.NoDev {
 				continue
 			}
 
@@ -720,9 +770,9 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 				if (subChan.ccwFlags & chainCmd) != 0 {
 					// If channel end, check if we should continue
 					_ = loadCCW(cUnit, subChan, true)
-				} else if irqEnb || Loading != D.NoDev {
+				} else if irqEnb || Loading != dev.NoDev {
 					// Disconnect from device
-					if (imask&mask) != 0 || Loading != D.NoDev {
+					if (imask&mask) != 0 || Loading != dev.NoDev {
 						pendDev = subChan.devAddr
 						break
 					}
@@ -732,12 +782,12 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 	}
 
 	// Only return loading unit on loading
-	if Loading != D.NoDev && Loading != pendDev {
-		return D.NoDev
+	if Loading != dev.NoDev && Loading != pendDev {
+		return dev.NoDev
 	}
 
 	// See if we can post an IRQ
-	if pendDev != D.NoDev {
+	if pendDev != dev.NoDev {
 		// Set to scan next time
 		IrqPending = true
 		subChan := findSubChannel(pendDev)
@@ -747,7 +797,7 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 			cUnit.devStatus[pendDev&0xff] = 0
 			return pendDev
 		}
-		if Loading == D.NoDev {
+		if Loading == dev.NoDev {
 			storeCSW(subChan)
 			cUnit.devStatus[pendDev&0xff] = 0
 			return pendDev
@@ -770,8 +820,8 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 				if cUnit.devStatus[j] != 0 {
 					cUnit.irqPending = true
 					IrqPending = true
-					M.SetMemory(0x44, uint32(cUnit.devStatus[j])<<24)
-					M.SetMemory(0x40, 0)
+					mem.SetMemory(0x44, uint32(cUnit.devStatus[j])<<24)
+					mem.SetMemory(0x40, 0)
 					cUnit.devStatus[j] = 0
 					return (uint16(i) << 8) | uint16(j)
 				}
@@ -779,11 +829,11 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 		}
 	}
 	// No pending device
-	return D.NoDev
+	return dev.NoDev
 }
 
 // IPL a device.
-func BootDevice(devNum uint16) bool {
+func IPLDevice(devNum uint16) bool {
 	ch := (devNum >> 8) & 0xf
 	dNum := devNum & 0xff
 	subChan := findSubChannel(devNum)
@@ -795,14 +845,20 @@ func BootDevice(devNum uint16) bool {
 	}
 
 	// If no device or channel, return CC = 3
-	if cUnit.devTab[dNum] == nil || subChan == nil {
+	if cUnit.devTab[dNum] == nil {
 		return true
 	}
+
+	// Clear all channels before staring new device.
+	ResetChannels()
+
+	// Try to start I/O chain on device.
 	status := uint16(cUnit.devTab[dNum].StartIO()) << 8
 	if status != 0 {
 		return true
 	}
 
+	// Create IPL command.
 	subChan.chanStatus = 0
 	subChan.dev = cUnit.devTab[dNum]
 	subChan.caw = 0x8
@@ -811,6 +867,7 @@ func BootDevice(devNum uint16) bool {
 	subChan.ccwFlags = chainCmd | flagSLI
 	subChan.ccwAddr = 0
 	subChan.ccwKey = 0
+	subChan.ccwCmd = dev.CmdRead
 	subChan.chanByte = bufEmpty
 	subChan.chanDirty = false
 
@@ -826,8 +883,34 @@ func BootDevice(devNum uint16) bool {
 	return false
 }
 
+// Attach a file to a device.
+func Attach(devNum uint16, fileName string) {
+	ch := (devNum >> 8) & 0xf
+	dNum := devNum & 0xff
+	cUnit := chanUnit[ch]
+	dev := cUnit.devTab[dNum]
+	if dev == nil {
+		fmt.Printf("No device: %03x\n", devNum)
+		return
+	}
+	dev.Attach(fileName)
+}
+
+// Detach whatever file the device has attached.
+func Detach(devNum uint16) {
+	ch := (devNum >> 8) & 0xf
+	dNum := devNum & 0xff
+	cUnit := chanUnit[ch]
+	dev := cUnit.devTab[dNum]
+	if dev == nil {
+		fmt.Printf("No device: %03x\n", devNum)
+		return
+	}
+	dev.Detach()
+}
+
 // Add a device at given address.
-func AddDevice(dev D.Device, devNum uint16) bool {
+func AddDevice(dev dev.Device, devNum uint16) bool {
 	ch := (devNum >> 8) & 0xf
 	dNum := devNum & 0xff
 	cUnit := chanUnit[ch]
@@ -843,12 +926,58 @@ func AddDevice(dev D.Device, devNum uint16) bool {
 	return true
 }
 
-// Get a device pointer
-func GetDevice(devNum uint16) D.Device {
+// Get a device pointer.
+func GetDevice(devNum uint16) dev.Device {
 	ch := (devNum >> 8) & 0xf
 	dNum := devNum & 0xff
 	cUnit := chanUnit[ch]
 	return cUnit.devTab[dNum]
+}
+
+// Add a telnet connection for device.
+func SetTelnet(tel tel.Telnet, devNum uint16) {
+	ch := (devNum >> 8) & 0xf
+	dNum := devNum & 0xff
+	cUnit := chanUnit[ch]
+	// Check if channel disabled
+	if cUnit == nil {
+		return
+	}
+
+	if cUnit.devTab[dNum] == nil {
+		return
+	}
+	cUnit.devTel[dNum] = tel
+}
+
+func SendConnect(devNum uint16, conn net.Conn) {
+	ch := (devNum >> 8) & 0xf
+	dNum := devNum & 0xff
+	cUnit := chanUnit[ch]
+	if cUnit.devTel[dNum] == nil {
+		return
+	}
+	cUnit.devTel[dNum].Connect(conn)
+}
+
+func SendDisconnect(devNum uint16) {
+	ch := (devNum >> 8) & 0xf
+	dNum := devNum & 0xff
+	cUnit := chanUnit[ch]
+	if cUnit.devTel[dNum] == nil {
+		return
+	}
+	cUnit.devTel[dNum].Disconnect()
+}
+
+func SendReceiveChar(devNum uint16, data []byte) {
+	ch := (devNum >> 8) & 0xf
+	dNum := devNum & 0xff
+	cUnit := chanUnit[ch]
+	if cUnit.devTel[dNum] == nil {
+		return
+	}
+	cUnit.devTel[dNum].ReceiveChar(data)
 }
 
 // Delete a device at a given address.
@@ -872,11 +1001,11 @@ func AddChannel(cNum int, ty int, subchan int) {
 
 	numSubChan := subchan
 	switch ty {
-	case D.TypeSel:
+	case dev.TypeSel:
 		numSubChan = 1
-	case D.TypeMux:
+	case dev.TypeMux:
 		numSubChan = subchan
-	case D.TypeBMux:
+	case dev.TypeBMux:
 		numSubChan = 32
 	}
 
@@ -911,15 +1040,15 @@ func findSubChannel(devNum uint16) *chanCtl {
 		return nil
 	}
 	switch cUnit.chanType {
-	case D.TypeSel:
+	case dev.TypeSel:
 		return &cUnit.subChans[0]
-	case D.TypeBMux:
+	case dev.TypeBMux:
 		if bmuxEnable {
 			subChanNum := (devNum >> 3) & 0x1f
 			return &cUnit.subChans[subChanNum]
 		}
 		return &cUnit.subChans[0]
-	case D.TypeMux:
+	case dev.TypeMux:
 		if dNum >= cUnit.numSubChan {
 			if dNum < 128 { // All shared devices over subchannels
 				return nil
@@ -933,8 +1062,11 @@ func findSubChannel(devNum uint16) *chanCtl {
 
 // Save full csw.
 func storeCSW(cUnit *chanCtl) {
-	M.SetMemory(0x40, (uint32(cUnit.ccwKey)<<24)|cUnit.caw)
-	M.SetMemory(0x44, uint32(cUnit.ccwCount)|(uint32(cUnit.chanStatus)<<16))
+	mem.SetMemory(0x40, (uint32(cUnit.ccwKey)<<24)|cUnit.caw)
+	mem.SetMemory(0x44, uint32(cUnit.ccwCount)|(uint32(cUnit.chanStatus)<<16))
+	word1 := mem.GetMemory(0x40)
+	word2 := mem.GetMemory(0x44)
+	fmt.Printf("CSW %08x %08x\n", word1, word2)
 	if (cUnit.chanStatus & statusPCI) != 0 {
 		cUnit.chanStatus &= ^statusPCI
 	} else {
@@ -990,15 +1122,14 @@ loop:
 
 		// TIC can't follow TIC nor bt first in chain
 		cmd := uint8((word & cmdMask) >> 24)
-		if cmd == D.CmdTIC {
+		if cmd == dev.CmdTIC {
 			// Pretend to fetch next word.
 			subChan.caw += 4
 			subChan.caw &= addrMask
-			subChan.ccwCmd = 0
-			subChan.ccwFlags = 0
 			if ticOk {
 				subChan.caw = word & addrMask
 				ticOk = false
+				fmt.Printf("TIC %08x", subChan.caw)
 				goto loop
 			}
 			subChan.chanStatus = statusPCHK
@@ -1023,6 +1154,7 @@ loop:
 		subChan.caw &= addrMask
 		subChan.ccwCount = uint16(word & countMask)
 
+		fmt.Printf("CCW %08x %02x%06x, %08x\n", subChan.caw-8, subChan.ccwCmd, subChan.ccwAddr, word)
 		// Copy SLI indicator in CD command
 		if (subChan.ccwFlags & (chainData | flagSLI)) == (chainData | flagSLI) {
 			word |= uint32(flagSLI) << 16
@@ -1108,14 +1240,14 @@ loop:
 // Read a fill word from memory.
 // Return true if fail and false if success.
 func readFullWord(cUnit *chanDev, subChan *chanCtl, addr uint32) (uint32, bool) {
-	if !M.CheckAddr(addr) {
+	if !mem.CheckAddr(addr) {
 		subChan.chanStatus |= statusPCHK
 		cUnit.irqPending = true
 		IrqPending = true
 		return 0, true
 	}
 	if subChan.ccwKey != 0 {
-		key := M.GetKey(addr)
+		key := mem.GetKey(addr)
 		if (key&0x8) != 0 && (key&0xf0) != subChan.ccwKey {
 			subChan.chanStatus |= statusProt
 			cUnit.irqPending = true
@@ -1123,7 +1255,7 @@ func readFullWord(cUnit *chanDev, subChan *chanCtl, addr uint32) (uint32, bool) 
 			return 0, true
 		}
 	}
-	w := M.GetMemory(addr)
+	w := mem.GetMemory(addr)
 	return w, false
 }
 
@@ -1144,6 +1276,7 @@ func readBuffer(cUnit *chanDev, subChan *chanCtl) bool {
 	}
 	subChan.chanBuffer = word
 	subChan.chanByte = uint8(addr & 3)
+	fmt.Printf("Read %08x %08x %d\n", addr, word, subChan.chanByte)
 	return false
 }
 
@@ -1159,8 +1292,8 @@ func writeBuffer(cUnit *chanDev, subChan *chanCtl) bool {
 	}
 
 	// Check if address valid
-	addr &= M.AMASK
-	if !M.CheckAddr(addr) {
+	addr &= mem.AMASK
+	if !mem.CheckAddr(addr) {
 		subChan.chanStatus |= statusPCHK
 		subChan.chanByte = bufEnd
 		subChan.chanDirty = false
@@ -1171,7 +1304,7 @@ func writeBuffer(cUnit *chanDev, subChan *chanCtl) bool {
 
 	// Check protection key
 	if subChan.ccwKey != 0 {
-		k := M.GetKey(addr)
+		k := mem.GetKey(addr)
 		if (k & 0xf0) != subChan.ccwKey {
 			subChan.chanStatus |= statusProt
 			subChan.chanByte = bufEnd
@@ -1183,7 +1316,8 @@ func writeBuffer(cUnit *chanDev, subChan *chanCtl) bool {
 	}
 
 	// Write memory
-	err := M.PutWord(addr, subChan.chanBuffer)
+	err := mem.PutWord(addr, subChan.chanBuffer)
+	fmt.Printf("Write %08x %08x\n", addr, subChan.chanBuffer)
 	subChan.chanByte = bufEmpty
 	subChan.chanDirty = false
 	return err
