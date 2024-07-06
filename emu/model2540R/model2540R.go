@@ -32,9 +32,12 @@
 package model2540r
 
 import (
+	"fmt"
+
+	reg "github.com/rcornwell/S370/config/register"
 	dev "github.com/rcornwell/S370/emu/device"
-	"github.com/rcornwell/S370/emu/event"
-	sys_channel "github.com/rcornwell/S370/emu/sys_channel"
+	event "github.com/rcornwell/S370/emu/event"
+	ch "github.com/rcornwell/S370/emu/sys_channel"
 	card "github.com/rcornwell/S370/util/card"
 )
 
@@ -102,7 +105,7 @@ func (device *Model2540Rctx) StartCmd(cmd uint8) uint8 {
 			r = dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusExpt
 		}
 		// Check if no more cards left in deck
-		if !device.ready {
+		if device.context.HopperSize() == 0 {
 			device.sense = dev.SenseINTVENT
 		} else {
 			device.busy = true
@@ -161,6 +164,22 @@ func (device *Model2540Rctx) InitDev() uint8 {
 	return 0
 }
 
+// Attach file to device.
+func (device *Model2540Rctx) Attach(fileName string) bool {
+	err := device.context.Attach(fileName, card.ModeEBCDIC, false, false)
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+	return true
+}
+
+// Detach device.
+func (device *Model2540Rctx) Detach() bool {
+	device.context.Detach()
+	return false
+}
+
 // Handle channel operations.
 func (device *Model2540Rctx) callback(cmd int) {
 	var status uint8
@@ -170,15 +189,15 @@ func (device *Model2540Rctx) callback(cmd int) {
 	if cmd == int(dev.CmdSense) {
 		device.busy = false
 		device.halt = false
-		_ = sys_channel.ChanWriteByte(device.addr, device.sense)
-		sys_channel.ChanEnd(device.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd))
+		_ = ch.ChanWriteByte(device.addr, device.sense)
+		ch.ChanEnd(device.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd))
 		return
 	}
 
 	// Handle feed end
 	if cmd == 0x100 {
 		device.busy = false
-		sys_channel.SetDevAttn(device.addr, dev.CStatusDevEnd)
+		ch.SetDevAttn(device.addr, dev.CStatusDevEnd)
 		return
 	}
 	if device.halt {
@@ -196,12 +215,12 @@ func (device *Model2540Rctx) callback(cmd int) {
 			device.eof = true
 			device.busy = false
 			device.halt = false
-			sys_channel.SetDevAttn(device.addr, dev.CStatusDevEnd|status)
+			ch.SetDevAttn(device.addr, dev.CStatusDevEnd|status)
 			return
 		case card.CardEmpty:
 			device.busy = false
 			device.halt = false
-			sys_channel.SetDevAttn(device.addr, dev.CStatusDevEnd|status)
+			ch.SetDevAttn(device.addr, dev.CStatusDevEnd|status)
 			return
 		case card.CardError:
 			device.err = true
@@ -230,7 +249,7 @@ func (device *Model2540Rctx) callback(cmd int) {
 	} else {
 		xlat &= 0xff
 	}
-	if sys_channel.ChanWriteByte(device.addr, uint8(xlat)) {
+	if ch.ChanWriteByte(device.addr, uint8(xlat)) {
 		goto feed
 	}
 	device.currentCol++
@@ -244,13 +263,29 @@ feed:
 	// If feed give, request a new card
 	if (cmd & maskStack) != maskStack {
 		device.ready = false
-		sys_channel.ChanEnd(device.addr, dev.CStatusChnEnd)
-		event.AddEvent(device, device.callback, 1000, 0) // Feed the card
+		ch.ChanEnd(device.addr, dev.CStatusChnEnd)
+		event.AddEvent(device, device.callback, 1000, 0x100) // Feed the card
 	} else {
 		if device.err {
 			status = dev.CStatusCheck
 		}
 		device.busy = false
-		sys_channel.ChanEnd(device.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd | status))
+		ch.ChanEnd(device.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd | status))
 	}
+}
+
+// register a device on initialize.
+func init() {
+	reg.RegisterModel("2540R", create)
+}
+
+// Create a device.
+func create(devNum uint16) bool {
+	dev := Model2540Rctx{addr: devNum}
+	if !ch.AddDevice(&dev, devNum) {
+		fmt.Printf("Unable to create testdev at %03x\n", devNum)
+		return false
+	}
+	dev.context = card.NewCardContext(card.ModeEBCDIC)
+	return true
 }

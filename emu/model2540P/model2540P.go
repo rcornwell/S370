@@ -32,9 +32,12 @@
 package model2540p
 
 import (
+	"fmt"
+
+	reg "github.com/rcornwell/S370/config/register"
 	dev "github.com/rcornwell/S370/emu/device"
-	"github.com/rcornwell/S370/emu/event"
-	sys_channel "github.com/rcornwell/S370/emu/sys_channel"
+	event "github.com/rcornwell/S370/emu/event"
+	ch "github.com/rcornwell/S370/emu/sys_channel"
 	card "github.com/rcornwell/S370/util/card"
 )
 
@@ -129,13 +132,29 @@ func (device *Model2540Pctx) InitDev() uint8 {
 	return 0
 }
 
+// Attach file to device.
+func (device *Model2540Pctx) Attach(fileName string) bool {
+	err := device.context.Attach(fileName, 0, true, true)
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+	return true
+}
+
+// Detach device.
+func (device *Model2540Pctx) Detach() bool {
+	device.context.Detach()
+	return false
+}
+
 // Process card punch operations.
 func (device *Model2540Pctx) callback(cmd int) {
 	if cmd == int(dev.CmdSense) {
 		device.busy = false
 		device.halt = false
-		_ = sys_channel.ChanWriteByte(device.addr, device.sense)
-		sys_channel.ChanEnd(device.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd))
+		_ = ch.ChanWriteByte(device.addr, device.sense)
+		ch.ChanEnd(device.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd))
 		return
 	}
 
@@ -143,9 +162,9 @@ func (device *Model2540Pctx) callback(cmd int) {
 	if device.ready {
 		switch device.context.PunchCard(device.image) {
 		case card.CardOK:
-			sys_channel.SetDevAttn(device.addr, dev.CStatusDevEnd)
+			ch.SetDevAttn(device.addr, dev.CStatusDevEnd)
 		default:
-			sys_channel.SetDevAttn(device.addr, dev.CStatusDevEnd|dev.CStatusCheck)
+			ch.SetDevAttn(device.addr, dev.CStatusDevEnd|dev.CStatusCheck)
 		}
 		device.currentCol = 0
 		device.ready = false
@@ -158,7 +177,7 @@ func (device *Model2540Pctx) callback(cmd int) {
 		var char uint8
 		var err bool
 
-		char, err = sys_channel.ChanReadByte(device.addr)
+		char, err = ch.ChanReadByte(device.addr)
 		if err {
 			device.ready = false
 		} else {
@@ -170,10 +189,26 @@ func (device *Model2540Pctx) callback(cmd int) {
 		}
 	}
 	if device.ready {
-		sys_channel.ChanEnd(device.addr, dev.CStatusChnEnd)
+		ch.ChanEnd(device.addr, dev.CStatusChnEnd)
 		event.AddEvent(device, device.callback, 1000, cmd)
 		device.ready = true
 	} else {
 		event.AddEvent(device, device.callback, 100, cmd)
 	}
+}
+
+// register a device on initialize.
+func init() {
+	reg.RegisterModel("2540P", create)
+}
+
+// Create a device.
+func create(devNum uint16) bool {
+	dev := Model2540Pctx{addr: devNum}
+	if !ch.AddDevice(&dev, devNum) {
+		fmt.Printf("Unable to create testdev at %03x\n", devNum)
+		return false
+	}
+	dev.context = card.NewCardContext(card.ModeEBCDIC)
+	return true
 }
