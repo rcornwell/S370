@@ -155,3 +155,8 @@ func Advance(t int) {
 		}
 	}
 }
+
+// Return true if an event is scheduled.
+func AnyEvent() bool {
+	return el.head != nil
+}

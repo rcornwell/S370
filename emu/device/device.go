@@ -28,6 +28,8 @@ type Device interface {
 	StartCmd(cmd uint8) uint8
 	HaltIO() uint8
 	InitDev() uint8
+	Attach(file string) bool
+	Detach() bool
 }
 
 // Channel types.

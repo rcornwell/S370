@@ -84,6 +84,16 @@ func (d device) InitDev() uint8 {
 	return 0
 }
 
+// Attach file to device.
+func (d device) Attach(_ string) bool {
+	return false
+}
+
+// Detach device.
+func (d device) Detach() bool {
+	return false
+}
+
 func initTest() {
 	stepCount = 0
 	deviceA.time = 0
