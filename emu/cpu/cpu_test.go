@@ -72,8 +72,7 @@ func setFloatLong(num int, v uint64) {
 
 // Convert a floating point value to a 64-bit FP register.
 func floatToFpreg(num int, val float64) bool {
-	var s uint64
-	var char int = 64
+	var sign uint64
 
 	// Quick exit if zero
 	if val == 0 {
@@ -83,10 +82,11 @@ func floatToFpreg(num int, val float64) bool {
 
 	// Extract sign
 	if val < 0 {
-		s = MSIGNL
+		sign = MSIGNL
 		val = -val
 	}
 
+	char := 64
 	// Determine exponent
 	for val >= 1 && char < 128 {
 		char++
@@ -103,7 +103,7 @@ func floatToFpreg(num int, val float64) bool {
 	}
 
 	val *= 1 << 24
-	f := s | (uint64(char) << 56) | (uint64(val) << 32)
+	f := sign | (uint64(char) << 56) | (uint64(val) << 32)
 	f |= uint64((val - float64(uint32(val))) * float64((uint64(1) << 32)))
 	setFloatLong(num, f)
 	return true
@@ -267,7 +267,7 @@ func TestLongConv(t *testing.T) {
 	}
 }
 
-// Roughly test characteristics of random number generator
+// Roughly test characteristics of random number generator.
 func TestRandFloat(t *testing.T) {
 	pos := 0
 	neg := 0
@@ -311,6 +311,7 @@ var trapFlag bool
 func setup() {
 	memory.SetSize(64)
 	InitializeCPU()
+	cpuState.flags = 0
 	cpuState.cc = 3
 }
 
@@ -321,7 +322,7 @@ func (cpu *cpu) testInst(mask uint8) {
 	memory.SetMemory(0x6c, 0x800)
 	trapFlag = false
 	for range 20 {
-		_ = CycleCPU()
+		_, _ = CycleCPU()
 
 		if cpu.PC == 0x800 {
 			trapFlag = true
@@ -4256,7 +4257,7 @@ func TestCycleSSK(t *testing.T) {
 	}
 }
 
-// ISK reads the storage key
+// ISK reads the storage key.
 func TestCycleISK(t *testing.T) {
 	setup()
 
@@ -6028,9 +6029,9 @@ func TestCycleHD(t *testing.T) {
 			t.Errorf("HDR Unable to set register to %f", f)
 		}
 		mb := f / 2.0
-		memory.SetMemory(0x400, 0x24020000) // HDR 0,2
+		memory.SetMemory(0x400, 0x24420000) // HDR 4,2
 		cpuState.testInst(0)
-		v := cnvtLongFloat(0)
+		v := cnvtLongFloat(4)
 		ratio := math.Abs((v - mb) / mb)
 		if ratio > 0.000001 {
 			t.Errorf("HDR difference too large got: %f expected: %f", v, mb)
@@ -6073,7 +6074,7 @@ func TestCycleAD(t *testing.T) {
 		f2 := rnum.NormFloat64()
 		scale = rnum.Intn(100) - 50
 		f2 = math.Ldexp(f2, scale)
-		err := floatToFpreg(0, f1)
+		err := floatToFpreg(4, f1)
 		if !err {
 			t.Errorf("Unable to set register to %f", f1)
 		}
@@ -6082,9 +6083,9 @@ func TestCycleAD(t *testing.T) {
 			t.Errorf("Unable to set register to %f", f2)
 		}
 		mb := f1 + f2
-		memory.SetMemory(0x400, 0x2a020000) // ADR 0,2
+		memory.SetMemory(0x400, 0x2a420000) // ADR 4,2
 		cpuState.testInst(0)
-		v := cnvtLongFloat(0)
+		v := cnvtLongFloat(4)
 		ratio := math.Abs((v - mb) / mb)
 		if ratio > 0.000001 {
 			t.Errorf("AD difference too large got: %f expected: %f", v, mb)
@@ -6476,9 +6477,9 @@ func TestCycleHE(t *testing.T) {
 		}
 		setFloatShort(1, low)
 		mb := f / 2.0
-		memory.SetMemory(0x400, 0x34020000) // HER 0,2
+		memory.SetMemory(0x400, 0x34420000) // HER 4,2
 		cpuState.testInst(0)
-		v := cnvtShortFloat(0)
+		v := cnvtShortFloat(4)
 		ratio := math.Abs((v - mb) / mb)
 		if ratio > 0.000001 {
 			t.Errorf("HER difference too large got: %f expected: %f", v, mb)
@@ -6524,7 +6525,7 @@ func TestCycleAE(t *testing.T) {
 		scale = rnum.Intn(100) - 50
 		f2 = math.Ldexp(f2, scale)
 		low := rnum.Uint32()
-		if floatToFpreg(0, f1) {
+		if floatToFpreg(4, f1) {
 			continue
 		}
 		if floatToFpreg(2, f2) {
@@ -6533,9 +6534,9 @@ func TestCycleAE(t *testing.T) {
 		mb := f1 + f2
 		setFloatShort(1, low)
 		setFloatShort(3, ^low)
-		memory.SetMemory(0x400, 0x3a020000) // AER 0,2
+		memory.SetMemory(0x400, 0x3a420000) // AER 4,2
 		cpuState.testInst(0)
-		v := cnvtShortFloat(0)
+		v := cnvtShortFloat(4)
 		ratio := math.Abs((v - mb) / mb)
 		if ratio > 0.000001 {
 			t.Errorf("AE difference too large got: %f expected: %f", v, mb)

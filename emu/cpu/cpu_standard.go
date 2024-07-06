@@ -23,6 +23,32 @@
 
 package cpu
 
+// Set the condition code based on value provided.
+func (cpu *cpu) setCC(value uint32) {
+	if (value & MSIGN) != 0 {
+		cpu.cc = 1
+	} else {
+		if value == 0 {
+			cpu.cc = 0
+		} else {
+			cpu.cc = 2
+		}
+	}
+}
+
+// Set the condition code based on value provided.
+func (cpu *cpu) setCCLong(value uint64) {
+	if (value & MSIGNL) != 0 {
+		cpu.cc = 1
+	} else {
+		if value == 0 {
+			cpu.cc = 0
+		} else {
+			cpu.cc = 2
+		}
+	}
+}
+
 // Handle an unknown instruction.
 func (cpu *cpu) opUnk(_ *stepInfo) uint16 {
 	return ircOper
@@ -129,26 +155,15 @@ func (cpu *cpu) opBXLE(step *stepInfo) uint16 {
 	return 0
 }
 
-// Set the condition code based on value provided.
-func (cpu *cpu) setCC(value uint32) {
-	if (value & MSIGN) != 0 {
-		cpu.cc = 1
-	} else {
-		if value == 0 {
-			cpu.cc = 0
-		} else {
-			cpu.cc = 2
-		}
-	}
-}
-
 // Load register and make positive.
 func (cpu *cpu) opLPR(step *stepInfo) uint16 {
-	if step.src2 == MSIGN { // Overflow
-		cpu.cc = 3
-	} else if (step.src2 & MSIGN) != 0 {
-		step.src2 = (FMASK ^ step.src2) + 1
-		cpu.setCC(step.src2)
+	if (step.src2 & MSIGN) != 0 {
+		if step.src2 == MSIGN { // Overflow
+			cpu.cc = 3
+		} else {
+			step.src2 = (FMASK ^ step.src2) + 1
+			cpu.setCC(step.src2)
+		}
 	} else {
 		cpu.setCC(step.src2)
 	}
@@ -791,17 +806,9 @@ func (cpu *cpu) opSLDA(step *stepInfo) uint16 {
 	value |= sign
 	cpu.storeDouble(step.R1, value)
 	if cpu.cc != 3 {
-		if value != 0 {
-			if sign != 0 {
-				cpu.cc = 1
-			} else {
-				cpu.cc = 2
-			}
-		}
-	} else {
-		if (cpu.progMask & FIXOVER) != 0 {
-			return ircFixOver
-		}
+		cpu.setCCLong(value)
+	} else if (cpu.progMask & FIXOVER) != 0 {
+		return ircFixOver
 	}
 	return 0
 }
@@ -819,13 +826,7 @@ func (cpu *cpu) opSRDA(step *stepInfo) uint16 {
 		value |= sign
 	}
 	cpu.storeDouble(step.R1, value)
-	if value != 0 {
-		if (value & MSIGNL) != 0 {
-			cpu.cc = 1
-		} else {
-			cpu.cc = 2
-		}
-	}
+	cpu.setCCLong(value)
 	return 0
 }
 
@@ -1046,7 +1047,6 @@ func (cpu *cpu) opTR(step *stepInfo) uint16 {
 
 // Move with offset.
 func (cpu *cpu) opMVO(step *stepInfo) uint16 {
-
 	err := cpu.testAccess(step.address1, uint32(step.R2), true)
 	if err != 0 {
 		return err

@@ -65,9 +65,9 @@ func setMemByte(addr uint32, data uint32) {
 }
 
 // Run a test of an I/O instruction.
-func (cpu *cpu) iotestInst(mask uint8, steps int) {
+func (cpu *cpu) iotestInst(steps int) {
 	cpu.PC = 0x400
-	cpu.progMask = mask & 0xf
+	cpu.progMask = 0
 	cpu.sysMask = 0x0000
 	cpu.irqEnb = false
 	mem.SetMemory(0x68, 0)
@@ -76,7 +76,7 @@ func (cpu *cpu) iotestInst(mask uint8, steps int) {
 	cy := 0
 	for range steps {
 		cy++
-		c := CycleCPU()
+		c, _ := CycleCPU()
 
 		if cpu.PC == 0x800 {
 			trapFlag = true
@@ -99,15 +99,16 @@ func (cpu *cpu) iotestInst(mask uint8, steps int) {
 // Debug channel test.
 func TestCycleTch(t *testing.T) {
 	ioSetup()
+
 	mem.SetMemory(0x400, 0x9f00040f)
 	mem.SetMemory(0x404, 0)
-	cpuState.iotestInst(0, 20)
+	cpuState.iotestInst(20)
 	if cpuState.cc != 3 {
 		t.Errorf("Test Channel on non-existing channel failed expected %d got: %d", 3, cpuState.cc)
 	}
 	mem.SetMemory(0x400, 0x9f00000f)
 	mem.SetMemory(0x404, 0)
-	cpuState.iotestInst(0, 20)
+	cpuState.iotestInst(20)
 	if cpuState.cc != 0 {
 		t.Errorf("Test Channel on non-existing channel failed expected %d got: %d", 0, cpuState.cc)
 	}
@@ -115,24 +116,24 @@ func TestCycleTch(t *testing.T) {
 
 func TestTestIO(t *testing.T) {
 	_ = ioSetup()
+
 	mem.SetMemory(0x400, 0x9d00000f)
 	mem.SetMemory(0x404, 0)
-	cpuState.iotestInst(0, 20)
+	cpuState.iotestInst(20)
 	if cpuState.cc != 0 {
 		t.Errorf("Test I/O expected %d got: %d", 0, cpuState.cc)
 	}
 	mem.SetMemory(0x400, 0x9d00000d)
 	mem.SetMemory(0x404, 0)
-	cpuState.iotestInst(0, 20)
+	cpuState.iotestInst(20)
 	if cpuState.cc != 3 {
 		t.Errorf("Test I/O expected %d got: %d", 3, cpuState.cc)
 	}
 }
 
 func TestCycleSIO(t *testing.T) {
-	var v uint32
-
 	td := ioSetup()
+
 	mem.SetMemory(0x40, 0)
 	mem.SetMemory(0x44, 0)
 	mem.SetMemory(0x78, 0)
@@ -155,9 +156,9 @@ func TestCycleSIO(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O 1 CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
@@ -204,7 +205,7 @@ func TestCycleSIO(t *testing.T) {
 	mem.SetMemory(0x608, 0xf8f9fafb)
 	mem.SetMemory(0x60C, 0xfcfdfeff)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
 	v = mem.GetMemory(0x40)
 	if v != 0x00000508 {
@@ -233,9 +234,8 @@ func TestCycleSIO(t *testing.T) {
 }
 
 func TestCycleSense(t *testing.T) {
-	var v uint32
-
 	_ = ioSetup()
+
 	mem.SetMemory(0x40, 0)
 	mem.SetMemory(0x44, 0)
 	mem.SetMemory(0x78, 0)
@@ -252,9 +252,9 @@ func TestCycleSense(t *testing.T) {
 
 	mem.SetMemory(0x600, 0xffffffff) // Invalidate data
 
-	cpuState.iotestInst(0, 50)
+	cpuState.iotestInst(50)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O 1 CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
@@ -270,9 +270,8 @@ func TestCycleSense(t *testing.T) {
 }
 
 func TestCycleNop(t *testing.T) {
-	var v uint32
-
 	_ = ioSetup()
+
 	mem.SetMemory(0x40, 0xffffffff)
 	mem.SetMemory(0x44, 0xffffffff)
 	mem.SetMemory(0x78, 0)
@@ -291,9 +290,9 @@ func TestCycleNop(t *testing.T) {
 	for i := uint32(0x600); i < 0x640; i += 4 {
 		mem.SetMemory(i, 0x55555555)
 	}
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O nop CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
@@ -325,7 +324,7 @@ func TestCycleNop(t *testing.T) {
 	for i := uint32(0x600); i < 0x640; i += 4 {
 		mem.SetMemory(i, 0x55555555)
 	}
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
 	v = mem.GetMemory(0x40)
 	if v != 0xffffffff {
@@ -343,9 +342,8 @@ func TestCycleNop(t *testing.T) {
 }
 
 func TestCycleCEOnly(t *testing.T) {
-	var v uint32
-
 	_ = ioSetup()
+
 	mem.SetMemory(0x40, 0xffffffff)
 	mem.SetMemory(0x44, 0xffffffff)
 	mem.SetMemory(0x78, 0)
@@ -365,9 +363,9 @@ func TestCycleCEOnly(t *testing.T) {
 	mem.SetMemory(0x500, 0x13000600) // Set channel words
 	mem.SetMemory(0x504, 0x00000001)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = cpuState.regs[1]
+	v := cpuState.regs[1]
 	if v != 0xffffffff {
 		t.Errorf("Start I/O Initial CSW1 expected %08x got: %08x", 0xffffffff, v)
 	}
@@ -396,9 +394,8 @@ func TestCycleCEOnly(t *testing.T) {
 }
 
 func TestCycleCCNop(t *testing.T) {
-	var v uint32
-
 	_ = ioSetup()
+
 	mem.SetMemory(0x40, 0xffffffff)
 	mem.SetMemory(0x44, 0xffffffff)
 	mem.SetMemory(0x78, 0)
@@ -420,9 +417,9 @@ func TestCycleCCNop(t *testing.T) {
 	mem.SetMemory(0x508, 0x03000600)
 	mem.SetMemory(0x50c, 0x00000001)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = cpuState.regs[1]
+	v := cpuState.regs[1]
 	if v != 0xffffffff {
 		t.Errorf("Start I/O Initial CCNOP CSW1 expected %08x got: %08x", 0xffffffff, v)
 	}
@@ -451,9 +448,8 @@ func TestCycleCCNop(t *testing.T) {
 }
 
 func TestCycleRead(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
+
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x10 + i)
@@ -482,9 +478,9 @@ func TestCycleRead(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O Read  CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
@@ -508,9 +504,8 @@ func TestCycleRead(t *testing.T) {
 }
 
 func TestCycleReadShort(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
+
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x10 + i)
@@ -539,9 +534,9 @@ func TestCycleReadShort(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O Read Short CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
@@ -565,9 +560,8 @@ func TestCycleReadShort(t *testing.T) {
 }
 
 func TestCycleReadShortSLI(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
+
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x10 + i)
@@ -595,9 +589,9 @@ func TestCycleReadShortSLI(t *testing.T) {
 	for i := uint32(0x600); i < 0x640; i += 4 {
 		mem.SetMemory(i, 0x55555555)
 	}
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O Short Read SLI CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
@@ -621,9 +615,8 @@ func TestCycleReadShortSLI(t *testing.T) {
 }
 
 func TestCycleWrite(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
+
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x55)
@@ -651,9 +644,9 @@ func TestCycleWrite(t *testing.T) {
 	for i := range 0x20 {
 		setMemByte(uint32(i+0x600), uint32(0x10+i))
 	}
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O Write CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
@@ -675,9 +668,8 @@ func TestCycleWrite(t *testing.T) {
 }
 
 func TestCycleWriteShort(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
+
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x55)
@@ -706,9 +698,9 @@ func TestCycleWriteShort(t *testing.T) {
 		setMemByte(uint32(i+0x600), uint32(0x10+i))
 	}
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O Short Write CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
@@ -734,9 +726,8 @@ func TestCycleWriteShort(t *testing.T) {
 }
 
 func TestCycleWriteShortSLI(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
+
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x55)
@@ -764,9 +755,9 @@ func TestCycleWriteShortSLI(t *testing.T) {
 	for i := range 0x20 {
 		setMemByte(uint32(i+0x600), uint32(0x10+i))
 	}
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O Short Write CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
@@ -792,9 +783,8 @@ func TestCycleWriteShortSLI(t *testing.T) {
 }
 
 func TestCycleReadCDA(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
+
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x10 + i)
@@ -825,9 +815,9 @@ func TestCycleReadCDA(t *testing.T) {
 		mem.SetMemory(0x600+i, 0x55555555)
 		mem.SetMemory(0x700+i, 0x55555555)
 	}
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000510 {
 		t.Errorf("Start I/O Read CDA CSW1 expected %08x got: %08x", 0x00000510, v)
 	}
@@ -857,9 +847,8 @@ func TestCycleReadCDA(t *testing.T) {
 }
 
 func TestCycleWriteCDA(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
+
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = 0x55
@@ -894,9 +883,9 @@ func TestCycleWriteCDA(t *testing.T) {
 	mem.SetMemory(0x708, 0x8c9cacbc)
 	mem.SetMemory(0x70c, 0xccdcecfc)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000510 {
 		t.Errorf("Start I/O Write CDA CSW1 expected %08x got: %08x", 0x00000510, v)
 	}
@@ -922,8 +911,6 @@ func TestCycleWriteCDA(t *testing.T) {
 }
 
 func TestCycleReadCDASkip(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
 	// Load Data
 	for i := range 0x20 {
@@ -955,9 +942,9 @@ func TestCycleReadCDASkip(t *testing.T) {
 		mem.SetMemory(0x600+i, 0x55555555)
 		mem.SetMemory(0x700+i, 0x55555555)
 	}
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000510 {
 		t.Errorf("Start I/O Read CDA CSW1 expected %08x got: %08x", 0x00000510, v)
 	}
@@ -983,8 +970,6 @@ func TestCycleReadCDASkip(t *testing.T) {
 }
 
 func TestCycleReadBkwd(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
 
 	// Load Data
@@ -1017,9 +1002,9 @@ func TestCycleReadBkwd(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000508 {
 		t.Errorf("Start I/O Read Bkwd CSW1 expected %08x got: %08x", 0x00000508, v)
 	}
@@ -1037,8 +1022,6 @@ func TestCycleReadBkwd(t *testing.T) {
 }
 
 func TestCycleCChain(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
 
 	// Load Data
@@ -1074,9 +1057,9 @@ func TestCycleCChain(t *testing.T) {
 	mem.SetMemory(0x608, 0x8f9fafbf)
 	mem.SetMemory(0x60c, 0xcfdfefff)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000510 {
 		t.Errorf("Start I/O CChain CSW1 expected %08x got: %08x", 0x00000518, v)
 	}
@@ -1099,8 +1082,6 @@ func TestCycleCChain(t *testing.T) {
 }
 
 func TestCycleCChainSLI(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
 
 	// Load Data
@@ -1134,9 +1115,9 @@ func TestCycleCChainSLI(t *testing.T) {
 		mem.SetMemory(i+0x100, 0x55555555)
 	}
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000510 {
 		t.Errorf("Start I/O CChain SLI CSW1 expected %08x got: %08x", 0x00000510, v)
 	}
@@ -1162,10 +1143,7 @@ func TestCycleCChainSLI(t *testing.T) {
 }
 
 func TestCycleCChainNop(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
-
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x10 + i)
@@ -1191,9 +1169,9 @@ func TestCycleCChainNop(t *testing.T) {
 	mem.SetMemory(0x508, 0x03000700)
 	mem.SetMemory(0x50c, 0x00000001)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000510 {
 		t.Errorf("Start I/O CChain Nop CSW1 expected %08x got: %08x", 0x00000510, v)
 	}
@@ -1205,8 +1183,6 @@ func TestCycleCChainNop(t *testing.T) {
 
 // Test TIC.
 func TestStartIOTic(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
 
 	// Load Data
@@ -1244,9 +1220,9 @@ func TestStartIOTic(t *testing.T) {
 	mem.SetMemory(0x608, 0x8f9fafbf)
 	mem.SetMemory(0x60c, 0xcfdfefff)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000530 {
 		t.Errorf("Start I/O Tic CSW1 expected %08x got: %08x", 0x00000530, v)
 	}
@@ -1271,10 +1247,7 @@ func TestStartIOTic(t *testing.T) {
 
 // Test TIC to another TIC.
 func TestCycleTicTic(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
-
 	// Load Data
 	for i := range 0x20 {
 		d.Data[i] = uint8(0x10 + i)
@@ -1310,9 +1283,9 @@ func TestCycleTicTic(t *testing.T) {
 
 	mem.SetMemory(0x700, 0xffffffff)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000520 {
 		t.Errorf("Start I/O Tic to Tic CSW1 expected %08x got: %08x", 0x00000520, v)
 	}
@@ -1337,8 +1310,6 @@ func TestCycleTicTic(t *testing.T) {
 
 // Test TIC as first command.
 func TestCycleTicError(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
 
 	// Load Data
@@ -1367,9 +1338,9 @@ func TestCycleTicError(t *testing.T) {
 	mem.SetMemory(0x50c, 0x40000001)
 	mem.SetMemory(0x700, 0xffffffff)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0xffffffff {
 		t.Errorf("Start I/O TIC Error CSW1 expected %08x got: %08x", 0xffffffff, v)
 	}
@@ -1386,8 +1357,6 @@ func TestCycleTicError(t *testing.T) {
 
 // Test TIC.
 func TestCycleSMSTic(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
 
 	// Load Data
@@ -1431,9 +1400,9 @@ func TestCycleSMSTic(t *testing.T) {
 
 	mem.SetMemory(0x700, 0xffffffff)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x00000548 {
 		t.Errorf("Start I/O SMS CSW1 expected %08x got: %08x", 0x00000548, v)
 	}
@@ -1458,10 +1427,7 @@ func TestCycleSMSTic(t *testing.T) {
 
 // Test if PCI interrupts work.
 func TestCyclePCI(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
-
 	// Load Data
 	for i := range 0x40 {
 		d.Data[i] = uint8(0x10 + i)
@@ -1506,9 +1472,9 @@ func TestCyclePCI(t *testing.T) {
 	mem.SetMemory(0x61c, 0x55555555)
 	mem.SetMemory(0x620, 0x55555555)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = cpuState.regs[0] & 0xfffffff0
+	v := cpuState.regs[0] & 0xfffffff0
 	if v != 0x00000510 {
 		t.Errorf("Start I/O PCI CSW1 PCI expected 0x0000051x got: %08x", v)
 	}
@@ -1555,7 +1521,7 @@ func TestCycleHaltIO1(t *testing.T) {
 	mem.SetMemory(0x408, 0x9e00000f) // HIO 00f
 	mem.SetMemory(0x40c, 0)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
 	if cpuState.cc != 1 {
 		t.Errorf("Start I/O HaltIO expected %d got: %d", 1, cpuState.cc)
@@ -1564,10 +1530,7 @@ func TestCycleHaltIO1(t *testing.T) {
 
 // Halt I/O on running device.
 func TestCycleHaltIO2(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
-
 	// Load Data
 	for i := range 0x80 {
 		d.Data[i] = uint8(0x10 + i)
@@ -1606,9 +1569,9 @@ func TestCycleHaltIO2(t *testing.T) {
 	}
 	mem.SetMemory(0x700, 0xffffffff)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = cpuState.regs[1] & HMASK
+	v := cpuState.regs[1] & HMASK
 	if v != 0x00800000 {
 		t.Errorf("Start I/O Haltio2 CSW2 PCI expected %08x got: %08x", 0x00800000, v)
 	}
@@ -1628,8 +1591,6 @@ func TestCycleHaltIO2(t *testing.T) {
 }
 
 func TestCycleTIOBusy(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
 
 	// Load Data
@@ -1667,10 +1628,10 @@ func TestCycleTIOBusy(t *testing.T) {
 	}
 	mem.SetMemory(0x700, 0xffffffff)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
 	// The result of a PCI can have a variety of addresses
-	v = cpuState.regs[1]
+	v := cpuState.regs[1]
 	if v != 0x6000040e {
 		t.Errorf("Start I/O TIO Busy CSW2 PCI expected %08x got: %08x", 0x6000040e, v)
 	}
@@ -1687,8 +1648,6 @@ func TestCycleTIOBusy(t *testing.T) {
 
 // Read Protection check.
 func TestCycleReadProt(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
 
 	// Load Data
@@ -1720,9 +1679,9 @@ func TestCycleReadProt(t *testing.T) {
 	mem.SetMemory(0x4008, 0x8f9fafbf)
 	mem.SetMemory(0x400c, 0xcfdfefff)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x20000508 {
 		t.Errorf("Start I/O Read Prot CSW1 expected %08x got: %08x", 0x20000508, v)
 	}
@@ -1742,8 +1701,6 @@ func TestCycleReadProt(t *testing.T) {
 }
 
 func TestCycleWriteProt(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
 
 	// Load Data
@@ -1776,9 +1733,9 @@ func TestCycleWriteProt(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x20000508 {
 		t.Errorf("Start I/O Write Prot  CSW1 expected %08x got: %08x", 0x20000508, v)
 	}
@@ -1798,8 +1755,6 @@ func TestCycleWriteProt(t *testing.T) {
 
 // Read Protection check.
 func TestCycleReadProt2(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
 
 	// Load Data
@@ -1831,9 +1786,9 @@ func TestCycleReadProt2(t *testing.T) {
 	mem.SetMemory(0x4008, 0x8f9fafbf)
 	mem.SetMemory(0x400c, 0xcfdfefff)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x30000508 {
 		t.Errorf("Start I/O Read Prot CSW1 expected %08x got: %08x", 0x30000508, v)
 	}
@@ -1853,8 +1808,6 @@ func TestCycleReadProt2(t *testing.T) {
 }
 
 func TestCycleWriteProt2(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
 
 	// Load Data
@@ -1887,9 +1840,9 @@ func TestCycleWriteProt2(t *testing.T) {
 		mem.SetMemory(i, 0x55555555)
 	}
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = mem.GetMemory(0x40)
+	v := mem.GetMemory(0x40)
 	if v != 0x30000508 {
 		t.Errorf("Start I/O Write Prot  CSW1 expected %08x got: %08x", 0x30000508, v)
 	}
@@ -1909,8 +1862,6 @@ func TestCycleWriteProt2(t *testing.T) {
 }
 
 func TestCycleBusy(t *testing.T) {
-	var v uint32
-
 	d := ioSetup()
 	d.Max = 0x10
 
@@ -1945,9 +1896,9 @@ func TestCycleBusy(t *testing.T) {
 	mem.SetMemory(0x510, 0x13000540) // Chan end without data end NOP
 	mem.SetMemory(0x514, 0x20000001)
 
-	cpuState.iotestInst(0, 2000)
+	cpuState.iotestInst(2000)
 
-	v = cpuState.regs[1]
+	v := cpuState.regs[1]
 	if v != 0x00000518 {
 		t.Errorf("Start I/O Busy Reg 1 expected %08x got: %08x", 0x00000518, v)
 	}

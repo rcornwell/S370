@@ -24,6 +24,7 @@
 package cpu
 
 import (
+	"fmt"
 	"time"
 
 	Dv "github.com/rcornwell/S370/emu/device"
@@ -151,19 +152,42 @@ func InitializeCPU() {
 	cpuState.pageMask = 0
 }
 
+func IPLDevice(devNum uint16) {
+	cpuState.flags = wait
+	cpuState.sysMask = 0xffff
+	ch.IPLDevice(devNum)
+}
+
+// Post an external interrupt to CPU.
+func PostExtIrq() {
+	cpuState.extIrq = true
+	fmt.Println("CPU: Post ext")
+}
+
 // Execute one instruction or take an interrupt.
-func CycleCPU() int {
-	var err uint16
-	memCycle = 0
+func CycleCPU() (int, bool) {
+	memCycle = 1
 
 	// Check if we should see if an IRQ is pending
 	irq := ch.ChanScan(cpuState.sysMask, cpuState.irqEnb)
 	if irq != Dv.NoDev {
 		cpuState.ilc = 0
-		if ch.Loading == Dv.NoDev {
+		if ch.Loading != Dv.NoDev {
+			// For IPL, save device after saving load complete
+			word1 := mem.GetMemory(0)
+			word2 := mem.GetMemory(4)
+
+			memCycle++
+			_ = mem.PutWordMask(0, uint32(ch.Loading), LMASK)
+			memCycle++
+			_ = mem.PutWordMask(0xba, uint32(ch.Loading), LMASK)
+
+			cpuState.lpsw(word1, word2)
+			ch.Loading = Dv.NoDev
+		} else {
 			cpuState.suppress(oIOPSW, irq)
 		}
-		return memCycle
+		return memCycle, true
 	}
 
 	// Check for external interrupts
@@ -172,83 +196,97 @@ func CycleCPU() int {
 			if !cpuState.ecMode || (cpuState.cregs[0]&0x20) != 0 ||
 				(cpuState.cregs[6]&0x40) != 0 {
 				cpuState.extIrq = false
+				fmt.Println("CPU: Ext IRQ")
 				cpuState.suppress(oEPSW, 0x40)
-				return memCycle
+				return memCycle, true
 			}
 		}
 
 		if cpuState.intIrq && (cpuState.cregs[0]&0x80) != 0 {
 			cpuState.intIrq = false
 			cpuState.suppress(oEPSW, 0x80)
-			return memCycle
+			return memCycle, true
 		}
 		if cpuState.clkIrq && cpuState.intEnb {
 			cpuState.clkIrq = false
 			cpuState.suppress(oEPSW, 0x1005)
-			return memCycle
+			return memCycle, true
 		}
 		if cpuState.todIrq && cpuState.todEnb {
 			cpuState.todIrq = false
 			cpuState.suppress(oEPSW, 0x1004)
-			return memCycle
+			return memCycle, true
 		}
 	}
 
-	/* If we have wait flag or loading, nothing more to do */
+	// Check if we have wait we can't exit
+	if ch.Loading == Dv.NoDev && !cpuState.irqEnb && (cpuState.flags&wait != 0) {
+		fmt.Printf("Uninterupable wait state %08x\n", cpuState.PC)
+		return 1, false
+	}
+
+	// If we have wait flag or loading, nothing more to do
 	if ch.Loading != Dv.NoDev || (cpuState.flags&wait) != 0 {
+
 		/* CPU IDLE */
 		if !cpuState.irqEnb && !cpuState.extEnb {
-			return memCycle
+			return memCycle, true
 		}
-		return memCycle
+		return memCycle, true
 	}
+	memCycle = 0
+	return cpuState.fetch(), true
+}
 
-	if (cpuState.PC & 1) != 0 {
-		cpuState.suppress(oPPSW, ircSpec)
+func (cpu *cpu) fetch() int {
+	if (cpu.PC & 1) != 0 {
+		cpu.suppress(oPPSW, ircSpec)
 		return memCycle
 	}
 
 	// Check if triggered PER event.
-	if cpuState.perEnb && cpuState.perFetch {
-		cpuState.perAddrCheck(cpuState.PC, 0x4000)
+	if cpu.perEnb && cpu.perFetch {
+		cpu.perAddrCheck(cpu.PC, 0x4000)
 	}
 
-	var opr, word uint32
+	var opr uint32
 	var step stepInfo
 
 	// Fetch the next instruction
-	word, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
+	word, err := cpu.readFull(cpu.PC & ^uint32(0x2))
 	if err != 0 {
-		cpuState.suppress(oPPSW, err)
+		cpu.suppress(oPPSW, err)
 		return memCycle
 	}
 
 	// Save instruction
-	if (cpuState.PC & 2) == 0 {
+	if (cpu.PC & 2) == 0 {
 		opr = (word >> 16) & 0xffff
 	} else {
 		opr = word & 0xffff
 	}
-	cpuState.perRegMod = 0
-	cpuState.perCode = 0
-	cpuState.perAddr = cpuState.PC
-	cpuState.iPC = cpuState.PC
-	cpuState.ilc = 1
+	cpu.perRegMod = 0
+	cpu.perCode = 0
+	cpu.perAddr = cpu.PC
+	cpu.iPC = cpu.PC
+	cpu.ilc = 1
 	step.opcode = uint8((opr >> 8) & 0xff)
 	step.reg = uint8(opr & 0xff)
 	step.R1 = (step.reg >> 4) & 0xf
 	step.R2 = step.reg & 0xf
-	cpuState.PC += 2
+	cpu.PC += 2
+
+	//fmt.Printf(" Fetch %08x: %02x %02x\n", cpu.PC-2, step.opcode, step.reg)
 
 	// Check type of instruction
 	if (step.opcode & 0xc0) != 0 {
 		// RX, RS, SI, SS
-		cpuState.ilc++
+		cpu.ilc++
 		// Check if we need new word?
-		if (cpuState.PC & 2) == 0 {
-			word, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
+		if (cpu.PC & 2) == 0 {
+			word, err = cpu.readFull(cpu.PC & ^uint32(0x2))
 			if err != 0 {
-				cpuState.suppress(oPPSW, err)
+				cpu.suppress(oPPSW, err)
 				return memCycle
 			}
 			step.address1 = (word >> 16)
@@ -256,17 +294,17 @@ func CycleCPU() int {
 			step.address1 = word
 		}
 		step.address1 &= 0xffff
-		cpuState.PC += 2
+		cpu.PC += 2
 	}
 
 	// If SS
 	if (step.opcode & 0xc0) == 0xc0 {
-		cpuState.ilc++
+		cpu.ilc++
 		// Do we need another word?
-		if (cpuState.PC & 2) == 0 {
-			word, err = cpuState.readFull(cpuState.PC & ^uint32(0x2))
+		if (cpu.PC & 2) == 0 {
+			word, err = cpu.readFull(cpu.PC & ^uint32(0x2))
 			if err != 0 {
-				cpuState.suppress(oPPSW, err)
+				cpu.suppress(oPPSW, err)
 				return memCycle
 			}
 			step.address2 = (word >> 16)
@@ -274,17 +312,17 @@ func CycleCPU() int {
 			step.address2 = word
 		}
 		step.address2 &= 0xffff
-		cpuState.PC += 2
+		cpu.PC += 2
 	}
 
-	err = cpuState.execute(&step)
+	err = cpu.execute(&step)
 	if err != 0 {
-		cpuState.suppress(oPPSW, err)
+		cpu.suppress(oPPSW, err)
 	}
 
 	// See if PER event happened
-	if cpuState.perEnb && cpuState.perCode != 0 {
-		cpuState.suppress(oPPSW, 0)
+	if cpu.perEnb && cpu.perCode != 0 {
+		cpu.suppress(oPPSW, 0)
 	}
 	return memCycle
 }
@@ -302,88 +340,93 @@ func (cpu *cpu) execute(step *stepInfo) uint16 {
 		}
 		step.address1 &= AMASK
 		step.src1 = step.address1
-
-		// Handle RX type operands
-		if (step.opcode & 0x80) == 0 {
+		switch step.opcode & 0xc0 {
+		case 0x40:
+			// Handle RX type operands
 			if step.R2 != 0 {
 				step.address1 += cpu.regs[step.R2]
 			}
-		} else if (step.opcode & 0xc0) == 0xc0 { // SS
+		case 0xc0:
+			// Handle SS
 			indexReg = (step.address2 >> 12) & 0xf
 			step.address2 &= 0xfff
 			if indexReg != 0 {
 				step.address2 += cpu.regs[indexReg]
 			}
 			step.address2 &= AMASK
+		default:
 		}
 	}
 
 	var err uint16
 
 	// Read operands
-	// Check if floating point
-	if (step.opcode & 0xA0) == 0x20 {
-		if (step.R1 & 0x9) != 0 {
-			return ircSpec
-		}
-
-		// Load operands
-		step.fsrc1 = cpu.fpregs[step.R1]
-		// Check for short
-		if (step.opcode & 0x10) != 0 {
-			step.fsrc1 &= HMASKL
-		}
-
-		// Floating point RX instruction
-		if (step.opcode & 0x40) != 0 {
-			var src1, src2 uint32
-			src1, err = cpu.readFull(step.address1)
-			if err != 0 {
-				return err
-			}
-
-			// Check for long
-			if (step.opcode & 0x10) == 0 {
-				src2, err = cpu.readFull(step.address1 + 4)
-				if err != 0 {
-					return err
-				}
-			} else {
-				src2 = 0
-			}
-			step.fsrc2 = (uint64(src1) << 32) | uint64(src2)
-		} else {
-			if (step.R2 & 0x9) != 0 {
-				return ircSpec
-			}
-			step.fsrc2 = cpu.fpregs[step.R2]
-			if (step.opcode & 0x10) != 0 {
-				step.fsrc2 &= HMASKL
-			}
-		}
-		// All RR opcodes
-	} else if (step.opcode & 0xe0) == 0 {
+	switch step.opcode & 0xe0 {
+	case 0x00:
+		// RR except floating point
 		step.src1 = cpu.regs[step.R1]
 		step.src2 = cpu.regs[step.R2]
 		step.address1 = (step.src2) & AMASK
+
+	case 0x40:
 		// All RX integer ops
-	} else if (step.opcode & 0xe0) == 0x40 {
 		step.src1 = cpu.regs[step.R1]
+		step.src2 = step.address1
 		// Read half word if 010010xx or 01001100
 		if (step.opcode&0xfc) == 0x48 || step.opcode == OpMH {
 			step.src2, err = cpu.readHalf(step.address1)
 			if err != 0 {
 				return err
 			}
-			// Read full word if 0101xxx and not xxxx00xx (ST)
-		} else if (step.opcode&0x10) != 0 && (step.opcode&0x0c) != 0 {
+		}
+		// Read full word if 0101xxx and not 010000xx (ST)
+		if (step.opcode&0x10) != 0 && (step.opcode&0x0c) != 0 {
 			step.src2, err = cpu.readFull(step.address1)
 			if err != 0 {
 				return err
 			}
-		} else {
-			step.src2 = step.address1
 		}
+
+	case 0x20:
+		// Floating point.
+		if (step.R1&0x9) != 0 || (step.R2&0x9) != 0 {
+			return ircSpec
+		}
+
+		// Load operands
+		step.fsrc1 = cpu.fpregs[step.R1]
+		step.fsrc2 = cpu.fpregs[step.R2]
+		// Check for short
+		if (step.opcode & 0x10) != 0 {
+			step.fsrc1 &= HMASKL
+			step.fsrc2 &= HMASKL
+		}
+	case 0x60:
+		// Floating point.
+		if (step.R1 & 0x9) != 0 {
+			return ircSpec
+		}
+
+		// Load operands
+		step.fsrc1 = cpu.fpregs[step.R1]
+		// Floating point RX instruction
+
+		var src1, src2 uint32
+		src1, err = cpu.readFull(step.address1)
+		if err != 0 {
+			return err
+		}
+
+		// Check for long
+		if (step.opcode & 0x10) == 0 {
+			src2, err = cpu.readFull(step.address1 + 4)
+			if err != 0 {
+				return err
+			}
+		} else {
+			step.fsrc1 &= HMASKL
+		}
+		step.fsrc2 = (uint64(src1) << 32) | uint64(src2)
 	}
 
 	// Execute the instruction.
@@ -587,6 +630,7 @@ func (cpu *cpu) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 	if vector == oPPSW && cpu.perEnb && cpu.perCode != 0 {
 		irqcode |= ircPer
 	}
+
 	if cpu.ecMode {
 		// Generate first word
 		word1 = uint32(0x80000) |
@@ -595,16 +639,13 @@ func (cpu *cpu) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 			(uint32(cpu.cc) << 12) |
 			(uint32(cpu.progMask) << 8)
 		if cpu.pageEnb {
-			word1 |= 1 << 26
+			word1 |= uint32(datEnable) << 24
 		}
 		if cpu.perEnb {
-			word1 |= 1 << 30
+			word1 |= uint32(perEnable) << 24
 		}
 		if cpu.irqEnb {
-			word1 |= 1 << 25
-		}
-		if cpu.extEnb {
-			word1 |= 1 << 24
+			word1 |= uint32(irqEnable) << 24
 		}
 
 		// Save code where 370 expects it to be
@@ -636,14 +677,16 @@ func (cpu *cpu) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 			(uint32(cpu.stKey) << 16) |
 			(uint32(cpu.flags) << 16) |
 			uint32(irqcode)
-		if cpu.extEnb {
-			word1 |= 1 << 24
-		}
+
 		// Generate second word. */
 		word2 = (uint32(cpu.ilc) << 30) |
 			(uint32(cpu.cc) << 28) |
 			(uint32(cpu.progMask) << 24) |
 			(cpu.PC & AMASK)
+	}
+
+	if cpu.extEnb {
+		word1 |= uint32(extEnable) << 24
 	}
 	memCycle++
 	mem.SetMemory(vector, word1)
@@ -722,31 +765,34 @@ func (cpu *cpu) readFull(virtAddr uint32) (uint32, uint16) {
 		return 0, ircAddr
 	}
 
-	// Handle unaligned access
-	if offset != 0 {
-		addr2 := virtAddr + 4
-		physAddr2 := physAddr + 4
-
-		if (virtAddr & SPMASK) != (addr2 & SPMASK) {
-			// Check if possible next page
-			physAddr2, pageErr = cpu.transAddr(addr2)
-			if pageErr != 0 {
-				return 0, pageErr
-			}
-			// Check access protection
-			if cpu.checkProtect(physAddr2, false) {
-				return 0, ircProt
-			}
-		}
-
-		memCycle++
-		word2, err := mem.GetWord(physAddr2)
-		if err {
-			return 0, ircAddr
-		}
-		word <<= (8 * offset)
-		word |= (word2 >> (8 * (4 - offset)))
+	// If aligned all done
+	if offset == 0 {
+		return word, 0
 	}
+
+	// Handle unaligned access
+	addr2 := virtAddr + 4
+	physAddr2 := physAddr + 4
+
+	if (virtAddr & SPMASK) != (addr2 & SPMASK) {
+		// Check if possible next page
+		physAddr2, pageErr = cpu.transAddr(addr2)
+		if pageErr != 0 {
+			return 0, pageErr
+		}
+		// Check access protection
+		if cpu.checkProtect(physAddr2, false) {
+			return 0, ircProt
+		}
+	}
+
+	memCycle++
+	word2, err := mem.GetWord(physAddr2)
+	if err {
+		return 0, ircAddr
+	}
+	word <<= (8 * offset)
+	word |= (word2 >> (8 * (4 - offset)))
 
 	//	sim_debug(DEBUG_DATA, &cpu_dev, "RD A=%08x %08x\n", addr, *v)
 	return word, 0
@@ -893,7 +939,6 @@ func (cpu *cpu) writeFull(virtAddr, data uint32) uint16 {
 	physAddr2 := physAddr + 4
 	virtAddr2 := (virtAddr & 0x00fffffc) + 4
 	if offset != 0 {
-
 		// Check if we handle unaligned access
 		if (virtAddr & SPMASK) != (virtAddr2 & SPMASK) {
 			// Validate address
@@ -1043,13 +1088,6 @@ func (cpu *cpu) writeByte(virtAddr, data uint32) uint16 {
 func (cpu *cpu) suppress(code uint32, irc uint16) {
 	irqaddr := cpu.storePSW(code, irc)
 
-	// For IPL, save device after saving load complete
-	if irqaddr == 0 {
-		memCycle++
-		_ = mem.PutWordMask(0, code, LMASK)
-		memCycle++
-		_ = mem.PutWordMask(0xba, code, LMASK)
-	}
 	memCycle++
 	src1, _ := mem.GetWord(irqaddr)
 	memCycle++
