@@ -136,6 +136,37 @@ func (d *TestDev) InitDev() uint8 {
 	return 0
 }
 
+// Attach file to device.
+func (d *TestDev) Attach(_ string) bool {
+	return false
+}
+
+// Detach device.
+func (d *TestDev) Detach() bool {
+	return false
+}
+
+// // register a device on initialize
+// func init() {
+// 	reg.RegisterModel("testdev", create)
+// }
+
+// // Create a device.
+//
+//	func create(devNum uint16) bool {
+//		dev := TestDev{Addr: devNum, Mask: 0xff}
+//		if Ch.AddDevice(&dev, devNum) {
+//			fmt.Printf("Unable to create testdev at %03x\n", devNum)
+//			return false
+//		}
+//		_ = dev.InitDev()
+//		for i := range 0x10 {
+//			dev.Data[i] = uint8(0xf0 + i)
+//		}
+//		dev.Max = 0x10
+//		return true
+//	}
+//
 // Handle channel operations.
 func (d *TestDev) callback(cmd int) {
 	var v uint8
