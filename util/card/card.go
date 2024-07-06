@@ -75,6 +75,7 @@ type CardContext struct {
 	hopperPos   int      // Position in hopper
 	eofPending  bool     // Next return should be EOF
 	table       int      // Translation table to use
+	attached    bool     // Attached to a file
 	deck        []Card   // Card images
 }
 
@@ -124,7 +125,7 @@ var emptyCard Card
 
 // Return if attached to a file.
 func (ctx *CardContext) Attached() bool {
-	return ctx.file != nil
+	return ctx.attached
 }
 
 // Attach a context to a file.
@@ -132,7 +133,9 @@ func (ctx *CardContext) Attach(fileName string, mode int, write bool, eof bool) 
 	var err error
 
 	ctx.file = nil
-	ctx.mode = mode
+	if mode != 0 {
+		ctx.mode = mode
+	}
 	if write {
 		var file *os.File
 		file, err = os.Create(fileName)
@@ -141,11 +144,13 @@ func (ctx *CardContext) Attach(fileName string, mode int, write bool, eof bool) 
 		}
 		ctx.file = file
 		ctx.deck = []Card{}
+		ctx.attached = true
 	} else {
 		err = ctx.readDeck(fileName)
 		if eof {
 			ctx.SetEOF()
 		}
+		ctx.attached = true
 	}
 	return err
 }
@@ -158,6 +163,7 @@ func (ctx *CardContext) Detach() {
 	}
 	ctx.hopperCards = 0
 	ctx.hopperPos = 0
+	ctx.attached = false
 }
 
 // Initialize back translation tables.
@@ -221,11 +227,14 @@ func (ctx *CardContext) SetEOF() {
 }
 
 func (ctx *CardContext) ReadCard() (Card, int) {
+	fmt.Println("Read new card")
 	if ctx.eofPending {
 		ctx.eofPending = false
+		fmt.Println("EOF")
 		return emptyCard, CardEOF
 	}
 	if ctx.hopperPos >= ctx.hopperCards {
+		fmt.Println("Empty")
 		return emptyCard, CardEmpty
 	}
 	c := ctx.deck[ctx.hopperPos]
@@ -235,14 +244,18 @@ func (ctx *CardContext) ReadCard() (Card, int) {
 		if (c.Image[0] & flagDATA) != 0 {
 			ctx.eofPending = true
 			c.Image[0] &= 0o7777
+			fmt.Println("data")
 			return c, CardOK
 		}
+		fmt.Println("EOF")
 		return emptyCard, CardEOF
 	}
 	if (c.Image[0] & flagERR) != 0 {
+		fmt.Println("Empty")
 		return emptyCard, CardError
 	}
 	c.Image[0] &= 0o7777
+	fmt.Println("data")
 	return c, CardOK
 }
 
@@ -434,10 +447,10 @@ func (ctx *CardContext) SetTable(table int) {
 }
 
 func NewCardContext(mode int) *CardContext {
-	ctx := new(CardContext)
-	ctx.mode = mode
-	ctx.table = Type029
-	return ctx
+	return &CardContext{
+		mode:  mode,
+		table: Type029,
+	}
 }
 
 // Read file into hopper.
@@ -478,7 +491,7 @@ func (ctx *CardContext) readDeck(fileName string) error {
 		}
 	}
 	ctx.file.Close()
-	ctx.file = nil
+	fmt.Printf("Read %d cards\n", ctx.HopperSize())
 	return err
 }
 
