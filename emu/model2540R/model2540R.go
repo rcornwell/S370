@@ -32,9 +32,11 @@
 package model2540r
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 
-	reg "github.com/rcornwell/S370/config/register"
+	config "github.com/rcornwell/S370/config/configparser"
 	dev "github.com/rcornwell/S370/emu/device"
 	event "github.com/rcornwell/S370/emu/event"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
@@ -165,19 +167,13 @@ func (device *Model2540Rctx) InitDev() uint8 {
 }
 
 // Attach file to device.
-func (device *Model2540Rctx) Attach(fileName string) bool {
-	err := device.context.Attach(fileName, card.ModeEBCDIC, false, false)
-	if err != nil {
-		fmt.Println(err)
-		return false
-	}
-	return true
+func (device *Model2540Rctx) Attach(fileName string) error {
+	return device.context.Attach(fileName, false, false)
 }
 
 // Detach device.
-func (device *Model2540Rctx) Detach() bool {
-	device.context.Detach()
-	return false
+func (device *Model2540Rctx) Detach() error {
+	return device.context.Detach()
 }
 
 // Handle channel operations.
@@ -276,16 +272,43 @@ feed:
 
 // register a device on initialize.
 func init() {
-	reg.RegisterModel("2540R", create)
+	config.RegisterModel("2540R", config.TypeModel, create)
 }
 
-// Create a device.
-func create(devNum uint16) bool {
+// Create a card reader device.
+func create(devNum uint16, _ string, options []config.Option) error {
 	dev := Model2540Rctx{addr: devNum}
-	if !ch.AddDevice(&dev, devNum) {
-		fmt.Printf("Unable to create testdev at %03x\n", devNum)
-		return false
+	err := ch.AddDevice(&dev, devNum)
+	if err != nil {
+		err := fmt.Sprintf("Unable to create 2540R at %03x\n", devNum)
+		return errors.New(err)
 	}
-	dev.context = card.NewCardContext(card.ModeEBCDIC)
-	return true
+	dev.context = card.NewCardContext(card.ModeAuto)
+	eof := false
+	for _, option := range options {
+		switch strings.ToUpper(option.Name) {
+		case "FORMAT", "FMT":
+			if !dev.context.SetFormat(option.EqualOpt) {
+				return errors.New("Invalid Card formt type: " + option.EqualOpt)
+			}
+		case "EOF":
+			eof = true
+		case "NOEOF":
+			eof = false
+		case "FILE":
+			if option.EqualOpt == "" {
+				return errors.New("File option missing filename")
+			}
+			err := dev.context.Attach(option.EqualOpt, false, eof)
+			if err != nil {
+				return err
+			}
+		default:
+			return errors.New("Reader invalid option: " + option.Name)
+		}
+		if option.Value != nil {
+			return errors.New("Extra options not supported on: " + option.Name)
+		}
+	}
+	return nil
 }

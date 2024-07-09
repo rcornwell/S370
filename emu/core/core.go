@@ -95,8 +95,12 @@ func (core *core) processPacket(packet master.Packet) {
 		syschannel.SendReceiveChar(packet.DevNum, packet.Data)
 	case master.TimeClock:
 	case master.IPLdevice:
-		cpu.IPLDevice(packet.DevNum)
-		core.running = true
+		err := cpu.IPLDevice(packet.DevNum)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			core.running = true
+		}
 	case master.Start:
 		core.running = true
 	case master.Stop:

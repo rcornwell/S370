@@ -85,13 +85,13 @@ func (d device) InitDev() uint8 {
 }
 
 // Attach file to device.
-func (d device) Attach(_ string) bool {
-	return false
+func (d device) Attach(_ string) error {
+	return nil
 }
 
 // Detach device.
-func (d device) Detach() bool {
-	return false
+func (d device) Detach() error {
+	return nil
 }
 
 func initTest() {

@@ -137,13 +137,13 @@ func (d *TestDev) InitDev() uint8 {
 }
 
 // Attach file to device.
-func (d *TestDev) Attach(_ string) bool {
-	return false
+func (d *TestDev) Attach(_ string) error {
+	return nil
 }
 
 // Detach device.
-func (d *TestDev) Detach() bool {
-	return false
+func (d *TestDev) Detach() error {
+	return nil
 }
 
 // // register a device on initialize

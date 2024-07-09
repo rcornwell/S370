@@ -533,9 +533,9 @@ func (cpu *cpu) opLCTL(step *stepInfo) uint16 {
 
 		case 6: // Assist function control
 			if cpu.vmAssist && (temp&0xc0000000) == 0x80000000 {
-				cpu.vmEnb = true
+				cpu.vmaEnb = true
 			} else {
-				cpu.vmEnb = false
+				cpu.vmaEnb = false
 			}
 
 		case 8: // Monitor masks

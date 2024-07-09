@@ -32,9 +32,11 @@
 package model2540p
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 
-	reg "github.com/rcornwell/S370/config/register"
+	config "github.com/rcornwell/S370/config/configparser"
 	dev "github.com/rcornwell/S370/emu/device"
 	event "github.com/rcornwell/S370/emu/event"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
@@ -45,7 +47,7 @@ type Model2540Pctx struct {
 	addr       uint16            // Current device address
 	currentCol int               // Current column
 	busy       bool              // Reader busy
-	eof        bool              // EOF pending
+	eof        bool              // EOF pendingReader
 	err        bool              // Error pending
 	ready      bool              // Have card ready to punch
 	halt       bool              // Signal halt requested
@@ -133,19 +135,13 @@ func (device *Model2540Pctx) InitDev() uint8 {
 }
 
 // Attach file to device.
-func (device *Model2540Pctx) Attach(fileName string) bool {
-	err := device.context.Attach(fileName, 0, true, true)
-	if err != nil {
-		fmt.Println(err)
-		return false
-	}
-	return true
+func (device *Model2540Pctx) Attach(fileName string) error {
+	return device.context.Attach(fileName, true, true)
 }
 
 // Detach device.
-func (device *Model2540Pctx) Detach() bool {
-	device.context.Detach()
-	return false
+func (device *Model2540Pctx) Detach() error {
+	return device.context.Detach()
 }
 
 // Process card punch operations.
@@ -199,16 +195,39 @@ func (device *Model2540Pctx) callback(cmd int) {
 
 // register a device on initialize.
 func init() {
-	reg.RegisterModel("2540P", create)
+	config.RegisterModel("2540P", config.TypeModel, create)
 }
 
-// Create a device.
-func create(devNum uint16) bool {
+// Create a card punch device.
+func create(devNum uint16, _ string, options []config.Option) error {
 	dev := Model2540Pctx{addr: devNum}
-	if !ch.AddDevice(&dev, devNum) {
-		fmt.Printf("Unable to create testdev at %03x\n", devNum)
-		return false
+	err := ch.AddDevice(&dev, devNum)
+	if err != nil {
+		err := fmt.Sprintf("Unable to create 2540R at %03x\n", devNum)
+		return errors.New(err)
 	}
-	dev.context = card.NewCardContext(card.ModeEBCDIC)
-	return true
+	dev.context = card.NewCardContext(card.ModeAuto)
+	eof := false
+	for _, option := range options {
+		switch strings.ToUpper(option.Name) {
+		case "FORMAT", "FMT":
+			if !dev.context.SetFormat(option.Name) {
+				return errors.New("Invalid Card formt type: " + option.Name)
+			}
+		case "FILE":
+			if option.EqualOpt == "" {
+				return errors.New("File option missing filename")
+			}
+			err := dev.context.Attach(option.EqualOpt, false, eof)
+			if err != nil {
+				return err
+			}
+		default:
+			return errors.New("Punch invalid option " + option.Name)
+		}
+		if option.Value != nil {
+			return errors.New("Extra options not supported on: " + option.Name)
+		}
+	}
+	return nil
 }

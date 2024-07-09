@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/rcornwell/S370/util/xlat"
 )
@@ -123,20 +124,38 @@ var emptyCard Card
     or card format binary.
 */
 
+var formats = map[string]int{
+	"AUTO":   ModeAuto,
+	"TEXT":   ModeText,
+	"EBCDIC": ModeEBCDIC,
+	"BIN":    ModeBIN,
+	"OCTAL":  ModeOctal,
+	"BCD":    ModeBCD,
+	"CBN":    ModeCBN,
+}
+
+func (ctx *CardContext) SetFormat(fmt string) bool {
+	newMode, ok := formats[strings.ToUpper(fmt)]
+	if !ok {
+		ctx.mode = ModeAuto
+		return false
+	}
+	ctx.mode = newMode
+	return true
+}
+
 // Return if attached to a file.
 func (ctx *CardContext) Attached() bool {
 	return ctx.attached
 }
 
 // Attach a context to a file.
-func (ctx *CardContext) Attach(fileName string, mode int, write bool, eof bool) error {
+func (ctx *CardContext) Attach(fileName string, punch bool, eof bool) error {
 	var err error
 
 	ctx.file = nil
-	if mode != 0 {
-		ctx.mode = mode
-	}
-	if write {
+
+	if punch {
 		var file *os.File
 		file, err = os.Create(fileName)
 		if err != nil {
@@ -156,7 +175,7 @@ func (ctx *CardContext) Attach(fileName string, mode int, write bool, eof bool) 
 }
 
 // Detach from file.
-func (ctx *CardContext) Detach() {
+func (ctx *CardContext) Detach() error {
 	if ctx.file != nil {
 		ctx.file.Close()
 		ctx.file = nil
@@ -164,6 +183,7 @@ func (ctx *CardContext) Detach() {
 	ctx.hopperCards = 0
 	ctx.hopperPos = 0
 	ctx.attached = false
+	return nil
 }
 
 // Initialize back translation tables.
@@ -227,14 +247,14 @@ func (ctx *CardContext) SetEOF() {
 }
 
 func (ctx *CardContext) ReadCard() (Card, int) {
-	fmt.Println("Read new card")
+	// fmt.Println("Read new card")
 	if ctx.eofPending {
 		ctx.eofPending = false
-		fmt.Println("EOF")
+		//		fmt.Println("EOF")
 		return emptyCard, CardEOF
 	}
 	if ctx.hopperPos >= ctx.hopperCards {
-		fmt.Println("Empty")
+		//		fmt.Println("Empty")
 		return emptyCard, CardEmpty
 	}
 	c := ctx.deck[ctx.hopperPos]
@@ -244,18 +264,18 @@ func (ctx *CardContext) ReadCard() (Card, int) {
 		if (c.Image[0] & flagDATA) != 0 {
 			ctx.eofPending = true
 			c.Image[0] &= 0o7777
-			fmt.Println("data")
+			//		fmt.Println("data")
 			return c, CardOK
 		}
-		fmt.Println("EOF")
+		//	fmt.Println("EOF")
 		return emptyCard, CardEOF
 	}
 	if (c.Image[0] & flagERR) != 0 {
-		fmt.Println("Empty")
+		//		fmt.Println("Empty")
 		return emptyCard, CardError
 	}
 	c.Image[0] &= 0o7777
-	fmt.Println("data")
+	// fmt.Println("data")
 	return c, CardOK
 }
 

@@ -32,11 +32,13 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/rcornwell/S370/config/register"
+	getopt "github.com/pborman/getopt/v2"
+	config "github.com/rcornwell/S370/config/configparser"
 	"github.com/rcornwell/S370/emu/core"
-	device "github.com/rcornwell/S370/emu/device"
+
+	//	device "github.com/rcornwell/S370/emu/device"
 	master "github.com/rcornwell/S370/emu/master"
-	"github.com/rcornwell/S370/emu/memory"
+	//"github.com/rcornwell/S370/emu/memory"
 	syschannel "github.com/rcornwell/S370/emu/sys_channel"
 	telnet "github.com/rcornwell/S370/telnet"
 
@@ -44,11 +46,32 @@ import (
 )
 
 func main() {
-	file := os.Args[1]
+	optConfig := getopt.StringLong("config", 'c', "S370.cfg", "Configuration file")
+	optDeck := getopt.StringLong("deck", 'd', "", "Deck to load")
+	optHelp := getopt.BoolLong("help", 'h', "Help")
+	getopt.Parse()
 
-	if file == "" {
-		fmt.Println("Please specify a file to load from")
-		return
+	if *optHelp {
+		getopt.Usage()
+		os.Exit(0)
+	}
+
+	if optConfig == nil {
+		fmt.Println("Please specify a configuration file")
+		os.Exit(0)
+	}
+
+	_, err := os.Stat(*optConfig)
+	if os.IsNotExist(err) {
+		fmt.Println("Configuration file ", *optConfig, " can't be found")
+		os.Exit(0)
+	}
+
+	syschannel.InitializeChannels()
+	err = config.LoadConfigFile(*optConfig)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(0)
 	}
 
 	// Create listener session
@@ -60,13 +83,11 @@ func main() {
 
 	masterChannel := make(chan master.Packet)
 
-	memory.SetSize(64)
+	// Create new routine to run CPU.
 	cpu := core.NewCPU(masterChannel)
+
 	// Configure I/O devices.
-	syschannel.InitializeChannels()
-	syschannel.AddChannel(0, device.TypeMux, 192)
-	register.CreateModel("1052", 0x01f)
-	register.CreateModel("2540R", 0x00c)
+	syschannel.ResetChannels()
 
 	// Start telnet server.
 	telServer.Start(masterChannel)
@@ -96,7 +117,7 @@ loop:
 			break loop
 		case input := <-msg:
 			syschannel.Detach(0x00c)
-			syschannel.Attach(0x00c, file)
+			syschannel.Attach(0x00c, *optDeck)
 			fmt.Printf("IPL device: %s\n", input)
 			masterChannel <- master.Packet{DevNum: 0x00c, Msg: master.IPLdevice}
 		}

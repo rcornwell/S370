@@ -24,9 +24,13 @@
 package syschannel
 
 import (
+	"errors"
 	"fmt"
 	"net"
+	"strconv"
+	"strings"
 
+	config "github.com/rcornwell/S370/config/configparser"
 	dev "github.com/rcornwell/S370/emu/device"
 	mem "github.com/rcornwell/S370/emu/memory"
 	tel "github.com/rcornwell/S370/telnet"
@@ -833,29 +837,37 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 }
 
 // IPL a device.
-func IPLDevice(devNum uint16) bool {
+func IPLDevice(devNum uint16) error {
 	ch := (devNum >> 8) & 0xf
 	dNum := devNum & 0xff
 	subChan := findSubChannel(devNum)
 	cUnit := chanUnit[ch]
 
-	// Check if channel disabled
-	if subChan == nil || cUnit == nil {
-		return true
+	// Check if channel exists
+	if cUnit == nil {
+		err := fmt.Sprintf("Channel %d does not exist", ch)
+		return errors.New(err)
+	}
+
+	if subChan == nil {
+		err := fmt.Sprintf("No subchannel for %03x", devNum)
+		return errors.New(err)
 	}
 
 	// If no device or channel, return CC = 3
 	if cUnit.devTab[dNum] == nil {
-		return true
+		err := fmt.Sprintf("Device %03x does not exist", devNum)
+		return errors.New(err)
 	}
 
 	// Clear all channels before staring new device.
 	ResetChannels()
 
 	// Try to start I/O chain on device.
-	status := uint16(cUnit.devTab[dNum].StartIO()) << 8
+	status := cUnit.devTab[dNum].StartIO()
 	if status != 0 {
-		return true
+		err := fmt.Sprintf("Device %03x gave none zero status to IPL command: %02x", devNum, status)
+		return errors.New(err)
 	}
 
 	// Create IPL command.
@@ -877,61 +889,89 @@ func IPLDevice(devNum uint16) bool {
 	if (subChan.chanStatus & (statusAttn | statusCheck | statusExcept)) != 0 {
 		subChan.ccwCmd = 0
 		subChan.ccwFlags = 0
-		return true
+		if status != 0 {
+			err := fmt.Sprintf("Device %03x gave none zero status to IPL command: %02x", devNum, status)
+			return errors.New(err)
+		}
 	}
 	Loading = devNum
-	return false
+	return nil
 }
 
 // Attach a file to a device.
-func Attach(devNum uint16, fileName string) {
+func Attach(devNum uint16, fileName string) error {
 	ch := (devNum >> 8) & 0xf
 	dNum := devNum & 0xff
 	cUnit := chanUnit[ch]
 	dev := cUnit.devTab[dNum]
 	if dev == nil {
-		fmt.Printf("No device: %03x\n", devNum)
-		return
+		err := fmt.Sprintf("No device: %03x\n", devNum)
+		return errors.New(err)
 	}
-	dev.Attach(fileName)
+	return dev.Attach(fileName)
 }
 
 // Detach whatever file the device has attached.
-func Detach(devNum uint16) {
+func Detach(devNum uint16) error {
 	ch := (devNum >> 8) & 0xf
 	dNum := devNum & 0xff
 	cUnit := chanUnit[ch]
 	dev := cUnit.devTab[dNum]
 	if dev == nil {
-		fmt.Printf("No device: %03x\n", devNum)
-		return
+		err := fmt.Sprintf("No device: %03x\n", devNum)
+		return errors.New(err)
 	}
-	dev.Detach()
+	return dev.Detach()
 }
 
 // Add a device at given address.
-func AddDevice(dev dev.Device, devNum uint16) bool {
+func AddDevice(dev dev.Device, devNum uint16) error {
 	ch := (devNum >> 8) & 0xf
 	dNum := devNum & 0xff
 	cUnit := chanUnit[ch]
-	// Check if channel disabled
+	// Check if channel exists
 	if cUnit == nil {
-		return false
+		err := fmt.Sprintf("Channel %d does not exist", ch)
+		return errors.New(err)
 	}
 
+	// Check if device already exists.
 	if cUnit.devTab[dNum] != nil {
-		return false
+		err := fmt.Sprintf("Device %03x already exists", devNum)
+		return errors.New(err)
 	}
 	cUnit.devTab[dNum] = dev
-	return true
+	return nil
 }
 
 // Get a device pointer.
-func GetDevice(devNum uint16) dev.Device {
+func GetDevice(devNum uint16) (dev.Device, error) {
 	ch := (devNum >> 8) & 0xf
 	dNum := devNum & 0xff
 	cUnit := chanUnit[ch]
-	return cUnit.devTab[dNum]
+	// Check if channel exists
+	if cUnit == nil {
+		err := fmt.Sprintf("Channel %d does not exist", ch)
+		return nil, errors.New(err)
+	}
+
+	// Check if device exists.
+	if cUnit.devTab[dNum] == nil {
+		err := fmt.Sprintf("Device %03x doesn't exist", devNum)
+		return nil, errors.New(err)
+	}
+	return cUnit.devTab[dNum], nil
+}
+
+// Delete a device at a given address.
+func DelDevice(devNum uint16) {
+	ch := (devNum >> 8) & 0xf
+	dNum := devNum & 0xff
+	cUnit := chanUnit[ch]
+	if cUnit != nil {
+		cUnit.devTab[dNum] = nil
+		cUnit.devStatus[dNum] = 0
+	}
 }
 
 // Add a telnet connection for device.
@@ -954,6 +994,9 @@ func SendConnect(devNum uint16, conn net.Conn) {
 	ch := (devNum >> 8) & 0xf
 	dNum := devNum & 0xff
 	cUnit := chanUnit[ch]
+	if cUnit == nil {
+		return
+	}
 	if cUnit.devTel[dNum] == nil {
 		return
 	}
@@ -964,6 +1007,9 @@ func SendDisconnect(devNum uint16) {
 	ch := (devNum >> 8) & 0xf
 	dNum := devNum & 0xff
 	cUnit := chanUnit[ch]
+	if cUnit == nil {
+		return
+	}
 	if cUnit.devTel[dNum] == nil {
 		return
 	}
@@ -974,19 +1020,13 @@ func SendReceiveChar(devNum uint16, data []byte) {
 	ch := (devNum >> 8) & 0xf
 	dNum := devNum & 0xff
 	cUnit := chanUnit[ch]
+	if cUnit == nil {
+		return
+	}
 	if cUnit.devTel[dNum] == nil {
 		return
 	}
 	cUnit.devTel[dNum].ReceiveChar(data)
-}
-
-// Delete a device at a given address.
-func DelDevice(devNum uint16) {
-	ch := (devNum >> 8) & 0xf
-	dNum := devNum & 0xff
-	cUnit := chanUnit[ch]
-	cUnit.devTab[dNum] = nil
-	cUnit.devStatus[dNum] = 0
 }
 
 // Enable a channel of a given type.
@@ -1321,4 +1361,78 @@ func writeBuffer(cUnit *chanDev, subChan *chanCtl) bool {
 	subChan.chanByte = bufEmpty
 	subChan.chanDirty = false
 	return err
+}
+
+// register a channel create on initialize.
+func init() {
+	config.RegisterModel("CHANNEL", config.TypeOptions, create)
+}
+
+// Create a channel.
+func create(_ uint16, number string, options []config.Option) error {
+	// Get channel number
+	ch, err := strconv.ParseUint(number, 10, 4)
+
+	if err != nil {
+		return errors.New("Channel number must be a number: " + number)
+	}
+
+	chanNum := int(ch)
+	// Check if number too large.
+	if chanNum > len(chanUnit) {
+		errstr := fmt.Sprintf("Channel number too large: %d max: %d\n", chanNum, len(chanUnit))
+		return errors.New(errstr)
+	}
+	if chanUnit[chanNum] != nil {
+		errstr := fmt.Sprintf("Channel %d already defined\n", chanNum)
+		return errors.New(errstr)
+	}
+
+	chanType := 0
+	subChans := uint64(0)
+	for _, option := range options {
+		switch strings.ToUpper(option.Name) {
+		case "MPX", "MUX":
+			if chanType != 0 {
+				return errors.New("Can't have more then one channel type\n")
+			}
+			chanType = dev.TypeMux
+		case "SEL":
+			if chanType != 0 {
+				return errors.New("Can't have more then one channel type\n")
+			}
+			chanType = dev.TypeSel
+		case "BMUX":
+			if chanType != 0 {
+				return errors.New("Can't have more then one channel type\n")
+			}
+			chanType = dev.TypeBMux
+		case "SUB", "SUBCHAN":
+			if subChans != 0 {
+				return errors.New("Can't have more then one channel type\n")
+			}
+			var err error
+			subChans, err = strconv.ParseUint(option.EqualOpt, 10, 9)
+			if err != nil || subChans > 256 {
+				return errors.New("Subchannel option: " + option.EqualOpt + " invalid must be less than 256")
+			}
+		default:
+			return errors.New("Channel invalid option: " + option.Name)
+		}
+		if option.Value != nil {
+			return errors.New("Extra options not supported on: " + option.Name)
+		}
+	}
+
+	if chanType == 0 {
+		errstr := fmt.Sprintf("No channel type defined for channel %d", chanNum)
+		return errors.New(errstr)
+	}
+
+	if chanType == dev.TypeMux && subChans == 0 {
+		subChans = 256
+	}
+
+	AddChannel(chanNum, chanType, int(subChans))
+	return nil
 }

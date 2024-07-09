@@ -45,7 +45,30 @@ type eventList struct {
 	tail *Event
 }
 
+var freeList *Event
 var el eventList
+
+// Grab event off free list, or create new one.
+func getEvent(dev D.Device, cb Callback, time int, iarg int) *Event {
+	if freeList != nil {
+		ev := freeList
+		ev.time = time
+		ev.dev = dev
+		ev.cb = cb
+		ev.iarg = iarg
+		freeList = ev.next
+		ev.next = nil
+		return ev
+	}
+	return &Event{dev: dev, cb: cb, time: time, iarg: iarg}
+}
+
+// Put event on freeList for later.
+func freeEvent(ev *Event) {
+	ev.prev = nil
+	ev.next = freeList
+	freeList = ev
+}
 
 // Add an event.
 func AddEvent(dev D.Device, cb Callback, time int, iarg int) bool {
@@ -55,7 +78,7 @@ func AddEvent(dev D.Device, cb Callback, time int, iarg int) bool {
 		return false
 	}
 
-	ev := &Event{dev: dev, cb: cb, time: time, iarg: iarg}
+	ev := getEvent(dev, cb, time, iarg)
 
 	evptr := el.head
 	// If empty put on head
@@ -126,7 +149,9 @@ func CancelEvent(dev D.Device, iarg int) {
 				// No previous, at head of list
 				el.head = evptr.next
 			}
-			evptr = nil
+
+			// Add event to freelist
+			freeEvent(evptr)
 			return
 		}
 		evptr = evptr.next

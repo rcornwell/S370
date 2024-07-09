@@ -373,7 +373,8 @@ func TestPunchCardBlank(t *testing.T) {
 	f.Close()
 	defer os.Remove(name)
 
-	err = ctx.Attach(name, ModeText, true, false)
+	ctx.SetFormat("TEXT")
+	err = ctx.Attach(name, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -431,7 +432,8 @@ func TestPunchCardDeck(t *testing.T) {
 	f.Close()
 	defer os.Remove(name)
 
-	err = ctx.Attach(name, ModeText, true, false)
+	ctx.SetFormat("TEXT")
+	err = ctx.Attach(name, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -503,7 +505,8 @@ func TestPunchCardEBCDIC(t *testing.T) {
 	f.Close()
 	defer os.Remove(name)
 
-	err = ctx.Attach(name, ModeEBCDIC, true, false)
+	ctx.SetFormat("EBCDIC")
+	err = ctx.Attach(name, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -571,7 +574,8 @@ func TestReadDeckEBCDIC(t *testing.T) {
 	f.Close()
 
 	// Attach to card deck just created.
-	err = ctx.Attach(name, ModeEBCDIC, false, false)
+	ctx.SetFormat("EBCDIC")
+	err = ctx.Attach(name, false, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -634,7 +638,8 @@ func TestPunchCardBinary(t *testing.T) {
 	f.Close()
 	defer os.Remove(name)
 
-	err = ctx.Attach(name, ModeBIN, true, false)
+	ctx.SetFormat("BIN")
+	err = ctx.Attach(name, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -739,7 +744,8 @@ func TestReadDeckBinary(t *testing.T) {
 	}
 	f.Close()
 
-	err = ctx.Attach(name, ModeBIN, false, false)
+	ctx.SetFormat("BIN")
+	err = ctx.Attach(name, false, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -791,7 +797,8 @@ func TestPunchCardCBN(t *testing.T) {
 	f.Close()
 	defer os.Remove(name)
 
-	err = ctx.Attach(name, ModeCBN, true, false)
+	ctx.SetFormat("CBN")
+	err = ctx.Attach(name, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -900,7 +907,8 @@ func TestReadDeckCBN(t *testing.T) {
 	f.Close()
 
 	// Attach to deck just created.
-	err = ctx.Attach(name, ModeCBN, false, false)
+	ctx.SetFormat("CBN")
+	err = ctx.Attach(name, false, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -952,7 +960,8 @@ func TestPunchCardBCD(t *testing.T) {
 	f.Close()
 	defer os.Remove(name)
 
-	err = ctx.Attach(name, ModeBCD, true, false)
+	ctx.SetFormat("BCD")
+	err = ctx.Attach(name, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1074,7 +1083,8 @@ func TestReadDeckBCD(t *testing.T) {
 	f.Close()
 
 	// Attach to deck just created.
-	err = ctx.Attach(name, ModeBCD, false, false)
+	ctx.SetFormat("BCD")
+	err = ctx.Attach(name, false, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1126,7 +1136,8 @@ func TestPunchCardOctal(t *testing.T) {
 	f.Close()
 	defer os.Remove(name)
 
-	err = ctx.Attach(name, ModeOctal, true, false)
+	ctx.SetFormat("OCTAL")
+	err = ctx.Attach(name, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1259,7 +1270,8 @@ func TestReadDeckOctal(t *testing.T) {
 	}
 	f.Close()
 
-	err = ctx.Attach(name, ModeText, false, false)
+	ctx.SetFormat("TEXT")
+	err = ctx.Attach(name, false, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1311,7 +1323,8 @@ func TestReadDeckAuto(t *testing.T) {
 		testImage[i] = 0x200
 	}
 
-	err = ctx.Attach(name, ModeText, true, false)
+	ctx.SetFormat("TEXT")
+	err = ctx.Attach(name, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1341,7 +1354,8 @@ func TestReadDeckAuto(t *testing.T) {
 	}
 	ctx.Detach()
 
-	err = ctx.Attach(name, ModeAuto, false, false)
+	ctx.SetFormat("AUTO")
+	err = ctx.Attach(name, false, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1406,7 +1420,8 @@ func TestReadDeckSpecial(t *testing.T) {
 	fmt.Fprintf(f, "%05d ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\n", 0) // 6
 	f.Close()
 
-	err = ctx.Attach(name, ModeAuto, false, true)
+	ctx.SetFormat("AUTO")
+	err = ctx.Attach(name, false, true)
 	if err != nil {
 		t.Error(err)
 		return

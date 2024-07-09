@@ -95,7 +95,7 @@ type cpu struct {
 	cpuTimer  [2]uint32 // CPU timer value
 	timerTics int       // Interval Timer is ever 3 tics
 	vmAssist  bool      // VM Assist functions enabled.
-	vmEnb     bool      // VM Assist enabled.
+	vmaEnb    bool      // VM Assist enabled.
 	table     [256]func(*stepInfo) uint16
 }
 

@@ -24,9 +24,12 @@
 package cpu
 
 import (
+	"errors"
 	"fmt"
 	"time"
+	"unicode"
 
+	config "github.com/rcornwell/S370/config/configparser"
 	Dv "github.com/rcornwell/S370/emu/device"
 	mem "github.com/rcornwell/S370/emu/memory"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
@@ -76,8 +79,11 @@ import (
 
 */
 
+// Holds state of CPU.
 var cpuState cpu
 
+// Holds number of memory cycles the current instruction too.
+// Used for advancing the timer close to system speed.
 var memCycle int
 
 // Initialize CPU to basic state.
@@ -108,7 +114,7 @@ func InitializeCPU() {
 	cpuState.intEnb = false
 	cpuState.todEnb = false
 	cpuState.todIrq = false
-	cpuState.vmEnb = false
+	cpuState.vmaEnb = false
 
 	// Clear registers
 	for i := range 16 {
@@ -152,10 +158,10 @@ func InitializeCPU() {
 	cpuState.pageMask = 0
 }
 
-func IPLDevice(devNum uint16) {
+func IPLDevice(devNum uint16) error {
 	cpuState.flags = wait
 	cpuState.sysMask = 0xffff
-	ch.IPLDevice(devNum)
+	return ch.IPLDevice(devNum)
 }
 
 // Post an external interrupt to CPU.
@@ -166,7 +172,7 @@ func PostExtIrq() {
 
 // Execute one instruction or take an interrupt.
 func CycleCPU() (int, bool) {
-	memCycle = 1
+	memCycle = 1 // Default to one cycle.
 
 	// Check if we should see if an IRQ is pending
 	irq := ch.ChanScan(cpuState.sysMask, cpuState.irqEnb)
@@ -234,7 +240,7 @@ func CycleCPU() (int, bool) {
 		}
 		return memCycle, true
 	}
-	memCycle = 0
+
 	return cpuState.fetch(), true
 }
 
@@ -1142,6 +1148,62 @@ func (cpu *cpu) storeDouble(reg uint8, value uint64) {
 	cpu.regs[reg|1] = uint32(value & LMASKL)
 	cpu.regs[reg] = uint32((value >> 32) & LMASKL)
 	cpu.perRegMod |= 3 << reg
+}
+
+// register a device on initialize.
+func init() {
+	config.RegisterSwitch("VMASIST", setVMA)
+	config.RegisterOption("MEMSIZE", setMemSize)
+	// Temporary for testing.
+	config.RegisterModel("IPL", config.TypeModel, setIPLDev)
+}
+
+// Enable VM Assit feature.
+func setVMA(devNum uint16, _ string, _ []config.Option) error {
+	cpuState.vmaEnb = true
+	return nil
+}
+
+// Set size of memory.
+func setMemSize(_ uint16, number string, _ []config.Option) error {
+	size := 0
+	multiplier := ' '
+	for i, digit := range number {
+		if !unicode.IsDigit(rune(digit)) {
+			if i == len(number)-1 {
+				multiplier = digit
+				break
+			}
+			return errors.New("Mem size not a number: " + number)
+		}
+		size = (size * 10) + (int(digit) - '0')
+	}
+
+	switch multiplier {
+	case 'k', 'K':
+		size *= 1024
+	case 'm', 'M':
+		size *= 1024 * 1024
+	case ' ', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+	default:
+		return errors.New("Invalid size multipler: " + string(multiplier))
+	}
+
+	// Memory should be in multiples of 8K. Force for to nearest 8k value.
+	if size < 8192 {
+		size = 8192
+	}
+	size = (size / 8192) * 8
+	mem.SetSize(size)
+	return nil
+}
+
+var IPLDev uint16
+
+// Set size of memory.
+func setIPLDev(devNum uint16, _ string, _ []config.Option) error {
+	IPLDev = devNum
+	return nil
 }
 
 //

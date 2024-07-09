@@ -32,11 +32,13 @@
 package model1052
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 
-	reg "github.com/rcornwell/S370/config/register"
+	config "github.com/rcornwell/S370/config/configparser"
 	core "github.com/rcornwell/S370/emu/core"
 	dev "github.com/rcornwell/S370/emu/device"
 	ev "github.com/rcornwell/S370/emu/event"
@@ -230,13 +232,13 @@ func (device *Model1052ctx) InitDev() uint8 {
 }
 
 // Attach file to device.
-func (device *Model1052ctx) Attach(_ string) bool {
-	return false
+func (device *Model1052ctx) Attach(_ string) error {
+	return nil
 }
 
 // Detach device.
-func (device *Model1052ctx) Detach() bool {
-	return false
+func (device *Model1052ctx) Detach() error {
+	return nil
 }
 
 // Handle channel operations.
@@ -350,7 +352,7 @@ func (telConn *model1052tel) Connect(conn net.Conn) {
 
 // Disconnect from connection.
 func (telConn *model1052tel) Disconnect() {
-	telConn.connected = true
+	telConn.connected = false
 	telConn.conn = nil
 }
 
@@ -464,20 +466,48 @@ func (telConn *model1052tel) ReceiveChar(data []byte) {
 
 // register a device on initialize.
 func init() {
-	fmt.Println("Registering 1052")
-	reg.RegisterModel("1052", create)
+	config.RegisterModel("1052", config.TypeModel, create)
 }
 
 // Create a device.
-func create(devNum uint16) bool {
+func create(devNum uint16, _ string, options []config.Option) error {
 	dev := Model1052ctx{addr: devNum}
-	if !ch.AddDevice(&dev, devNum) {
-		fmt.Printf("Unable to create testdev at %03x\n", devNum)
-		return false
+	err := ch.AddDevice(&dev, devNum)
+
+	if err != nil {
+		err := fmt.Sprintf("Unable to create 1052 at %03x\n", devNum)
+		return errors.New(err)
 	}
-	tel := model1052tel{ctx: &dev}
-	dev.telctx = &tel
-	telnet.RegisterTerminal(&tel, devNum, 0, "")
-	ch.SetTelnet(&tel, devNum)
-	return true
+	console := model1052tel{ctx: &dev}
+	dev.telctx = &console
+	//	portNum := 3270
+	group := ""
+	for _, option := range options {
+		switch strings.ToUpper(option.Name) {
+		// case "PORT":
+		// 	if option.EqualOpt == "" {
+		// 		fmt.Println("Port option missing port number")
+		// 		return false
+		// 	}
+		// port, err := strconv.ParseUint(option.EqualOpt, 10, 32)
+		// if err != nil {
+		// 	fmt.Println("Port requires number: ", option.EqualOpt)
+		// }
+		// portNum = int(port)
+		case "GROUP":
+			if option.EqualOpt == "" {
+				return errors.New("Group option missing group name")
+			}
+			group = option.EqualOpt
+		default:
+			return errors.New("10552 invalid option: " + option.Name)
+		}
+		if option.Value != nil {
+			return errors.New("Extra options not supported on: " + option.Name)
+		}
+	}
+
+	telnet.RegisterTerminal(&console, devNum, 0, group)
+	ch.SetTelnet(&console, devNum)
+	return nil
 }
