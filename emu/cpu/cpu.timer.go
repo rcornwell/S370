@@ -32,48 +32,12 @@ import (
 
 // Update current interval timer and TOD clock.
 func UpdateTimer() {
-	timeMem := mem.GetMemory(0x50)
-	timeMem -= 0x100
-	mem.SetMemory(0x50, timeMem)
-
-	// Check if should signal CPU
-	if (timeMem & 0xfffff00) == 0 {
-		cpuState.intIrq = true
-	}
-
-	// Update TOD clock if enabled.
-	if cpuState.todSet && (cpuState.cregs[0]&0x20000000) == 0 {
-		t := cpuState.todClock[1] + (13333333)
-		if t < cpuState.todClock[1] {
-			cpuState.todClock[0]++
-		}
-		cpuState.todClock[1] = t
-
-		// Check if we should post a TOD irq
-		cpuState.todIrq = false
-		if (cpuState.clkCmp[0] < cpuState.todClock[0]) ||
-			((cpuState.clkCmp[0] == cpuState.todClock[0]) && (cpuState.clkCmp[1] < cpuState.todClock[1])) {
-			//     sim_debug(DEBUG_INST, &cpu_dev, "CPU TIMER CCK IRQ %08x %08x\n", clk_cmp[0],
-			//               clk_cmp[1]);
-			cpuState.todIrq = true
-		}
-	}
-
-	// Update CPU timer.
-	t := cpuState.cpuTimer[1] - (uint32(cpuState.timerTics) << 12)
-	if t > cpuState.cpuTimer[1] {
-		cpuState.cpuTimer[0]--
-	}
-	cpuState.cpuTimer[1] = t
-	cpuState.timerTics = 3333
-	if (cpuState.cpuTimer[0] & MSIGN) != 0 {
-		cpuState.clkIrq = true
-	}
+	sysCPU.updateClock()
 }
 
 // Set TOD to current date.
 func SetTod() {
-	if !cpuState.todSet {
+	if !sysCPU.todSet {
 		// Get current time
 		now := time.Now()
 		lsec := uint64(now.Unix())
@@ -83,7 +47,48 @@ func SetTod() {
 		lsec += ((70 * 365) + 17) * 86400
 		lsec *= 1000000
 		lsec <<= 12
-		cpuState.todClock[0] = uint32(lsec >> 32)
-		cpuState.todClock[1] = uint32(lsec & uint64(FMASK))
+		sysCPU.todClock[0] = uint32(lsec >> 32)
+		sysCPU.todClock[1] = uint32(lsec & uint64(FMASK))
+	}
+}
+
+// Update the current interval and TOD clock.
+func (cpu *cpuState) updateClock() {
+	timeMem := mem.GetMemory(0x50)
+	timeMem -= 0x100
+	mem.SetMemory(0x50, timeMem)
+
+	// Check if should signal CPU
+	if (timeMem & 0xfffff00) == 0 {
+		cpu.intIrq = true
+	}
+
+	// Update TOD clock if enabled.
+	if cpu.todSet && (cpu.cregs[0]&0x20000000) == 0 {
+		t := cpu.todClock[1] + (13333333)
+		if t < cpu.todClock[1] {
+			cpu.todClock[0]++
+		}
+		cpu.todClock[1] = t
+
+		// Check if we should post a TOD irq
+		cpu.todIrq = false
+		if (cpu.clkCmp[0] < cpu.todClock[0]) ||
+			((cpu.clkCmp[0] == cpu.todClock[0]) && (cpu.clkCmp[1] < cpu.todClock[1])) {
+			//     sim_debug(DEBUG_INST, &cpu_dev, "CPU TIMER CCK IRQ %08x %08x\n", clk_cmp[0],
+			//               clk_cmp[1]);
+			cpu.todIrq = true
+		}
+	}
+
+	// Update CPU timer.
+	t := cpu.cpuTimer[1] - (uint32(cpu.timerTics) << 12)
+	if t > cpu.cpuTimer[1] {
+		cpu.cpuTimer[0]--
+	}
+	cpu.cpuTimer[1] = t
+	cpu.timerTics = 3333
+	if (cpu.cpuTimer[0] & MSIGN) != 0 {
+		cpu.clkIrq = true
 	}
 }

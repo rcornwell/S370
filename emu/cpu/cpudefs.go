@@ -37,7 +37,7 @@ type stepInfo struct {
 	fsrc2    uint64 // Floating point second operand
 }
 
-type cpu struct {
+type cpuState struct {
 	PC       uint32      // Program counter
 	iPC      uint32      // Initial PC for instruction
 	regs     [16]uint32  // Internal registers

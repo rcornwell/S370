@@ -26,7 +26,7 @@ package cpu
 
 // Load decimal number into temp storage
 // return error or zero.
-func (cpu *cpu) decLoad(data *[32]uint8, addr uint32, length int, sign *bool) uint16 {
+func (cpu *cpuState) decLoad(data *[32]uint8, addr uint32, length int, sign *bool) uint16 {
 	var err uint16
 
 	// Point to end, and read backwards
@@ -67,7 +67,7 @@ func (cpu *cpu) decLoad(data *[32]uint8, addr uint32, length int, sign *bool) ui
 
 // Store decimal number into memory
 // return error code.
-func (cpu *cpu) decStore(data [32]uint8, addr uint32, length int) uint16 {
+func (cpu *cpuState) decStore(data [32]uint8, addr uint32, length int) uint16 {
 	addr += uint32(length)
 	j := 0
 	for i := 0; i <= length; i++ {
@@ -136,7 +136,7 @@ func decRecomp(l int, value *[32]uint8) bool {
 }
 
 // Handle AP, SP, CP and ZAP instructions.
-func (cpu *cpu) opDecAdd(step *stepInfo) uint16 {
+func (cpu *cpuState) opDecAdd(step *stepInfo) uint16 {
 	// ZAP = F8    00
 	// CP  = F9    01
 	// AP  = FA    10
@@ -249,7 +249,7 @@ func (cpu *cpu) opDecAdd(step *stepInfo) uint16 {
 }
 
 // Handle SRP instruction.
-func (cpu *cpu) opSRP(step *stepInfo) uint16 {
+func (cpu *cpuState) opSRP(step *stepInfo) uint16 {
 	var err uint16
 	var value [32]uint8
 	var sign bool
@@ -370,7 +370,7 @@ func decMulstep(length int, pos int, value1 *[32]uint8, value2 *[32]uint8) {
 }
 
 // Decimal multiply.
-func (cpu *cpu) opMP(step *stepInfo) uint16 {
+func (cpu *cpuState) opMP(step *stepInfo) uint16 {
 	var err uint16
 	var value1 [32]uint8
 	var value2 [32]uint8
@@ -430,7 +430,7 @@ func (cpu *cpu) opMP(step *stepInfo) uint16 {
 }
 
 // BCD Packed Divide instruction.
-func (cpu *cpu) opDP(step *stepInfo) uint16 {
+func (cpu *cpuState) opDP(step *stepInfo) uint16 {
 	var err uint16
 	var value1 [32]uint8
 	var value2 [32]uint8

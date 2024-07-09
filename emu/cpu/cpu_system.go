@@ -31,7 +31,7 @@ import (
 )
 
 // Set storage key.
-func (cpu *cpu) opSSK(step *stepInfo) uint16 {
+func (cpu *cpuState) opSSK(step *stepInfo) uint16 {
 	if (cpu.flags & problem) != 0 {
 		// Try to do quick SSK
 		// if (QVMA && vma_stssk(R1, addr1))
@@ -49,7 +49,7 @@ func (cpu *cpu) opSSK(step *stepInfo) uint16 {
 }
 
 // Insert storage Key into register.
-func (cpu *cpu) opISK(step *stepInfo) uint16 {
+func (cpu *cpuState) opISK(step *stepInfo) uint16 {
 	if (cpu.flags & problem) != 0 {
 		//  if (QVMA && vma_stisk(src1, addr1))
 		// break;
@@ -73,7 +73,7 @@ func (cpu *cpu) opISK(step *stepInfo) uint16 {
 }
 
 // Supervisor call.
-func (cpu *cpu) opSVC(step *stepInfo) uint16 {
+func (cpu *cpuState) opSVC(step *stepInfo) uint16 {
 	//  if ((flags & PROBLEM) != 0 && \
 	//  (cpu_unit[0].flags & (FEAT_370|FEAT_VMA)) == (FEAT_370|FEAT_VMA) && \
 	//  (cregs[6] & 0x88000000) == MSIGN && vma_stsvc(reg))
@@ -88,7 +88,7 @@ func (cpu *cpu) opSVC(step *stepInfo) uint16 {
 }
 
 // Set system mask.
-func (cpu *cpu) opSSM(step *stepInfo) uint16 {
+func (cpu *cpuState) opSSM(step *stepInfo) uint16 {
 	if (cpu.flags & problem) != 0 {
 		//      sim_debug(DEBUG_VMA, &cpu_dev, "SSM  CR6 %08x\n", cregs[6]);
 		//      if (QVMA && vma_ssm(addr1))
@@ -132,7 +132,7 @@ func (cpu *cpu) opSSM(step *stepInfo) uint16 {
 }
 
 // Load processor status word.
-func (cpu *cpu) opLPSW(step *stepInfo) uint16 {
+func (cpu *cpuState) opLPSW(step *stepInfo) uint16 {
 	if (cpu.flags & problem) != 0 {
 		//       if (QVMA && vma_lpsw(addr1))
 		//           break;
@@ -157,7 +157,7 @@ func (cpu *cpu) opLPSW(step *stepInfo) uint16 {
 }
 
 // Compare and swap.
-func (cpu *cpu) opCS(step *stepInfo) uint16 {
+func (cpu *cpuState) opCS(step *stepInfo) uint16 {
 	var err uint16
 	var orig uint32
 	var src uint32
@@ -185,7 +185,7 @@ func (cpu *cpu) opCS(step *stepInfo) uint16 {
 }
 
 // Compare and swap double.
-func (cpu *cpu) opCDS(step *stepInfo) uint16 {
+func (cpu *cpuState) opCDS(step *stepInfo) uint16 {
 	var err uint16
 	var origl, origh uint32
 	var srcl, srch uint32
@@ -223,7 +223,7 @@ func (cpu *cpu) opCDS(step *stepInfo) uint16 {
 }
 
 // Translate virtual address to real address.
-func (cpu *cpu) opLRA(step *stepInfo) uint16 {
+func (cpu *cpuState) opLRA(step *stepInfo) uint16 {
 	// RX instruction in RS range
 	if step.R2 != 0 {
 		step.address1 += cpu.regs[step.R2]
@@ -314,7 +314,7 @@ func (cpu *cpu) opLRA(step *stepInfo) uint16 {
 }
 
 // Execute instruction.
-func (cpu *cpu) opEX(step *stepInfo) uint16 {
+func (cpu *cpuState) opEX(step *stepInfo) uint16 {
 	var s stepInfo // New stepInfo
 
 	// Fetch the next instruction
@@ -362,7 +362,7 @@ func (cpu *cpu) opEX(step *stepInfo) uint16 {
 }
 
 // Signal second processor.
-func (cpu *cpu) opSIGP(_ *stepInfo) uint16 {
+func (cpu *cpuState) opSIGP(_ *stepInfo) uint16 {
 	if (cpu.flags & problem) != 0 {
 		return ircPriv
 	}
@@ -370,7 +370,7 @@ func (cpu *cpu) opSIGP(_ *stepInfo) uint16 {
 }
 
 // Machine check.
-func (cpu *cpu) opMC(step *stepInfo) uint16 {
+func (cpu *cpuState) opMC(step *stepInfo) uint16 {
 	if (step.reg & 0xf0) != 0 {
 		return ircSpec
 	}
@@ -383,7 +383,7 @@ func (cpu *cpu) opMC(step *stepInfo) uint16 {
 }
 
 // And or Or byte with system mask.
-func (cpu *cpu) opSTxSM(step *stepInfo) uint16 {
+func (cpu *cpuState) opSTxSM(step *stepInfo) uint16 {
 	if (cpu.flags & problem) != 0 {
 		// Try to do quick STNSM
 		// if QVMA & vma_stnsm(reg, addr1))
@@ -453,7 +453,7 @@ func (cpu *cpu) opSTxSM(step *stepInfo) uint16 {
 }
 
 // Load control registers.
-func (cpu *cpu) opLCTL(step *stepInfo) uint16 {
+func (cpu *cpuState) opLCTL(step *stepInfo) uint16 {
 	if (cpu.flags & problem) != 0 {
 		return ircPriv
 	}
@@ -565,7 +565,7 @@ func (cpu *cpu) opLCTL(step *stepInfo) uint16 {
 }
 
 // Store control.
-func (cpu *cpu) opSTCTL(step *stepInfo) uint16 {
+func (cpu *cpuState) opSTCTL(step *stepInfo) uint16 {
 	if (cpu.flags & problem) != 0 {
 		// Try to do a quick STCTL
 		// if (QVMA && vm_stctl(step))
@@ -587,7 +587,7 @@ func (cpu *cpu) opSTCTL(step *stepInfo) uint16 {
 }
 
 // CPU Diagnostic instruction.
-func (cpu *cpu) opDIAG(step *stepInfo) uint16 {
+func (cpu *cpuState) opDIAG(step *stepInfo) uint16 {
 	if (cpu.flags & problem) != 0 {
 		return ircPriv
 	}
@@ -596,7 +596,7 @@ func (cpu *cpu) opDIAG(step *stepInfo) uint16 {
 }
 
 // Handle special 370 opcodes.
-func (cpu *cpu) opB2(step *stepInfo) uint16 {
+func (cpu *cpuState) opB2(step *stepInfo) uint16 {
 	if step.reg > 0x13 {
 		return ircOper
 	}
@@ -776,7 +776,7 @@ func (cpu *cpu) opB2(step *stepInfo) uint16 {
 }
 
 // Start I/O Operation.
-func (cpu *cpu) opSIO(step *stepInfo) uint16 {
+func (cpu *cpuState) opSIO(step *stepInfo) uint16 {
 	if (cpu.flags & problem) != 0 {
 		return ircPriv
 	}
@@ -785,7 +785,7 @@ func (cpu *cpu) opSIO(step *stepInfo) uint16 {
 }
 
 // Test state of device.
-func (cpu *cpu) opTIO(step *stepInfo) uint16 {
+func (cpu *cpuState) opTIO(step *stepInfo) uint16 {
 	if (cpu.flags & problem) != 0 {
 		return ircPriv
 	}
@@ -794,7 +794,7 @@ func (cpu *cpu) opTIO(step *stepInfo) uint16 {
 }
 
 // Halt I/O device.
-func (cpu *cpu) opHIO(step *stepInfo) uint16 {
+func (cpu *cpuState) opHIO(step *stepInfo) uint16 {
 	if (cpu.flags & problem) != 0 {
 		return ircPriv
 	}
@@ -803,7 +803,7 @@ func (cpu *cpu) opHIO(step *stepInfo) uint16 {
 }
 
 // Check state of channel.
-func (cpu *cpu) opTCH(step *stepInfo) uint16 {
+func (cpu *cpuState) opTCH(step *stepInfo) uint16 {
 	if (cpu.flags & problem) != 0 {
 		return ircPriv
 	}

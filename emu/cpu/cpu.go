@@ -81,7 +81,7 @@ import (
 */
 
 // Holds state of CPU.
-var cpuState cpu
+var sysCPU cpuState
 
 // Holds number of memory cycles the current instruction too.
 // Used for advancing the timer close to system speed.
@@ -89,58 +89,58 @@ var memCycle int
 
 // Initialize CPU to basic state.
 func InitializeCPU() {
-	cpuState.createTable()
-	cpuState.PC = 0
-	cpuState.sysMask = 0
-	cpuState.stKey = 0
-	cpuState.cc = 0
-	cpuState.ilc = 0
-	cpuState.progMask = 0
-	cpuState.flags = 0
-	cpuState.perRegMod = 0
-	cpuState.perAddr = 0
-	cpuState.perCode = 0
-	cpuState.clkCmp[0] = FMASK
-	cpuState.clkCmp[1] = FMASK
-	cpuState.timerTics = 0
-	cpuState.cpuTimer[0] = 0
-	cpuState.cpuTimer[1] = 0
-	cpuState.perEnb = false
-	cpuState.ecMode = false
-	cpuState.pageEnb = false
-	cpuState.irqEnb = false
-	cpuState.extEnb = false
-	cpuState.extIrq = false
-	cpuState.intIrq = false
-	cpuState.intEnb = false
-	cpuState.todEnb = false
-	cpuState.todIrq = false
-	cpuState.vmaEnb = false
+	sysCPU.createTable()
+	sysCPU.PC = 0
+	sysCPU.sysMask = 0
+	sysCPU.stKey = 0
+	sysCPU.cc = 0
+	sysCPU.ilc = 0
+	sysCPU.progMask = 0
+	sysCPU.flags = 0
+	sysCPU.perRegMod = 0
+	sysCPU.perAddr = 0
+	sysCPU.perCode = 0
+	sysCPU.clkCmp[0] = FMASK
+	sysCPU.clkCmp[1] = FMASK
+	sysCPU.timerTics = 0
+	sysCPU.cpuTimer[0] = 0
+	sysCPU.cpuTimer[1] = 0
+	sysCPU.perEnb = false
+	sysCPU.ecMode = false
+	sysCPU.pageEnb = false
+	sysCPU.irqEnb = false
+	sysCPU.extEnb = false
+	sysCPU.extIrq = false
+	sysCPU.intIrq = false
+	sysCPU.intEnb = false
+	sysCPU.todEnb = false
+	sysCPU.todIrq = false
+	sysCPU.vmaEnb = false
 
 	// Clear registers
 	for i := range 16 {
-		cpuState.regs[i] = 0
-		cpuState.cregs[i] = 0
+		sysCPU.regs[i] = 0
+		sysCPU.cregs[i] = 0
 	}
 
 	// Initialize Control regisers to default
-	cpuState.cregs[0] = 0x000000e0
-	cpuState.cregs[2] = 0xffffffff
-	cpuState.cregs[14] = 0xc2000000
-	cpuState.cregs[15] = 512
+	sysCPU.cregs[0] = 0x000000e0
+	sysCPU.cregs[2] = 0xffffffff
+	sysCPU.cregs[14] = 0xc2000000
+	sysCPU.cregs[15] = 512
 
 	// Clear floating point registers
 	for i := range 8 {
-		cpuState.fpregs[i] = 0
+		sysCPU.fpregs[i] = 0
 	}
 
 	// Clear TBL tables
 	for i := range 256 {
-		cpuState.tlb[i] = 0
+		sysCPU.tlb[i] = 0
 	}
 
 	// Set clock to current time
-	if !cpuState.todSet {
+	if !sysCPU.todSet {
 		// Set TOD to current time
 		now := time.Now()
 		sec := now.Unix()
@@ -151,23 +151,23 @@ func InitializeCPU() {
 		sec *= 1000000
 		sec <<= 12
 		usec := uint64(sec)
-		cpuState.todClock[0] = uint32((usec >> 32) & LMASKL)
-		cpuState.todClock[1] = uint32(usec & LMASKL)
-		cpuState.todSet = true
+		sysCPU.todClock[0] = uint32((usec >> 32) & LMASKL)
+		sysCPU.todClock[1] = uint32(usec & LMASKL)
+		sysCPU.todSet = true
 	}
 
-	cpuState.pageMask = 0
+	sysCPU.pageMask = 0
 }
 
 func IPLDevice(devNum uint16) error {
-	cpuState.flags = wait
-	cpuState.sysMask = 0xffff
+	sysCPU.flags = wait
+	sysCPU.sysMask = 0xffff
 	return ch.IPLDevice(devNum)
 }
 
 // Post an external interrupt to CPU.
 func PostExtIrq() {
-	cpuState.extIrq = true
+	sysCPU.extIrq = true
 	fmt.Println("CPU: Post ext")
 }
 
@@ -176,9 +176,9 @@ func CycleCPU() (int, bool) {
 	memCycle = 1 // Default to one cycle.
 
 	// Check if we should see if an IRQ is pending
-	irq := ch.ChanScan(cpuState.sysMask, cpuState.irqEnb)
+	irq := ch.ChanScan(sysCPU.sysMask, sysCPU.irqEnb)
 	if irq != Dv.NoDev {
-		cpuState.ilc = 0
+		sysCPU.ilc = 0
 		if ch.Loading != Dv.NoDev {
 			// For IPL, save device after saving load complete
 			word1 := mem.GetMemory(0)
@@ -189,62 +189,62 @@ func CycleCPU() (int, bool) {
 			memCycle++
 			_ = mem.PutWordMask(0xba, uint32(ch.Loading), LMASK)
 
-			cpuState.lpsw(word1, word2)
+			sysCPU.lpsw(word1, word2)
 			ch.Loading = Dv.NoDev
 		} else {
-			cpuState.suppress(oIOPSW, irq)
+			sysCPU.suppress(oIOPSW, irq)
 		}
 		return memCycle, true
 	}
 
 	// Check for external interrupts
-	if cpuState.extEnb {
-		if cpuState.extIrq {
-			if !cpuState.ecMode || (cpuState.cregs[0]&0x20) != 0 ||
-				(cpuState.cregs[6]&0x40) != 0 {
-				cpuState.extIrq = false
+	if sysCPU.extEnb {
+		if sysCPU.extIrq {
+			if !sysCPU.ecMode || (sysCPU.cregs[0]&0x20) != 0 ||
+				(sysCPU.cregs[6]&0x40) != 0 {
+				sysCPU.extIrq = false
 				fmt.Println("CPU: Ext IRQ")
-				cpuState.suppress(oEPSW, 0x40)
+				sysCPU.suppress(oEPSW, 0x40)
 				return memCycle, true
 			}
 		}
 
-		if cpuState.intIrq && (cpuState.cregs[0]&0x80) != 0 {
-			cpuState.intIrq = false
-			cpuState.suppress(oEPSW, 0x80)
+		if sysCPU.intIrq && (sysCPU.cregs[0]&0x80) != 0 {
+			sysCPU.intIrq = false
+			sysCPU.suppress(oEPSW, 0x80)
 			return memCycle, true
 		}
-		if cpuState.clkIrq && cpuState.intEnb {
-			cpuState.clkIrq = false
-			cpuState.suppress(oEPSW, 0x1005)
+		if sysCPU.clkIrq && sysCPU.intEnb {
+			sysCPU.clkIrq = false
+			sysCPU.suppress(oEPSW, 0x1005)
 			return memCycle, true
 		}
-		if cpuState.todIrq && cpuState.todEnb {
-			cpuState.todIrq = false
-			cpuState.suppress(oEPSW, 0x1004)
+		if sysCPU.todIrq && sysCPU.todEnb {
+			sysCPU.todIrq = false
+			sysCPU.suppress(oEPSW, 0x1004)
 			return memCycle, true
 		}
 	}
 
 	// Check if we have wait we can't exit
-	if ch.Loading == Dv.NoDev && !cpuState.irqEnb && (cpuState.flags&wait != 0) {
-		fmt.Printf("Uninterupable wait state %08x\n", cpuState.PC)
+	if ch.Loading == Dv.NoDev && !sysCPU.irqEnb && (sysCPU.flags&wait != 0) {
+		fmt.Printf("Uninterupable wait state %08x\n", sysCPU.PC)
 		return 1, false
 	}
 
 	// If we have wait flag or loading, nothing more to do
-	if ch.Loading != Dv.NoDev || (cpuState.flags&wait) != 0 {
+	if ch.Loading != Dv.NoDev || (sysCPU.flags&wait) != 0 {
 		/* CPU IDLE */
-		if !cpuState.irqEnb && !cpuState.extEnb {
+		if !sysCPU.irqEnb && !sysCPU.extEnb {
 			return memCycle, true
 		}
 		return memCycle, true
 	}
 
-	return cpuState.fetch(), true
+	return sysCPU.fetch(), true
 }
 
-func (cpu *cpu) fetch() int {
+func (cpu *cpuState) fetch() int {
 	if (cpu.PC & 1) != 0 {
 		cpu.suppress(oPPSW, ircSpec)
 		return memCycle
@@ -336,7 +336,7 @@ func (cpu *cpu) fetch() int {
 // Generate addresses for operands and if
 // approperate fetch the values. Then execute the
 // instruction and return any error condition.
-func (cpu *cpu) execute(step *stepInfo) uint16 {
+func (cpu *cpuState) execute(step *stepInfo) uint16 {
 	// Compute addresses of operands
 	if (step.opcode & 0xc0) != 0 { // RS, RX, SS
 		indexReg := (step.address1 >> 12) & 0xf
@@ -445,7 +445,7 @@ func (cpu *cpu) execute(step *stepInfo) uint16 {
 }
 
 // Create function table.
-func (cpu *cpu) createTable() {
+func (cpu *cpuState) createTable() {
 	cpu.table = [256]func(*stepInfo) uint16{
 		//  0         1         2         3          4         5         6          7
 		cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opSPM, cpu.opBAL, cpu.opBCT, cpu.opBC, // 0x
@@ -517,7 +517,7 @@ func (cpu *cpu) createTable() {
  */
 
 // Translate an address from virtual to physical.
-func (cpu *cpu) transAddr(virtAddr uint32) (uint32, uint16) {
+func (cpu *cpuState) transAddr(virtAddr uint32) (uint32, uint16) {
 	var entry uint32
 	var err bool
 
@@ -629,7 +629,7 @@ func (cpu *cpu) transAddr(virtAddr uint32) (uint32, uint16) {
 }
 
 // Store the PSW at given address with irq value.
-func (cpu *cpu) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
+func (cpu *cpuState) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 	var word1, word2 uint32
 	irqaddr = vector + 0x40
 
@@ -704,7 +704,7 @@ func (cpu *cpu) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 }
 
 // Check for protection violation.
-func (cpu *cpu) checkProtect(addr uint32, write bool) bool {
+func (cpu *cpuState) checkProtect(addr uint32, write bool) bool {
 	/* Check storage key */
 	if cpu.stKey == 0 {
 		return false
@@ -723,7 +723,7 @@ func (cpu *cpu) checkProtect(addr uint32, write bool) bool {
 }
 
 // * Check if we can access a range of mem.
-func (cpu *cpu) testAccess(virtAddr uint32, size uint32, write bool) uint16 {
+func (cpu *cpuState) testAccess(virtAddr uint32, size uint32, write bool) uint16 {
 	// Translate address
 	physAddr, err := cpu.transAddr(virtAddr)
 	if err != 0 {
@@ -751,7 +751,7 @@ func (cpu *cpu) testAccess(virtAddr uint32, size uint32, write bool) uint16 {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *cpu) readFull(virtAddr uint32) (uint32, uint16) {
+func (cpu *cpuState) readFull(virtAddr uint32) (uint32, uint16) {
 	offset := virtAddr & 3
 
 	// Validate address
@@ -809,7 +809,7 @@ func (cpu *cpu) readFull(virtAddr uint32) (uint32, uint16) {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *cpu) readHalf(virtAddr uint32) (uint32, uint16) {
+func (cpu *cpuState) readHalf(virtAddr uint32) (uint32, uint16) {
 	offset := virtAddr & 3
 
 	/* Validate address */
@@ -874,7 +874,7 @@ func (cpu *cpu) readHalf(virtAddr uint32) (uint32, uint16) {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *cpu) readByte(virtAddr uint32) (uint32, uint16) {
+func (cpu *cpuState) readByte(virtAddr uint32) (uint32, uint16) {
 	offset := virtAddr & 3
 
 	// Validate address
@@ -899,7 +899,7 @@ func (cpu *cpu) readByte(virtAddr uint32) (uint32, uint16) {
 	return word, 0
 }
 
-func (cpu *cpu) perAddrCheck(virtAddr uint32, code uint16) {
+func (cpu *cpuState) perAddrCheck(virtAddr uint32, code uint16) {
 	if cpu.cregs[10] <= cpu.cregs[11] {
 		if virtAddr >= cpu.cregs[10] && virtAddr <= cpu.cregs[11] {
 			cpu.perCode |= code
@@ -912,7 +912,7 @@ func (cpu *cpu) perAddrCheck(virtAddr uint32, code uint16) {
 }
 
 // Check if address is in the range of PER modify range.
-func (cpu *cpu) perCheck(virtAddr uint32) {
+func (cpu *cpuState) perCheck(virtAddr uint32) {
 	if cpu.perEnb && cpu.perStore {
 		cpu.perAddrCheck(virtAddr, 0x2000)
 	}
@@ -923,7 +923,7 @@ func (cpu *cpu) perCheck(virtAddr uint32) {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *cpu) writeFull(virtAddr, data uint32) uint16 {
+func (cpu *cpuState) writeFull(virtAddr, data uint32) uint16 {
 	var err1, err2 bool
 
 	offset := virtAddr & 3
@@ -999,7 +999,7 @@ func (cpu *cpu) writeFull(virtAddr, data uint32) uint16 {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *cpu) writeHalf(virtAddr, data uint32) uint16 {
+func (cpu *cpuState) writeHalf(virtAddr, data uint32) uint16 {
 	var err bool
 
 	offset := virtAddr & 3
@@ -1064,7 +1064,7 @@ func (cpu *cpu) writeHalf(virtAddr, data uint32) uint16 {
  * and alignment restrictions. Return 1 if failure, 0 if
  * success.
  */
-func (cpu *cpu) writeByte(virtAddr, data uint32) uint16 {
+func (cpu *cpuState) writeByte(virtAddr, data uint32) uint16 {
 	var err bool
 
 	// Validate address
@@ -1091,7 +1091,7 @@ func (cpu *cpu) writeByte(virtAddr, data uint32) uint16 {
 }
 
 // Suppress execution of instruction.
-func (cpu *cpu) suppress(code uint32, irc uint16) {
+func (cpu *cpuState) suppress(code uint32, irc uint16) {
 	irqaddr := cpu.storePSW(code, irc)
 
 	memCycle++
@@ -1102,7 +1102,7 @@ func (cpu *cpu) suppress(code uint32, irc uint16) {
 }
 
 // Load new processor status double word.
-func (cpu *cpu) lpsw(src1, src2 uint32) {
+func (cpu *cpuState) lpsw(src1, src2 uint32) {
 	cpu.ecMode = (src1 & 0x00080000) != 0
 	cpu.extEnb = (src1 & 0x01000000) != 0
 
@@ -1138,13 +1138,13 @@ func (cpu *cpu) lpsw(src1, src2 uint32) {
 }
 
 // Load register pair into 64 bit integer.
-func (cpu *cpu) loadDouble(reg uint8) uint64 {
+func (cpu *cpuState) loadDouble(reg uint8) uint64 {
 	value := (uint64(cpu.regs[reg]) << 32) | uint64(cpu.regs[reg|1])
 	return value
 }
 
 // Store a 64 bit integer in register pair.
-func (cpu *cpu) storeDouble(reg uint8, value uint64) {
+func (cpu *cpuState) storeDouble(reg uint8, value uint64) {
 	cpu.regs[reg|1] = uint32(value & LMASKL)
 	cpu.regs[reg] = uint32((value >> 32) & LMASKL)
 	cpu.perRegMod |= 3 << reg
@@ -1160,7 +1160,7 @@ func init() {
 
 // Enable VM Assist feature.
 func setVMA(_ uint16, _ string, _ []config.Option) error {
-	cpuState.vmaEnb = true
+	sysCPU.vmaEnb = true
 	return nil
 }
 
