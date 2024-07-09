@@ -50,7 +50,6 @@ type modelName struct {
 	model string // value of model.
 	// slash byte   // Slash optional value.
 	// dash  byte   // Dash optinal value.
-
 }
 
 // Option after model.
@@ -215,13 +214,13 @@ func LoadConfigFile(name string) error {
 
 		line := optionLine{}
 		line.line, err = reader.ReadString('\n')
-		lineNumber++
-		if len(line.line) == 0 && err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
 			return err
 		}
+		lineNumber++
 		err = line.parseLine()
 		if err != nil {
 			return err
@@ -241,9 +240,9 @@ func (line *optionLine) parseLine() error {
 		// Get device number
 		first := line.parseFirst()
 		if first == nil || !first.isAddr {
-			err := fmt.Sprintf("Device %s requires device address, line: %d\n", model.model, lineNumber)
-			return errors.New(err)
+			return fmt.Errorf("Device %s requires device address, line: %d", model.model, lineNumber)
 		}
+
 		// Get any remaining options.
 		options, err := line.parseOptions()
 		if err != nil {
@@ -257,16 +256,14 @@ func (line *optionLine) parseLine() error {
 		first := line.parseFirst()
 		line.skipSpace()
 		if !line.isEOL() || first == nil {
-			err := fmt.Sprintf("Option: %s not followed by value. line: %d\n", model.model, lineNumber)
-			return errors.New(err)
+			return fmt.Errorf("Option: %s not followed by value. line: %d", model.model, lineNumber)
 		}
 		return createOption(model.model, first)
 
 	case TypeOptions:
 		first := line.parseFirst()
 		if first == nil {
-			err := fmt.Sprintf("Option: %s not followed by value, line: %d\n", model.model, lineNumber)
-			return errors.New(err)
+			return fmt.Errorf("Option: %s not followed by value, line: %d", model.model, lineNumber)
 		}
 		options, err := line.parseOptions()
 		if err != nil {
@@ -277,13 +274,11 @@ func (line *optionLine) parseLine() error {
 	case TypeSwitch:
 		line.skipSpace()
 		if !line.isEOL() {
-			err := fmt.Sprintf("Switch Option: %s followed by options, line: %d\n", model.model, lineNumber)
-			return errors.New(err)
+			return fmt.Errorf("Switch Option: %s followed by options, line: %d", model.model, lineNumber)
 		}
 		return createSwitch(model.model)
 	case 0:
-		err := fmt.Sprintf("No type: %s registered, line: %d\n", model.model, lineNumber)
-		return errors.New(err)
+		return fmt.Errorf("No type: %s registered, line: %d", model.model, lineNumber)
 	}
 	return nil
 }
@@ -469,8 +464,7 @@ func (line *optionLine) getName() (string, error) {
 	by := line.line[line.pos]
 	if !unicode.IsLetter(rune(by)) {
 		if !line.isEOL() {
-			err := fmt.Sprintf("Invalid option encountered line: %d [%d]\n", lineNumber, line.pos)
-			return "", errors.New(err)
+			return "", fmt.Errorf("Invalid option encountered line: %d [%d]", lineNumber, line.pos)
 		}
 		return "", nil
 	}
@@ -514,8 +508,7 @@ func (line *optionLine) parseOption() (*Option, error) {
 		if ok {
 			option.EqualOpt = v
 		} else {
-			err := fmt.Sprintf("Invalid quoted string line: %d [%d]\n", lineNumber, line.pos)
-			return nil, errors.New(err)
+			return nil, fmt.Errorf("Invalid quoted string line: %d [%d]", lineNumber, line.pos)
 		}
 	}
 

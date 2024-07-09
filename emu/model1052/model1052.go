@@ -473,10 +473,8 @@ func init() {
 func create(devNum uint16, _ string, options []config.Option) error {
 	dev := Model1052ctx{addr: devNum}
 	err := ch.AddDevice(&dev, devNum)
-
 	if err != nil {
-		err := fmt.Sprintf("Unable to create 1052 at %03x\n", devNum)
-		return errors.New(err)
+		return fmt.Errorf("Unable to create 1052 at %03x", devNum)
 	}
 	console := model1052tel{ctx: &dev}
 	dev.telctx = &console

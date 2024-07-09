@@ -1,4 +1,4 @@
-/* ibm370 IBM 370 Channel functions.
+/* S370 IBM 370 Channel functions.
 
    Copyright (c) 2024, Richard Cornwell
 
@@ -845,19 +845,16 @@ func IPLDevice(devNum uint16) error {
 
 	// Check if channel exists
 	if cUnit == nil {
-		err := fmt.Sprintf("Channel %d does not exist", ch)
-		return errors.New(err)
+		return fmt.Errorf("Channel %d does not exist", ch)
 	}
 
 	if subChan == nil {
-		err := fmt.Sprintf("No subchannel for %03x", devNum)
-		return errors.New(err)
+		return fmt.Errorf("No subchannel for %03x", devNum)
 	}
 
 	// If no device or channel, return CC = 3
 	if cUnit.devTab[dNum] == nil {
-		err := fmt.Sprintf("Device %03x does not exist", devNum)
-		return errors.New(err)
+		return fmt.Errorf("Device %03x does not exist", devNum)
 	}
 
 	// Clear all channels before staring new device.
@@ -866,8 +863,7 @@ func IPLDevice(devNum uint16) error {
 	// Try to start I/O chain on device.
 	status := cUnit.devTab[dNum].StartIO()
 	if status != 0 {
-		err := fmt.Sprintf("Device %03x gave none zero status to IPL command: %02x", devNum, status)
-		return errors.New(err)
+		return fmt.Errorf("Device %03x gave none zero status to IPL command: %02x", devNum, status)
 	}
 
 	// Create IPL command.
@@ -890,8 +886,7 @@ func IPLDevice(devNum uint16) error {
 		subChan.ccwCmd = 0
 		subChan.ccwFlags = 0
 		if status != 0 {
-			err := fmt.Sprintf("Device %03x gave none zero status to IPL command: %02x", devNum, status)
-			return errors.New(err)
+			return fmt.Errorf("Device %03x gave none zero status to IPL command: %02x", devNum, status)
 		}
 	}
 	Loading = devNum
@@ -905,8 +900,7 @@ func Attach(devNum uint16, fileName string) error {
 	cUnit := chanUnit[ch]
 	dev := cUnit.devTab[dNum]
 	if dev == nil {
-		err := fmt.Sprintf("No device: %03x\n", devNum)
-		return errors.New(err)
+		return fmt.Errorf("No device: %03x", devNum)
 	}
 	return dev.Attach(fileName)
 }
@@ -918,8 +912,7 @@ func Detach(devNum uint16) error {
 	cUnit := chanUnit[ch]
 	dev := cUnit.devTab[dNum]
 	if dev == nil {
-		err := fmt.Sprintf("No device: %03x\n", devNum)
-		return errors.New(err)
+		return fmt.Errorf("No device: %03x", devNum)
 	}
 	return dev.Detach()
 }
@@ -931,14 +924,12 @@ func AddDevice(dev dev.Device, devNum uint16) error {
 	cUnit := chanUnit[ch]
 	// Check if channel exists
 	if cUnit == nil {
-		err := fmt.Sprintf("Channel %d does not exist", ch)
-		return errors.New(err)
+		return fmt.Errorf("Channel %d does not exist", ch)
 	}
 
 	// Check if device already exists.
 	if cUnit.devTab[dNum] != nil {
-		err := fmt.Sprintf("Device %03x already exists", devNum)
-		return errors.New(err)
+		return fmt.Errorf("Device %03x already exists", devNum)
 	}
 	cUnit.devTab[dNum] = dev
 	return nil
@@ -951,14 +942,12 @@ func GetDevice(devNum uint16) (dev.Device, error) {
 	cUnit := chanUnit[ch]
 	// Check if channel exists
 	if cUnit == nil {
-		err := fmt.Sprintf("Channel %d does not exist", ch)
-		return nil, errors.New(err)
+		return nil, fmt.Errorf("Channel %d does not exist", ch)
 	}
 
 	// Check if device exists.
 	if cUnit.devTab[dNum] == nil {
-		err := fmt.Sprintf("Device %03x doesn't exist", devNum)
-		return nil, errors.New(err)
+		return nil, fmt.Errorf("Device %03x doesn't exist", devNum)
 	}
 	return cUnit.devTab[dNum], nil
 }
@@ -1372,7 +1361,6 @@ func init() {
 func create(_ uint16, number string, options []config.Option) error {
 	// Get channel number
 	ch, err := strconv.ParseUint(number, 10, 4)
-
 	if err != nil {
 		return errors.New("Channel number must be a number: " + number)
 	}
@@ -1380,12 +1368,10 @@ func create(_ uint16, number string, options []config.Option) error {
 	chanNum := int(ch)
 	// Check if number too large.
 	if chanNum > len(chanUnit) {
-		errstr := fmt.Sprintf("Channel number too large: %d max: %d\n", chanNum, len(chanUnit))
-		return errors.New(errstr)
+		return fmt.Errorf("Channel number too large: %d max: %d", chanNum, len(chanUnit))
 	}
 	if chanUnit[chanNum] != nil {
-		errstr := fmt.Sprintf("Channel %d already defined\n", chanNum)
-		return errors.New(errstr)
+		return fmt.Errorf("Channel %d already defined", chanNum)
 	}
 
 	chanType := 0
@@ -1394,22 +1380,22 @@ func create(_ uint16, number string, options []config.Option) error {
 		switch strings.ToUpper(option.Name) {
 		case "MPX", "MUX":
 			if chanType != 0 {
-				return errors.New("Can't have more then one channel type\n")
+				return errors.New("Can't have more then one channel type")
 			}
 			chanType = dev.TypeMux
 		case "SEL":
 			if chanType != 0 {
-				return errors.New("Can't have more then one channel type\n")
+				return errors.New("Can't have more then one channel type")
 			}
 			chanType = dev.TypeSel
 		case "BMUX":
 			if chanType != 0 {
-				return errors.New("Can't have more then one channel type\n")
+				return errors.New("Can't have more then one channel type")
 			}
 			chanType = dev.TypeBMux
 		case "SUB", "SUBCHAN":
 			if subChans != 0 {
-				return errors.New("Can't have more then one channel type\n")
+				return errors.New("Can't have more then one channel type")
 			}
 			var err error
 			subChans, err = strconv.ParseUint(option.EqualOpt, 10, 9)
@@ -1425,8 +1411,7 @@ func create(_ uint16, number string, options []config.Option) error {
 	}
 
 	if chanType == 0 {
-		errstr := fmt.Sprintf("No channel type defined for channel %d", chanNum)
-		return errors.New(errstr)
+		return fmt.Errorf("No channel type defined for channel %d", chanNum)
 	}
 
 	if chanType == dev.TypeMux && subChans == 0 {

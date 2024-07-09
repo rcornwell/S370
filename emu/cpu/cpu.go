@@ -233,7 +233,6 @@ func CycleCPU() (int, bool) {
 
 	// If we have wait flag or loading, nothing more to do
 	if ch.Loading != Dv.NoDev || (cpuState.flags&wait) != 0 {
-
 		/* CPU IDLE */
 		if !cpuState.irqEnb && !cpuState.extEnb {
 			return memCycle, true
@@ -282,7 +281,7 @@ func (cpu *cpu) fetch() int {
 	step.R2 = step.reg & 0xf
 	cpu.PC += 2
 
-	//fmt.Printf(" Fetch %08x: %02x %02x\n", cpu.PC-2, step.opcode, step.reg)
+	// fmt.Printf(" Fetch %08x: %02x %02x\n", cpu.PC-2, step.opcode, step.reg)
 
 	// Check type of instruction
 	if (step.opcode & 0xc0) != 0 {
@@ -1158,8 +1157,8 @@ func init() {
 	config.RegisterModel("IPL", config.TypeModel, setIPLDev)
 }
 
-// Enable VM Assit feature.
-func setVMA(devNum uint16, _ string, _ []config.Option) error {
+// Enable VM Assist feature.
+func setVMA(_ uint16, _ string, _ []config.Option) error {
 	cpuState.vmaEnb = true
 	return nil
 }
@@ -1169,7 +1168,7 @@ func setMemSize(_ uint16, number string, _ []config.Option) error {
 	size := 0
 	multiplier := ' '
 	for i, digit := range number {
-		if !unicode.IsDigit(rune(digit)) {
+		if !unicode.IsDigit(digit) {
 			if i == len(number)-1 {
 				multiplier = digit
 				break

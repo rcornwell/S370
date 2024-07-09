@@ -45,8 +45,10 @@ type eventList struct {
 	tail *Event
 }
 
-var freeList *Event
-var el eventList
+var (
+	freeList *Event
+	el       eventList
+)
 
 // Grab event off free list, or create new one.
 func getEvent(dev D.Device, cb Callback, time int, iarg int) *Event {

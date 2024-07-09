@@ -32,10 +32,12 @@ import (
 	D "github.com/rcornwell/S370/emu/device"
 )
 
-var testOptions []Option
-var testDevNum uint16
-var testValue string
-var testType string
+var (
+	testOptions []Option
+	testDevNum  uint16
+	testValue   string
+	testType    string
+)
 
 func resetTest() {
 	testOptions = []Option{}
@@ -103,7 +105,7 @@ func TestRegisterModel(t *testing.T) {
 	}
 }
 
-// Test register a switch
+// Test register a switch.
 func TestRegisterSwitch(t *testing.T) {
 	cleanUpConfig()
 

@@ -34,11 +34,8 @@ import (
 
 	getopt "github.com/pborman/getopt/v2"
 	config "github.com/rcornwell/S370/config/configparser"
-	"github.com/rcornwell/S370/emu/core"
-
-	//	device "github.com/rcornwell/S370/emu/device"
+	core "github.com/rcornwell/S370/emu/core"
 	master "github.com/rcornwell/S370/emu/master"
-	//"github.com/rcornwell/S370/emu/memory"
 	syschannel "github.com/rcornwell/S370/emu/sys_channel"
 	telnet "github.com/rcornwell/S370/telnet"
 
@@ -116,8 +113,8 @@ loop:
 			fmt.Println("Got quit signal")
 			break loop
 		case input := <-msg:
-			syschannel.Detach(0x00c)
-			syschannel.Attach(0x00c, *optDeck)
+			_ = syschannel.Detach(0x00c)
+			_ = syschannel.Attach(0x00c, *optDeck)
 			fmt.Printf("IPL device: %s\n", input)
 			masterChannel <- master.Packet{DevNum: 0x00c, Msg: master.IPLdevice}
 		}

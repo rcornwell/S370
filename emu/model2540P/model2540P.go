@@ -203,8 +203,7 @@ func create(devNum uint16, _ string, options []config.Option) error {
 	dev := Model2540Pctx{addr: devNum}
 	err := ch.AddDevice(&dev, devNum)
 	if err != nil {
-		err := fmt.Sprintf("Unable to create 2540R at %03x\n", devNum)
-		return errors.New(err)
+		return fmt.Errorf("Unable to create 2540R at %03x", devNum)
 	}
 	dev.context = card.NewCardContext(card.ModeAuto)
 	eof := false
