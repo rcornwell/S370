@@ -1,4 +1,4 @@
-/* Core S370 emulator loop.
+/* S370 IBM 370 Regular timer event.
 
    Copyright (c) 2024, Richard Cornwell
 
@@ -15,66 +15,66 @@
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-   ROBERT M SUPNIK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+   RICHARD CORNWELL BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
    IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
    CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 */
 
-package core
+package timer
 
 import (
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/rcornwell/S370/emu/cpu"
-	"github.com/rcornwell/S370/emu/event"
 	"github.com/rcornwell/S370/emu/master"
-	syschannel "github.com/rcornwell/S370/emu/sys_channel"
 )
 
-type core struct {
+type timer struct {
 	wg       sync.WaitGroup
 	shutdown bool // Signal to shutdown simulator.
 	running  bool // Indicate when simulator should run or not.
 	master   chan master.Packet
+	enable   chan bool    // Enable or disable timer.
+	ticker   *time.Ticker // Regular timer intervale.
 }
 
-// Create instance of CPU.
-func NewCPU(master chan master.Packet) *core {
-	return &core{
+// Create instance of Clock timer.
+func NewTimer(master chan master.Packet) *timer {
+	timer := &timer{
 		master: master,
 	}
+	timer.ticker = time.NewTicker(20 * time.Microsecond)
+	timer.ticker.Stop()
+	return timer
 }
 
-// Start CPU running.
-func (core *core) Start() {
-	core.wg.Add(1)
-	cpu.InitializeCPU()
-	cpu.SetTod()
-	for !core.shutdown {
-		if core.running {
-			var cycle int
-			cycle, core.running = cpu.CycleCPU()
-			event.Advance(cycle)
-		} else if event.AnyEvent() {
-			event.Advance(1)
-		}
+// Start timer process to deliver 20ms clock pulses.
+func (timer *timer) Start() {
+	timer.wg.Add(1)
+	defer timer.ticker.Stop()
+	for !timer.shutdown {
 		select {
-		case packet := <-core.master:
-			core.processPacket(packet)
+		case <-timer.ticker.C:
+			timer.master <- master.Packet{Msg: master.TimeClock}
+		case timer.running = <-timer.enable:
+			if timer.running {
+				timer.ticker.Reset(20 * time.Millisecond)
+			} else {
+				timer.ticker.Stop()
+			}
 		default:
 		}
 	}
 }
 
 // Stop a running server.
-func (core *core) Stop() {
-	core.shutdown = true
+func (timer *timer) Stop() {
+	timer.shutdown = true
 	done := make(chan struct{})
 	go func() {
-		core.wg.Wait()
+		timer.wg.Wait()
 		close(done)
 	}()
 
@@ -85,35 +85,4 @@ func (core *core) Stop() {
 		fmt.Println("Timed out waiting for connections to finish.")
 		return
 	}
-}
-
-// Process a packet sent to system simulation.
-func (core *core) processPacket(packet master.Packet) {
-	switch packet.Msg {
-	case master.TelConnect:
-		syschannel.SendConnect(packet.DevNum, packet.Conn)
-	case master.TelDisconnect:
-		syschannel.SendDisconnect(packet.DevNum)
-	case master.TelReceive:
-		syschannel.SendReceiveChar(packet.DevNum, packet.Data)
-	case master.TimeClock:
-		cpu.UpdateTimer()
-	case master.IPLdevice:
-		err := cpu.IPLDevice(packet.DevNum)
-		if err != nil {
-			fmt.Println(err)
-		} else {
-			core.running = true
-		}
-	case master.Start:
-		core.running = true
-	case master.Stop:
-		core.running = false
-	case master.Shutdown:
-		core.shutdown = true
-	}
-}
-
-func PostExtIrq() {
-	cpu.PostExtIrq()
 }

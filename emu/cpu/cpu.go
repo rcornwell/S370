@@ -1,4 +1,5 @@
-/* CPU definitions for IBM 370 simulator definitions
+/*
+   CPU: main CPU instruction fetch and execute.
 
    Copyright (c) 2024, Richard Cornwell
 
@@ -1263,57 +1264,6 @@ func setIPLDev(devNum uint16, _ string, _ []config.Option) error {
 //     }
 //     idle_stop_tm0 = 0;
 //     return SCPE_OK;
-// }
-
-// /* Interval timer routines */
-// t_stat
-// rtc_srv(UNIT * uptr)
-// {
-//     (void)sim_rtcn_calb (rtc_tps, TMR_RTC);
-//     sim_activate_after(uptr, 1000000/rtc_tps);
-//     M[0x50>>2] -= 0x100;
-//     if ((M[0x50>>2] & 0xfffff00) == 0)  {
-//         sim_debug(DEBUG_INST, &cpu_dev, "TIMER IRQ %08x\n", M[0x50>>2]);
-//         interval_irq = 1;
-//     }
-//     key[0] |= 0x6;
-//     sim_debug(DEBUG_INST, &cpu_dev, "TIMER = %08x\n", M[0x50>>2]);
-//     /* Time of day clock and timer on IBM 370 */
-//     if (Q370) {
-//         uint32 t;
-//         if (clk_state && (cregs[0] & 0x20000000) == 0) {
-//            t = tod_clock[1] + (13333333);
-//            if (t < tod_clock[1])
-//                 tod_clock[0]++;
-//            tod_clock[1] = t;
-//            sim_debug(DEBUG_INST, &cpu_dev, "TOD = %08x %08x\n", tod_clock[0], tod_clock[1]);
-//            check_tod_irq();
-//         }
-//         t = cpu_timer[1] - (timer_tics << 12);
-//         if (t > cpu_timer[1])
-//             cpu_timer[0]--;
-//         cpu_timer[1] = t;
-//         sim_debug(DEBUG_INST, &cpu_dev, "INTER = %08x %08x\n", cpu_timer[0], cpu_timer[1]);
-//         timer_tics = 3333;
-//         if (cpu_timer[0] & MSIGN) {
-//             sim_debug(DEBUG_INST, &cpu_dev, "CPU TIMER IRQ %08x%08x\n", cpu_timer[0],
-//               cpu_timer[1]);
-//             clk_irq = 1;
-//         }
-//     }
-//     return SCPE_OK;
-// }
-
-// void
-// check_tod_irq()
-// {
-//     tod_irq = 0;
-//     if ((clk_cmp[0] < tod_clock[0]) ||
-//        ((clk_cmp[0] == tod_clock[0]) && (clk_cmp[1] < tod_clock[1]))) {
-//         sim_debug(DEBUG_INST, &cpu_dev, "CPU TIMER CCK IRQ %08x %08x\n", clk_cmp[0],
-//                   clk_cmp[1]);
-//         tod_irq = 1;
-//     }
 // }
 
 // /* RSV: Set CPU IDLESTOP=<val>

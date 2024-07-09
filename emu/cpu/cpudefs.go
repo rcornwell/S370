@@ -1,4 +1,5 @@
-/* CPU definitions for IBM 370 simulator definitions
+/*
+   CPU definitions for IBM 370 simulator definitions
 
    Copyright (c) 2024, Richard Cornwell
 

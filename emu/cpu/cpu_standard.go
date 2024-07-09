@@ -1,4 +1,5 @@
-/* IBM 370 Standard instruction execution
+/*
+   IBM 370 Standard instruction execution
 
    Copyright (c) 2024, Richard Cornwell
 

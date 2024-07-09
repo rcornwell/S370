@@ -1,4 +1,5 @@
-/* IBM 370 Floating point instructions
+/*
+   IBM 370 Floating point instructions
 
    Copyright (c) 2024, Richard Cornwell
 

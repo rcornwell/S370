@@ -1,4 +1,5 @@
-/* IBM 370 System instructions
+/*
+   IBM 370 System instructions
 
    Copyright (c) 2024, Richard Cornwell
 

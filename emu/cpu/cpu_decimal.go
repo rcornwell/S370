@@ -1,4 +1,5 @@
-/* IBM 370 Decimal instructions
+/*
+   IBM 370 Decimal instructions
 
    Copyright (c) 2024, Richard Cornwell
 
