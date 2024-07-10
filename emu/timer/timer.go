@@ -1,4 +1,5 @@
-/* S370 IBM 370 Regular timer event.
+/*
+   S370 IBM 370 Regular timer event.
 
    Copyright (c) 2024, Richard Cornwell
 
@@ -31,47 +32,42 @@ import (
 	"github.com/rcornwell/S370/emu/master"
 )
 
-type timer struct {
-	wg       sync.WaitGroup
-	shutdown bool // Signal to shutdown simulator.
-	running  bool // Indicate when simulator should run or not.
-	master   chan master.Packet
-	enable   chan bool    // Enable or disable timer.
-	ticker   *time.Ticker // Regular timer intervale.
+type Timer struct {
+	wg      sync.WaitGroup
+	running bool // Indicate when simulator should run or not.
+	master  chan master.Packet
+	enable  chan bool     // Enable or disable timer.
+	done    chan struct{} // Stop timer task.
+	ticker  *time.Ticker  // Regular timer intervale.
 }
 
 // Create instance of Clock timer.
-func NewTimer(master chan master.Packet) *timer {
-	timer := &timer{
-		master: master,
+func NewTimer(masterChannel chan master.Packet) *Timer {
+	timer := &Timer{
+		master:  masterChannel,
+		running: false,
+		enable:  make(chan bool, 1),
+		done:    make(chan struct{}),
 	}
-	timer.ticker = time.NewTicker(20 * time.Microsecond)
-	timer.ticker.Stop()
+	// Run ticker to deliver regular commands on master channel.
+	timer.wg.Add(1)
+	go timer.run()
 	return timer
 }
 
-// Start timer process to deliver 20ms clock pulses.
-func (timer *timer) Start() {
-	timer.wg.Add(1)
-	defer timer.ticker.Stop()
-	for !timer.shutdown {
-		select {
-		case <-timer.ticker.C:
-			timer.master <- master.Packet{Msg: master.TimeClock}
-		case timer.running = <-timer.enable:
-			if timer.running {
-				timer.ticker.Reset(20 * time.Millisecond)
-			} else {
-				timer.ticker.Stop()
-			}
-		default:
-		}
-	}
+// Start timer process to deliver 5ms clock pulses.
+func (timer *Timer) Start() {
+	timer.enable <- true
 }
 
-// Stop a running server.
-func (timer *timer) Stop() {
-	timer.shutdown = true
+// Stop a timer for some time.
+func (timer *Timer) Stop() {
+	timer.enable <- false
+}
+
+// Shutdown a running server.
+func (timer *Timer) Shutdown() {
+	close(timer.done)
 	done := make(chan struct{})
 	go func() {
 		timer.wg.Wait()
@@ -84,5 +80,28 @@ func (timer *timer) Stop() {
 	case <-time.After(time.Second):
 		fmt.Println("Timed out waiting for connections to finish.")
 		return
+	}
+}
+
+// Internval timer routine to send timer events on master channel.
+func (timer *Timer) run() {
+	defer timer.wg.Done()
+	timer.ticker = time.NewTicker(6666666 * time.Nanosecond)
+	defer timer.ticker.Stop()
+	timer.running = false
+
+	for {
+		select {
+		case <-timer.ticker.C:
+			if timer.running {
+				timer.master <- master.Packet{Msg: master.TimeClock}
+			}
+		case timer.running = <-timer.enable:
+			if timer.running {
+				timer.ticker.Reset(6666666 * time.Nanosecond)
+			}
+		case <-timer.done:
+			return
+		}
 	}
 }
