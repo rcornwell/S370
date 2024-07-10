@@ -128,8 +128,8 @@ const (
 	oPPSW    uint32 = 0x28 // Program old PSW
 	oMPSW    uint32 = 0x30 // Machine check PSW
 	oIOPSW   uint32 = 0x38 // IO old PSW
-	CSW      uint32 = 0x40 // CSW
-	CAW      uint32 = 0x48 // CAW
+	CSW      uint32 = 0x40 // Channel Status Word
+	CAW      uint32 = 0x48 // Channel Address Word
 	timer    uint32 = 0x50 // timer
 	nEPSW    uint32 = 0x58 // External new PSW
 	nSPSW    uint32 = 0x60 // SVC new PSW

@@ -37,35 +37,37 @@ func UpdateTimer() {
 
 // Set TOD to current date.
 func SetTod() {
-	if !sysCPU.todSet {
-		// Get current time
-		now := time.Now()
-		lsec := uint64(now.Unix())
-
-		// IBM measures time from 1900, Unix starts at 1970
-		// Add in number of years from 1900 to 1970 + 17 leap days
-		lsec += ((70 * 365) + 17) * 86400
-		lsec *= 1000000
-		lsec <<= 12
-		sysCPU.todClock[0] = uint32(lsec >> 32)
-		sysCPU.todClock[1] = uint32(lsec & uint64(FMASK))
+	if sysCPU.todSet {
+		return
 	}
+	// Get current time
+	now := time.Now()
+	lsec := uint64(now.Unix())
+
+	// IBM measures time from 1900, Unix starts at 1970
+	// Add in number of years from 1900 to 1970 + 17 leap days
+	lsec += ((70 * 365) + 17) * 86400
+	lsec *= 1000000
+	lsec <<= 12
+	sysCPU.todClock[0] = uint32(lsec >> 32)
+	sysCPU.todClock[1] = uint32(lsec & uint64(FMASK))
 }
 
 // Update the current interval and TOD clock.
 func (cpu *cpuState) updateClock() {
-	timeMem := mem.GetMemory(0x50)
-	timeMem -= 0x100
-	mem.SetMemory(0x50, timeMem)
+	timeMem := mem.GetMemory(timer)
+	timeMem -= 0x200 // 2 * 1/300 of second.
+	mem.SetMemory(timer, timeMem)
 
 	// Check if should signal CPU
-	if (timeMem & 0xfffff00) == 0 {
+	if (timeMem & 0xffffe00) == 0 {
 		cpu.intIrq = true
 	}
 
 	// Update TOD clock if enabled.
 	if cpu.todSet && (cpu.cregs[0]&0x20000000) == 0 {
-		t := cpu.todClock[1] + (13333333)
+		// TOD clock bit 51 is updated every microsecond.
+		t := cpu.todClock[1] + (26666666)
 		if t < cpu.todClock[1] {
 			cpu.todClock[0]++
 		}
@@ -81,13 +83,13 @@ func (cpu *cpuState) updateClock() {
 		}
 	}
 
-	// Update CPU timer.
+	// Update CPU timer, updated 300 times per second.
 	t := cpu.cpuTimer[1] - (uint32(cpu.timerTics) << 12)
 	if t > cpu.cpuTimer[1] {
 		cpu.cpuTimer[0]--
 	}
 	cpu.cpuTimer[1] = t
-	cpu.timerTics = 3333
+	cpu.timerTics = 6666 // 2 * 1/300 of a second.
 	if (cpu.cpuTimer[0] & MSIGN) != 0 {
 		cpu.clkIrq = true
 	}

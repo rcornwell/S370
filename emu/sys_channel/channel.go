@@ -59,6 +59,10 @@ const (
 	bufEmpty uint8 = 0x04 // Buffer is empty
 	bufEnd   uint8 = 0x10 // Device has returned channel end, no more data
 
+	// Addresses for reading and writing channel status to.
+	CSW uint32 = 0x40 // Channel Status Word
+	CAW uint32 = 0x48 // Channel Address Word
+
 	// Channel status information.
 	statusAttn   uint16 = 0x8000 // Device raised attention
 	statusSMS    uint16 = 0x4000 // Status modifier
@@ -167,8 +171,8 @@ func StartIO(devNum uint16) uint8 {
 
 	// Check for any pending status for this device
 	if dStatus != 0 {
-		mem.SetMemory(0x44, uint32(dStatus)<<24)
-		mem.SetMemory(0x40, 0)
+		mem.SetMemory(CSW, 0)
+		mem.SetMemory(CSW+4, uint32(dStatus)<<24)
 		cUnit.devStatus[dNum] = 0
 		return 1
 	}
@@ -178,13 +182,13 @@ func StartIO(devNum uint16) uint8 {
 		return 2
 	}
 	if status != 0 {
-		mem.PutWordMask(0x44, uint32(status)<<16, statusMask)
+		mem.PutWordMask(CSW+4, uint32(status)<<16, statusMask)
 		return 1
 	}
 
 	// All ok, get caw address
 	subChan.chanStatus = 0
-	subChan.caw = mem.GetMemory(0x48)
+	subChan.caw = mem.GetMemory(CAW)
 	subChan.ccwKey = uint8(((subChan.caw & keyMask) >> 24) & 0xff)
 	subChan.caw &= addrMask
 	subChan.devAddr = devNum
@@ -192,7 +196,7 @@ func StartIO(devNum uint16) uint8 {
 	cUnit.devStatus[dNum] = 0
 
 	if loadCCW(cUnit, subChan, false) {
-		mem.SetMemoryMask(0x44, uint32(subChan.chanStatus)<<16, statusMask)
+		mem.SetMemoryMask(CSW+4, uint32(subChan.chanStatus)<<16, statusMask)
 		subChan.chanStatus = 0
 		subChan.ccwCmd = 0
 		subChan.devAddr = dev.NoDev
@@ -203,7 +207,7 @@ func StartIO(devNum uint16) uint8 {
 
 	// If channel returned busy save CSW and return CC = 1
 	if (subChan.chanStatus & statusBusy) != 0 {
-		mem.SetMemoryMask(0x44, uint32(subChan.chanStatus)<<16, statusMask)
+		mem.SetMemoryMask(CSW+4, uint32(subChan.chanStatus)<<16, statusMask)
 		subChan.chanStatus = 0
 		subChan.ccwCmd = 0
 		subChan.devAddr = dev.NoDev
@@ -219,7 +223,7 @@ func StartIO(devNum uint16) uint8 {
 		if (subChan.chanStatus & statusDevEnd) != 0 {
 			storeCSW(subChan)
 		} else {
-			mem.SetMemoryMask(0x44, uint32(subChan.chanStatus)<<16, statusMask)
+			mem.SetMemoryMask(CSW+4, uint32(subChan.chanStatus)<<16, statusMask)
 		}
 		subChan.ccwCmd = 0
 		subChan.devAddr = dev.NoDev
@@ -232,7 +236,7 @@ func StartIO(devNum uint16) uint8 {
 
 	// If immediate command and chaining report status, but don't clear things
 	if (subChan.chanStatus&(statusChnEnd|statusDevEnd)) == statusChnEnd && (subChan.ccwFlags&chainCmd) != 0 {
-		mem.SetMemoryMask(0x44, uint32(subChan.chanStatus)<<16, statusMask)
+		mem.SetMemoryMask(CSW+4, uint32(subChan.chanStatus)<<16, statusMask)
 		return 1
 	}
 
@@ -277,8 +281,8 @@ func TestIO(devNum uint16) uint8 {
 
 	// Device has returned a status, store the csw and return cc=1
 	if cUnit.devStatus[dNum] != 0 {
-		mem.SetMemory(0x40, 0)
-		mem.SetMemory(0x44, (uint32(cUnit.devStatus[dNum]) << 24))
+		mem.SetMemory(CSW, 0)
+		mem.SetMemory(CSW+4, (uint32(cUnit.devStatus[dNum]) << 24))
 		cUnit.devStatus[dNum] = 0
 		return 1
 	}
@@ -303,7 +307,7 @@ func TestIO(devNum uint16) uint8 {
 
 	// If we get a error, save csw and return cc = 1
 	if (status & errorStatus) != 0 {
-		mem.SetMemoryMask(0x44, uint32(status)<<16, statusMask)
+		mem.SetMemoryMask(CSW+4, uint32(status)<<16, statusMask)
 		return 1
 	}
 
@@ -351,7 +355,7 @@ func HaltIO(devNum uint16) uint8 {
 	// Let device try to halt
 	cc := cUnit.devTab[dNum].HaltIO()
 	if cc == 1 {
-		mem.SetMemoryMask(0x44, (uint32(subChan.chanStatus) << 16), statusMask)
+		mem.SetMemoryMask(CSW+4, (uint32(subChan.chanStatus) << 16), statusMask)
 	}
 	return cc
 }
@@ -824,8 +828,8 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 				if cUnit.devStatus[j] != 0 {
 					cUnit.irqPending = true
 					IrqPending = true
-					mem.SetMemory(0x44, uint32(cUnit.devStatus[j])<<24)
-					mem.SetMemory(0x40, 0)
+					mem.SetMemory(CSW, 0)
+					mem.SetMemory(CSW+4, uint32(cUnit.devStatus[j])<<24)
 					cUnit.devStatus[j] = 0
 					return (uint16(i) << 8) | uint16(j)
 				}
@@ -1091,10 +1095,10 @@ func findSubChannel(devNum uint16) *chanCtl {
 
 // Save full csw.
 func storeCSW(cUnit *chanCtl) {
-	mem.SetMemory(0x40, (uint32(cUnit.ccwKey)<<24)|cUnit.caw)
-	mem.SetMemory(0x44, uint32(cUnit.ccwCount)|(uint32(cUnit.chanStatus)<<16))
-	word1 := mem.GetMemory(0x40)
-	word2 := mem.GetMemory(0x44)
+	mem.SetMemory(CSW, (uint32(cUnit.ccwKey)<<24)|cUnit.caw)
+	mem.SetMemory(CSW+4, uint32(cUnit.ccwCount)|(uint32(cUnit.chanStatus)<<16))
+	word1 := mem.GetMemory(CSW)
+	word2 := mem.GetMemory(CSW + 4)
 	fmt.Printf("CSW %08x %08x\n", word1, word2)
 	if (cUnit.chanStatus & statusPCI) != 0 {
 		cUnit.chanStatus &= ^statusPCI
