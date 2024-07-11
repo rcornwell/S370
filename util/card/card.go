@@ -186,36 +186,6 @@ func (ctx *CardContext) Detach() error {
 	return nil
 }
 
-// Initialize back translation tables.
-func init() {
-	for i := range 4096 {
-		holToEBCDICTable[i] = 0x100
-		holToASCIITable26[i] = 0xff
-		holToASCIITable29[i] = 0xff
-	}
-
-	// Initialize back translation from Hollerith to Ebcdic
-	for i, t := range ebcdicToHolTable {
-		if holToEBCDICTable[t] != 0x100 {
-			s := fmt.Sprintf("Translation error EBCDIC %02x is %03x and %03x", i, t, holToEBCDICTable[t])
-			panic(s)
-		}
-		holToEBCDICTable[t] = uint16(i)
-	}
-
-	// Initialize back translation from Hollerith to ascii
-	for i, t := range asciiToHol29 {
-		if (t & 0xf000) == 0 {
-			holToASCIITable29[t] = uint8(i)
-		}
-	}
-	for i, t := range asciiToHol26 {
-		if (t & 0xf000) == 0 {
-			holToASCIITable26[t] = uint8(i)
-		}
-	}
-}
-
 func (ctx CardContext) HopperSize() int {
 	return ctx.hopperCards - ctx.hopperPos
 }
@@ -803,4 +773,34 @@ card_done:
 		j++
 	}
 	buf.len -= p
+}
+
+// Initialize back translation tables.
+func init() {
+	for i := range 4096 {
+		holToEBCDICTable[i] = 0x100
+		holToASCIITable26[i] = 0xff
+		holToASCIITable29[i] = 0xff
+	}
+
+	// Initialize back translation from Hollerith to Ebcdic
+	for i, t := range ebcdicToHolTable {
+		if holToEBCDICTable[t] != 0x100 {
+			s := fmt.Sprintf("Translation error EBCDIC %02x is %03x and %03x", i, t, holToEBCDICTable[t])
+			panic(s)
+		}
+		holToEBCDICTable[t] = uint16(i)
+	}
+
+	// Initialize back translation from Hollerith to ascii
+	for i, t := range asciiToHol29 {
+		if (t & 0xf000) == 0 {
+			holToASCIITable29[t] = uint8(i)
+		}
+	}
+	for i, t := range asciiToHol26 {
+		if (t & 0xf000) == 0 {
+			holToASCIITable26[t] = uint8(i)
+		}
+	}
 }
