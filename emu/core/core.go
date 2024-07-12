@@ -28,7 +28,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rcornwell/S370/emu/cpu"
+	cpu "github.com/rcornwell/S370/emu/cpu"
 	"github.com/rcornwell/S370/emu/event"
 	"github.com/rcornwell/S370/emu/master"
 	syschannel "github.com/rcornwell/S370/emu/sys_channel"
@@ -114,6 +114,12 @@ func (core *core) processPacket(packet master.Packet) {
 	}
 }
 
+// Post an external interrupt to CPU.
 func PostExtIrq() {
 	cpu.PostExtIrq()
+}
+
+// Get IPL line option.
+func IPLDevice() uint16 {
+	return cpu.IPLDev
 }

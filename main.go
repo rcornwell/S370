@@ -116,7 +116,7 @@ loop:
 			_ = syschannel.Detach(0x00c)
 			_ = syschannel.Attach(0x00c, *optDeck)
 			fmt.Printf("IPL device: %s\n", input)
-			masterChannel <- master.Packet{DevNum: 0x00c, Msg: master.IPLdevice}
+			masterChannel <- master.Packet{DevNum: core.IPLDevice(), Msg: master.IPLdevice}
 		}
 	}
 
