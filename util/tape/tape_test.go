@@ -153,7 +153,12 @@ func TestAttach(t *testing.T) {
 		return
 	}
 
-	err = ctx.Attach(fileTap, TapeFmtTap, false, false)
+	ctx.SetNoRing()
+	err = ctx.SetFormat("TAP")
+	if err != nil {
+		t.Error(err)
+	}
+	err = ctx.Attach(fileTap)
 	if err != nil {
 		t.Error(err)
 	}
@@ -162,7 +167,11 @@ func TestAttach(t *testing.T) {
 	}
 	_ = ctx.Detach()
 
-	err = ctx.Attach(fileTap, TapeFmtE11, false, false)
+	err = ctx.SetFormat("E11")
+	if err != nil {
+		t.Error(err)
+	}
+	err = ctx.Attach(fileE11)
 	if err != nil {
 		t.Error(err)
 	}
@@ -171,7 +180,11 @@ func TestAttach(t *testing.T) {
 	}
 	_ = ctx.Detach()
 
-	err = ctx.Attach(fileTap, TapeFmtP7B, false, false)
+	err = ctx.SetFormat("P7B")
+	if err != nil {
+		t.Error(err)
+	}
+	err = ctx.Attach(fileP7B)
 	if err != nil {
 		t.Error(err)
 	}
@@ -180,16 +193,21 @@ func TestAttach(t *testing.T) {
 	}
 	_ = ctx.Detach()
 	cleanup()
-	err = ctx.Attach(fileTap, TapeFmtE11, false, false)
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Error(err)
-	}
 }
 
 // Read test of tape.
-func testRead(fileName string, fmtStr string, format int, t *testing.T) {
+func testRead(fileName string, fmtStr string, t *testing.T) {
 	ctx = NewTapeContext()
-	err := ctx.Attach(fileName, format, false, false)
+	err := ctx.SetFormat(fmtStr)
+	if err != nil {
+		t.Error(err)
+	}
+
+	ctx.SetNoRing()
+	if ctx.format == TapeFmtP7B {
+		ctx.Set7Track()
+	}
+	err = ctx.Attach(fileName)
 	if err != nil {
 		t.Error(err)
 	}
@@ -317,7 +335,7 @@ func TestReadE11(t *testing.T) {
 		return
 	}
 
-	testRead(fileE11, "E11", TapeFmtE11, t)
+	testRead(fileE11, "E11", t)
 }
 
 // Test read of TAP tape.
@@ -329,7 +347,7 @@ func TestReadTap(t *testing.T) {
 		return
 	}
 
-	testRead(fileTap, "Tap", TapeFmtTap, t)
+	testRead(fileTap, "Tap", t)
 }
 
 // Test read of P7B tape.
@@ -341,11 +359,11 @@ func TestReadP7B(t *testing.T) {
 		return
 	}
 
-	testRead(fileP7B, "P7B", TapeFmtP7B, t)
+	testRead(fileP7B, "P7B", t)
 }
 
 // Read test of tape.
-func testWrite(fmtStr string, format int, t *testing.T) {
+func testWrite(fmtStr string, t *testing.T) {
 	ctx = NewTapeContext()
 	f, err := os.CreateTemp("", "tapeFile")
 	if err != nil {
@@ -356,7 +374,15 @@ func testWrite(fmtStr string, format int, t *testing.T) {
 	defer os.Remove(fileTemp)
 
 	mark := false
-	err = ctx.Attach(fileTemp, format, true, false)
+	err = ctx.SetFormat(fmtStr)
+	if err != nil {
+		t.Error(err)
+	}
+	ctx.SetRing()
+	if ctx.format == TapeFmtP7B {
+		ctx.Set7Track()
+	}
+	err = ctx.Attach(fileTemp)
 	if err != nil {
 		t.Error(err)
 	}
@@ -471,21 +497,21 @@ func testWrite(fmtStr string, format int, t *testing.T) {
 
 // Test write of E11 tape.
 func TestWriteE11(t *testing.T) {
-	testWrite("E11", TapeFmtE11, t)
+	testWrite("E11", t)
 }
 
 // Test write of Tap tape.
 func TestWriteTap(t *testing.T) {
-	testWrite("Tap", TapeFmtTap, t)
+	testWrite("Tap", t)
 }
 
 // Test write of P7B tape.
 func TestWriteP7B(t *testing.T) {
-	testWrite("P7B", TapeFmtP7B, t)
+	testWrite("P7B", t)
 }
 
 // Write a series of records of increasing size.
-func testWriteLong(fmtStr string, format int, t *testing.T) {
+func testWriteLong(fmtStr string, t *testing.T) {
 	ctx = NewTapeContext()
 	f, err := os.CreateTemp("", "tapeFile")
 	if err != nil {
@@ -496,7 +522,15 @@ func testWriteLong(fmtStr string, format int, t *testing.T) {
 	defer os.Remove(fileTemp)
 
 	mark := false
-	err = ctx.Attach(fileTemp, format, true, false)
+	err = ctx.SetFormat(fmtStr)
+	if err != nil {
+		t.Error(err)
+	}
+	if ctx.format == TapeFmtP7B {
+		ctx.Set7Track()
+	}
+	ctx.SetRing()
+	err = ctx.Attach(fileTemp)
 	if err != nil {
 		t.Error(err)
 	}
@@ -584,7 +618,7 @@ func testWriteLong(fmtStr string, format int, t *testing.T) {
 				}
 				break
 			}
-			if format == TapeFmtP7B {
+			if ctx.format == TapeFmtP7B {
 				if data != byte(i&0x7f) {
 					fail = true
 				}
@@ -629,21 +663,21 @@ func testWriteLong(fmtStr string, format int, t *testing.T) {
 
 // Write a series of record in increasing size.
 func TestWriteLongE11(t *testing.T) {
-	testWriteLong("E11", TapeFmtE11, t)
+	testWriteLong("E11", t)
 }
 
 // Write a series of record in increasing size.
 func TestWriteLongTap(t *testing.T) {
-	testWriteLong("Tap", TapeFmtTap, t)
+	testWriteLong("Tap", t)
 }
 
 // Write a series of record in increasing size.
 func TestWriteLongP7B(t *testing.T) {
-	testWriteLong("P7B", TapeFmtP7B, t)
+	testWriteLong("P7B", t)
 }
 
 // Write a tape mark ever 10 records, verify read correct forward and backwards.
-func testMark(fmtStr string, format int, t *testing.T) {
+func testMark(fmtStr string, t *testing.T) {
 	ctx = NewTapeContext()
 	f, err := os.CreateTemp("", "tapeFile")
 	if err != nil {
@@ -653,7 +687,15 @@ func testMark(fmtStr string, format int, t *testing.T) {
 	f.Close()
 	defer os.Remove(fileTemp)
 
-	err = ctx.Attach(fileTemp, format, true, false)
+	err = ctx.SetFormat(fmtStr)
+	if err != nil {
+		t.Error(err)
+	}
+	ctx.SetRing()
+	if ctx.format == TapeFmtP7B {
+		ctx.Set7Track()
+	}
+	err = ctx.Attach(fileTemp)
 	if err != nil {
 		t.Error(err)
 	}
@@ -872,21 +914,21 @@ func testMark(fmtStr string, format int, t *testing.T) {
 
 // Write a tape mark ever 10 records, verify read correct forward and backwards.
 func TestWMarkE11(t *testing.T) {
-	testMark("E11", TapeFmtE11, t)
+	testMark("E11", t)
 }
 
 // Write a tape mark ever 10 records, verify read correct forward and backwards.
 func TestWMarkTAP(t *testing.T) {
-	testMark("TAP", TapeFmtTap, t)
+	testMark("TAP", t)
 }
 
 // Write a tape mark ever 10 records, verify read correct forward and backwards.
 func TestWMarkP7B(t *testing.T) {
-	testMark("P7B", TapeFmtP7B, t)
+	testMark("P7B", t)
 }
 
 // Write a tape mark ever 10 records, verify read correct forward and backwards.
-func testShortRead(fmtStr string, format int, t *testing.T) {
+func testShortRead(fmtStr string, t *testing.T) {
 	ctx = NewTapeContext()
 	f, err := os.CreateTemp("", "tapeFile")
 	if err != nil {
@@ -896,7 +938,15 @@ func testShortRead(fmtStr string, format int, t *testing.T) {
 	f.Close()
 	defer os.Remove(fileTemp)
 
-	err = ctx.Attach(fileTemp, format, true, false)
+	err = ctx.SetFormat(fmtStr)
+	if err != nil {
+		t.Error(err)
+	}
+	ctx.SetRing()
+	if ctx.format == TapeFmtP7B {
+		ctx.Set7Track()
+	}
+	err = ctx.Attach(fileTemp)
 	if err != nil {
 		t.Error(err)
 	}
@@ -1098,17 +1148,17 @@ func testShortRead(fmtStr string, format int, t *testing.T) {
 
 // Read part of record, make sure unread is skipped.
 func TestShortReadE11(t *testing.T) {
-	testShortRead("E11", TapeFmtE11, t)
+	testShortRead("E11", t)
 }
 
 // Read part of record, make sure unread is skipped.
 func TestShortReadTAP(t *testing.T) {
-	testShortRead("TAP", TapeFmtTap, t)
+	testShortRead("TAP", t)
 }
 
 // Read part of record, make sure unread is skipped.
 func TestShortReadP7B(t *testing.T) {
-	testShortRead("P7B", TapeFmtP7B, t)
+	testShortRead("P7B", t)
 }
 
 // Test Odd record has pad character.
@@ -1122,7 +1172,15 @@ func TestOddTap(t *testing.T) {
 	f.Close()
 	defer os.Remove(fileTemp)
 
-	err = ctx.Attach(fileTemp, TapeFmtTap, true, false)
+	err = ctx.SetFormat("TAP")
+	if err != nil {
+		t.Error(err)
+	}
+	ctx.SetRing()
+	if ctx.format == TapeFmtP7B {
+		ctx.Set7Track()
+	}
+	err = ctx.Attach(fileTemp)
 	if err != nil {
 		t.Error(err)
 	}

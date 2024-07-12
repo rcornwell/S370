@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 const (
@@ -46,7 +47,9 @@ const (
 	irgLen = 1200
 
 	// Supported densities.
-	Density800 = 1 + iota
+	Density200 = 1 + iota
+	Density556
+	Density800
 	Density1600
 	Density6250
 
@@ -60,12 +63,12 @@ const (
 )
 
 var (
-	TapeEOT    = errors.New("EOT")    // End of tape error.
-	TapeMARK   = errors.New("MARK")   // Tape mark found.
-	TapeBOT    = errors.New("BOT")    // Beginning of tape.
-	TapeEOR    = errors.New("EOR")    // End of record.
-	TapeFORMAT = errors.New("FORMAT") // Tape format error.
-	TapeTYPE   = errors.New("TYPE")   // Tape type not supported.
+	TapeEOT       = errors.New("EOT")    // End of tape error.
+	TapeMARK      = errors.New("MARK")   // Tape mark found.
+	TapeBOT       = errors.New("BOT")    // Beginning of tape.
+	TapeEOR       = errors.New("EOR")    // End of record.
+	errTapeFORMAT = errors.New("FORMAT") // Tape format error.
+	errTapeTYPE   = errors.New("TYPE")   // Tape type not supported.
 )
 
 // Structure to hold tape information.
@@ -89,6 +92,24 @@ type TapeContext struct {
 	buffer   [32 * 1024]byte // Tape buffer.
 }
 
+var formats = map[string]int{
+	"TAP":  TapeFmtTap,
+	"SIMH": TapeFmtTap,
+	"E11":  TapeFmtE11,
+	"P7B":  TapeFmtP7B,
+	"AWS":  TapeFmtAWS,
+}
+
+func (tape *TapeContext) SetFormat(fmt string) error {
+	newMode, ok := formats[strings.ToUpper(fmt)]
+	if !ok {
+		tape.format = TapeFmtTap
+		return errTapeFORMAT
+	}
+	tape.format = newMode
+	return nil
+}
+
 // Check if tape is at load point.
 func (tape *TapeContext) TapeAtLoadPt() bool {
 	return tape.bot
@@ -99,9 +120,29 @@ func (tape *TapeContext) TapeReady() bool {
 	return tape.file != nil
 }
 
+// Set tape ring in place, allow for write.
+func (tape *TapeContext) SetRing() {
+	tape.ring = true
+}
+
+// Set tape no ring, read only.
+func (tape *TapeContext) SetNoRing() {
+	tape.ring = false
+}
+
 // Determine if tape can be written.
 func (tape *TapeContext) TapeRing() bool {
 	return tape.ring
+}
+
+// Set tape to 9 track
+func (tape *TapeContext) Set9Track() {
+	tape.seven = false
+}
+
+// Set tape to 7 track
+func (tape *TapeContext) Set7Track() {
+	tape.seven = true
 }
 
 // Determine if tape is 7 track or 9 track.
@@ -109,13 +150,15 @@ func (tape *TapeContext) Tape9Track() bool {
 	return !tape.seven
 }
 
+// Return if attached to a file.
+func (tape *TapeContext) Attached() bool {
+	return tape.file != nil
+}
+
 // Attach file to tape context.
-func (tape *TapeContext) Attach(fileName string, format int, ring bool, seven bool) error {
-	tape.format = format
-	tape.seven = seven
-	tape.ring = ring
+func (tape *TapeContext) Attach(fileName string) error {
 	var err error
-	if ring {
+	if tape.ring {
 		tape.file, err = os.Create(fileName)
 	} else {
 		tape.file, err = os.Open(fileName)
@@ -204,7 +247,7 @@ func (tape *TapeContext) WriteStart() error {
 		}
 
 	default:
-		err = TapeTYPE
+		err = errTapeTYPE
 	}
 	tape.lrecl = 0
 	return err
@@ -249,7 +292,7 @@ func (tape *TapeContext) WriteMark() error {
 	case TapeFmtAWS:
 		tape.mark = true
 	default:
-		err = TapeTYPE
+		err = errTapeTYPE
 	}
 	tape.frame += irgLen
 	return err
@@ -371,7 +414,7 @@ func (tape *TapeContext) ReadForwStart() error {
 		tape.lrecl = (uint32(hdr[1]) << 8) | uint32(hdr[0])
 		fmt.Printf("Header %02x %02x\n", hdr[4], hdr[5])
 	default:
-		return TapeTYPE
+		return errTapeTYPE
 	}
 
 	return nil
@@ -482,7 +525,7 @@ func (tape *TapeContext) ReadBackStart() error {
 		tape.lrecl = (uint32(hdr[3]) << 8) | uint32(hdr[2])
 		fmt.Printf("Header %02x %02x\n", hdr[4], hdr[5])
 	default:
-		return TapeTYPE
+		return errTapeTYPE
 	}
 
 	return nil
@@ -568,7 +611,7 @@ func (tape *TapeContext) ReadFrame() (byte, error) {
 		}
 
 	default:
-		return 0, TapeTYPE
+		return 0, errTapeTYPE
 	}
 	return data, err
 }
@@ -627,7 +670,7 @@ func (tape *TapeContext) FinishRecord() error {
 	case TapeFmtAWS:
 		err = tape.finishAWSfunc()
 	default:
-		return TapeTYPE
+		return errTapeTYPE
 	}
 	tape.mode = funcNone
 	return err
@@ -708,7 +751,7 @@ func (tape *TapeContext) finishTAPfunc() error {
 		lrecl := uint32(recLen[0]) | (uint32(recLen[1]) << 8) |
 			(uint32(recLen[2]) << 16) | (uint32(recLen[3]) << 24)
 		if lrecl != tape.lrecl {
-			return TapeFORMAT
+			return errTapeFORMAT
 		}
 
 	case funcWrite:
@@ -762,7 +805,7 @@ func (tape *TapeContext) finishTAPfunc() error {
 		lrecl := uint32(recLen[0]) | (uint32(recLen[1]) << 8) |
 			(uint32(recLen[2]) << 16) | (uint32(recLen[3]) << 24)
 		if lrecl != tape.lrecl {
-			return TapeFORMAT
+			return errTapeFORMAT
 		}
 	}
 	return nil
@@ -794,7 +837,7 @@ func (tape *TapeContext) finishAWSfunc() error {
 		lrecl := (uint32(hdr[3]) << 8) | uint32(hdr[2])
 		fmt.Printf("Header %02x %02x\n", hdr[4], hdr[5])
 		if lrecl != tape.lrecl {
-			return TapeFORMAT
+			return errTapeFORMAT
 		}
 
 		// Check if tape mark.
@@ -851,7 +894,7 @@ func (tape *TapeContext) finishAWSfunc() error {
 		lrecl := (uint32(hdr[1]) << 8) | uint32(hdr[0])
 		fmt.Printf("Header %02x %02x\n", hdr[4], hdr[5])
 		if lrecl != tape.lrecl {
-			return TapeFORMAT
+			return errTapeFORMAT
 		}
 
 		// Check if tape mark.
