@@ -29,7 +29,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -208,19 +207,21 @@ func LoadConfigFile(name string) error {
 	defer file.Close()
 
 	lineNumber = 0
-	reader := bufio.NewReader(file)
-	for {
-		var err error
 
-		line := optionLine{}
-		line.line, err = reader.ReadString('\n')
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return err
-		}
+	scanner := bufio.NewScanner(file)
+	scanner.Split(bufio.ScanLines)
+
+	line := optionLine{}
+	for scanner.Scan() {
+		line.line = scanner.Text()
+		line.pos = 0
 		lineNumber++
+
+		// We can skip blank lines and lines that begin with a #.
+		if line.line == "" || line.line[0] == '#' {
+			continue
+		}
+		fmt.Printf("line %d: '%s' \n", lineNumber, line.line)
 		err = line.parseLine()
 		if err != nil {
 			return err
@@ -240,7 +241,7 @@ func (line *optionLine) parseLine() error {
 		// Get device number
 		first := line.parseFirst()
 		if first == nil || !first.isAddr {
-			return fmt.Errorf("Device %s requires device address, line: %d", model.model, lineNumber)
+			return fmt.Errorf("device %s: requires device address, line: %d", model.model, lineNumber)
 		}
 
 		// Get any remaining options.
@@ -250,35 +251,47 @@ func (line *optionLine) parseLine() error {
 		}
 
 		// Try and create the device.
-		return createModel(model.model, first, options)
+		err = createModel(model.model, first, options)
+		if err != nil {
+			return fmt.Errorf("device %s: %w, line: %d %s", model.model, err, lineNumber, line.line)
+		}
 
 	case TypeOption:
 		first := line.parseFirst()
 		line.skipSpace()
 		if !line.isEOL() || first == nil {
-			return fmt.Errorf("Option: %s not followed by value. line: %d", model.model, lineNumber)
+			return fmt.Errorf("option %s: not followed by value. line: %d", model.model, lineNumber)
 		}
-		return createOption(model.model, first)
+		err := createOption(model.model, first)
+		if err != nil {
+			return fmt.Errorf("option %s: %w, line: %d %s", model.model, err, lineNumber, line.line)
+		}
 
 	case TypeOptions:
 		first := line.parseFirst()
 		if first == nil {
-			return fmt.Errorf("Option: %s not followed by value, line: %d", model.model, lineNumber)
+			return fmt.Errorf("option %s: not followed by value, line: %d", model.model, lineNumber)
 		}
 		options, err := line.parseOptions()
 		if err != nil {
 			return err
 		}
-		return createOptions(model.model, first, options)
+		err = createOptions(model.model, first, options)
+		if err != nil {
+			return fmt.Errorf("option %s: %w, line: %d %s", model.model, err, lineNumber, line.line)
+		}
 
 	case TypeSwitch:
 		line.skipSpace()
 		if !line.isEOL() {
-			return fmt.Errorf("Switch Option: %s followed by options, line: %d", model.model, lineNumber)
+			return fmt.Errorf("switch %s: followed by options, line: %d", model.model, lineNumber)
 		}
-		return createSwitch(model.model)
+		err := createSwitch(model.model)
+		if err != nil {
+			return fmt.Errorf("switch %s: %w, line: %d %s", model.model, err, lineNumber, line.line)
+		}
 	case 0:
-		return fmt.Errorf("No type: %s registered, line: %d", model.model, lineNumber)
+		return fmt.Errorf("no type: %s registered, line: %d", model.model, lineNumber)
 	}
 	return nil
 }
