@@ -275,7 +275,6 @@ func TestIO(devNum uint16) uint8 {
 	if subChan.ccwCmd == 0 && subChan.chanStatus != 0 {
 		storeCSW(subChan)
 		subChan.devAddr = dev.NoDev
-		fmt.Println("TIO CSW")
 		return 1
 	}
 
@@ -313,12 +312,12 @@ func TestIO(devNum uint16) uint8 {
 
 	// Check if device BUSY
 	if (status & statusBusy) != 0 {
-		fmt.Println("TIO cc = 2")
+		// fmt.Println("TIO cc = 2")
 		return 2
 	}
 
 	// Everything ok, return cc = 0
-	fmt.Println("TIO cc = 0")
+	// fmt.Println("TIO cc = 0")
 	return 0
 }
 
@@ -455,6 +454,7 @@ func ChanReadByte(devNum uint16) (uint8, bool) {
 		if readBuffer(cUnit, subChan) {
 			return 0, true
 		}
+		//	fmt.Printf("Read  %08x %08x\n", subChan.ccwAddr, subChan.chanBuffer)
 		if nextAddress(cUnit, subChan) {
 			return 0, true
 		}
@@ -619,7 +619,6 @@ func nextAddress(cUnit *chanDev, subChan *chanCtl) bool {
 	} else {
 		subChan.ccwAddr += 4 - (subChan.ccwAddr & 0x3)
 	}
-	// subChan.chanByte = uint8(subChan.ccwAddr & 3)
 	return false
 }
 
@@ -659,6 +658,7 @@ func ChanEnd(devNum uint16, flags uint8) {
 		subChan.ccwFlags &= ^(chainData | flagSLI)
 	}
 
+	//	fmt.Printf("Channel end: %04x\n", subChan.chanStatus)
 	cUnit.irqPending = true
 	IrqPending = true
 }
@@ -685,6 +685,7 @@ func SetDevAttn(devNum uint16, flags uint8) {
 			cUnit.devStatus[devNum&0xff] = flags
 		}
 	}
+	//	fmt.Printf("SetDevAttn end:%02x  %04x\n", flags, subChan.chanStatus)
 	cUnit.irqPending = true
 	IrqPending = true
 }
@@ -733,9 +734,7 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 	IrqPending = false
 	pendDev := dev.NoDev // Device with Pending interrupt
 	// Start with channel 0 and work through all channels
-	for i := range len(chanUnit) {
-		cUnit := chanUnit[i]
-
+	for i, cUnit := range chanUnit {
 		if cUnit == nil {
 			continue
 		}
@@ -1097,9 +1096,9 @@ func findSubChannel(devNum uint16) *chanCtl {
 func storeCSW(cUnit *chanCtl) {
 	mem.SetMemory(CSW, (uint32(cUnit.ccwKey)<<24)|cUnit.caw)
 	mem.SetMemory(CSW+4, uint32(cUnit.ccwCount)|(uint32(cUnit.chanStatus)<<16))
-	word1 := mem.GetMemory(CSW)
-	word2 := mem.GetMemory(CSW + 4)
-	fmt.Printf("CSW %08x %08x\n", word1, word2)
+	//	word1 := mem.GetMemory(CSW)
+	//	word2 := mem.GetMemory(CSW + 4)
+	//	fmt.Printf("CSW %08x %08x\n", word1, word2)
 	if (cUnit.chanStatus & statusPCI) != 0 {
 		cUnit.chanStatus &= ^statusPCI
 	} else {
@@ -1187,7 +1186,7 @@ loop:
 		subChan.caw &= addrMask
 		subChan.ccwCount = uint16(word & countMask)
 
-		fmt.Printf("CCW %08x %02x%06x, %08x\n", subChan.caw-8, subChan.ccwCmd, subChan.ccwAddr, word)
+		//	fmt.Printf("CCW %08x %02x%06x, %08x\n", subChan.caw-8, subChan.ccwCmd, subChan.ccwAddr, word)
 		// Copy SLI indicator in CD command
 		if (subChan.ccwFlags & (chainData | flagSLI)) == (chainData | flagSLI) {
 			word |= uint32(flagSLI) << 16
@@ -1288,8 +1287,8 @@ func readFullWord(cUnit *chanDev, subChan *chanCtl, addr uint32) (uint32, bool) 
 			return 0, true
 		}
 	}
-	w := mem.GetMemory(addr)
-	return w, false
+	word := mem.GetMemory(addr)
+	return word, false
 }
 
 // Read a word into channel buffer.
@@ -1309,7 +1308,6 @@ func readBuffer(cUnit *chanDev, subChan *chanCtl) bool {
 	}
 	subChan.chanBuffer = word
 	subChan.chanByte = uint8(addr & 3)
-	fmt.Printf("Read %08x %08x %d\n", addr, word, subChan.chanByte)
 	return false
 }
 
@@ -1350,7 +1348,7 @@ func writeBuffer(cUnit *chanDev, subChan *chanCtl) bool {
 
 	// Write memory
 	err := mem.PutWord(addr, subChan.chanBuffer)
-	fmt.Printf("Write %08x %08x\n", addr, subChan.chanBuffer)
+	//	fmt.Printf("Write %08x %08x\n", addr, subChan.chanBuffer)
 	subChan.chanByte = bufEmpty
 	subChan.chanDirty = false
 	return err
