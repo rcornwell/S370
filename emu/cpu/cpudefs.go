@@ -339,12 +339,10 @@ const (
 	OpSTOSM = 0xAD // 370 Store then or system mask
 	OpSIGP  = 0xAE // 370 Signal processor
 	OpMC    = 0xAF // 370 Monitor call
-	OpSTMC  = 0xB0 // 360/67 Store control
 	OpLRA   = 0xB1
 	Op370   = 0xB2 // Misc 370 system instructions
 	OpSTCTL = 0xB6 // 370 Store control
 	OpLCTL  = 0xB7 // 370 Load control
-	OpLMC   = 0xB8 // 360/67 Load Control
 	OpCS    = 0xBA // 370 Compare and swap
 	OpCDS   = 0xBB // 370 Compare double and swap
 	OpCLM   = 0xBD // 370 Compare character under mask

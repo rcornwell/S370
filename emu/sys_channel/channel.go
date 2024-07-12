@@ -469,8 +469,8 @@ func ChanReadByte(devNum uint16) (uint8, bool) {
 	if subChan.ccwCount == 0 && (subChan.ccwFlags&chainData) != 0 {
 		// If chaining try and start next CCW
 		if loadCCW(cUnit, subChan, true) {
-			// Return that this is last byte device will get
-			return data, true
+			// Next call will return end.
+			subChan.chanByte = bufEnd
 		}
 	}
 

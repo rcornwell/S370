@@ -151,7 +151,7 @@ func (cpu *cpuState) opLPSW(step *stepInfo) uint16 {
 	if err != 0 {
 		return err
 	}
-	//fmt.Printf("LPSW: %08x %08x\n", src1, src2)
+	// fmt.Printf("LPSW: %08x %08x\n", src1, src2)
 	cpu.lpsw(src1, src2)
 	return 0
 }

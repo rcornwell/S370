@@ -170,12 +170,9 @@ func (device *Model2540Pctx) callback(cmd int) {
 
 	// Add next byte to image.
 	if device.currentCol < 80 {
-		var char uint8
-		var err bool
-
-		char, err = ch.ChanReadByte(device.addr)
-		if err {
-			device.ready = false
+		char, end := ch.ChanReadByte(device.addr)
+		if end {
+			device.ready = true
 		} else {
 			device.image.Image[device.currentCol] = card.EBCDICToHol(char)
 			device.currentCol++
