@@ -29,4 +29,6 @@ import (
 	_ "github.com/rcornwell/S370/emu/model2540R"
 
 	_ "github.com/rcornwell/S370/emu/model2540P"
+
+	_ "github.com/rcornwell/S370/emu/modelTape"
 )
