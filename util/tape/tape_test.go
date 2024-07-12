@@ -41,7 +41,7 @@ var (
 	ctx      *TapeContext
 )
 
-// Write out tape block
+// Write out tape block.
 func writeBlock(file *os.File, buffer []byte, format int) {
 	recl := len(buffer)
 	length := recl
@@ -99,7 +99,7 @@ func createTapeFile(file *os.File, recs int, format int) {
 	file.Close()
 }
 
-// Creat test tape files
+// Creat test tape files.
 func setupTape() error {
 	f, err := os.CreateTemp("", "tapeP7B")
 	if err != nil {
@@ -1015,7 +1015,6 @@ func testShortRead(fmtStr string, t *testing.T) {
 	// Make sure we can read them back.
 	for !mark {
 		err = ctx.ReadForwStart()
-
 		if err != nil {
 			if !errors.Is(err, TapeMARK) {
 				t.Error(err)
@@ -1025,12 +1024,6 @@ func testShortRead(fmtStr string, t *testing.T) {
 			break
 		}
 
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			t.Error(err)
-		}
 		buffer := []byte{}
 		for range length {
 			var data byte

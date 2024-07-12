@@ -135,12 +135,12 @@ func (tape *TapeContext) TapeRing() bool {
 	return tape.ring
 }
 
-// Set tape to 9 track
+// Set tape to 9 track.
 func (tape *TapeContext) Set9Track() {
 	tape.seven = false
 }
 
-// Set tape to 7 track
+// Set tape to 7 track.
 func (tape *TapeContext) Set7Track() {
 	tape.seven = true
 }
