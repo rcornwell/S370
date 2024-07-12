@@ -27,6 +27,7 @@ package cpu
 import (
 	dev "github.com/rcornwell/S370/emu/device"
 	"github.com/rcornwell/S370/emu/memory"
+	op "github.com/rcornwell/S370/emu/opcodemap"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
 )
 
@@ -330,7 +331,7 @@ func (cpu *cpuState) opEX(step *stepInfo) uint16 {
 	}
 
 	// Can't execute an execute instruction
-	if s.opcode == OpEX {
+	if s.opcode == op.OpEX {
 		return ircExec
 	}
 	s.reg = uint8(step.src1 & 0xff)
@@ -415,7 +416,7 @@ func (cpu *cpuState) opSTxSM(step *stepInfo) uint16 {
 	}
 
 	// Merge mask
-	if step.opcode == OpSTNSM {
+	if step.opcode == op.OpSTNSM {
 		newSSM = step.reg & oldSSM
 	} else {
 		newSSM = step.reg | oldSSM

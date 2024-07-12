@@ -24,6 +24,10 @@
 
 package cpu
 
+import (
+	op "github.com/rcornwell/S370/emu/opcodemap"
+)
+
 // Set the condition code based on value provided.
 func (cpu *cpuState) setCC(value uint32) {
 	if (value & MSIGN) != 0 {
@@ -65,7 +69,7 @@ func (cpu *cpuState) opSPM(step *stepInfo) uint16 {
 // Branch and save.
 func (cpu *cpuState) opBAS(step *stepInfo) uint16 {
 	dest := cpu.PC
-	if step.opcode != OpBASR || step.R2 != 0 {
+	if step.opcode != op.OpBASR || step.R2 != 0 {
 		// Check if triggered PER event.
 		if cpu.perEnb && cpu.perBranch {
 			cpu.perCode |= 0x8000 // Set PER branch
@@ -84,7 +88,7 @@ func (cpu *cpuState) opBAL(step *stepInfo) uint16 {
 		(uint32(cpu.cc) << 28) |
 		(uint32(cpu.progMask) << 24) |
 		cpu.PC
-	if step.opcode != OpBALR || step.R2 != 0 {
+	if step.opcode != op.OpBALR || step.R2 != 0 {
 		// Check if triggered PER event.
 		if cpu.perEnb && cpu.perBranch {
 			cpu.perCode |= 0x8000 // Set PER branch
@@ -100,7 +104,7 @@ func (cpu *cpuState) opBAL(step *stepInfo) uint16 {
 func (cpu *cpuState) opBCT(step *stepInfo) uint16 {
 	dest := step.src1 - 1
 
-	if dest != 0 && (step.opcode != OpBCTR || step.R2 != 0) {
+	if dest != 0 && (step.opcode != op.OpBCTR || step.R2 != 0) {
 		// Check if triggered PER event.
 		if cpu.perEnb && cpu.perBranch {
 			cpu.perCode |= 0x8000
@@ -114,7 +118,7 @@ func (cpu *cpuState) opBCT(step *stepInfo) uint16 {
 
 // Branch conditional.
 func (cpu *cpuState) opBC(step *stepInfo) uint16 {
-	if ((0x8>>cpu.cc)&step.R1) != 0 && (step.opcode != OpBCR || step.R2 != 0) {
+	if ((0x8>>cpu.cc)&step.R1) != 0 && (step.opcode != op.OpBCR || step.R2 != 0) {
 		// Check if triggered PER event.
 		if cpu.perEnb && cpu.perBranch {
 			cpu.perCode |= 0x8000
@@ -899,7 +903,7 @@ func (cpu *cpuState) opMem(step *stepInfo) uint16 {
 		return err
 	}
 	opcode := step.opcode
-	if opcode == OpNC || opcode == OpOC || opcode == OpXC {
+	if opcode == op.OpNC || opcode == op.OpOC || opcode == op.OpXC {
 		cpu.cc = 0
 	}
 
@@ -910,27 +914,27 @@ func (cpu *cpuState) opMem(step *stepInfo) uint16 {
 		if err != 0 {
 			return err
 		}
-		if opcode != OpMVC {
+		if opcode != op.OpMVC {
 			dest, err = cpu.readByte(step.address1)
 			if err != 0 {
 				return err
 			}
 			switch opcode {
-			case OpMVZ:
+			case op.OpMVZ:
 				dest = (dest & 0x0f) | (source & 0xf0)
-			case OpMVN:
+			case op.OpMVN:
 				dest = (dest & 0xf0) | (source & 0x0f)
-			case OpNC:
+			case op.OpNC:
 				dest &= source
 				if dest != 0 {
 					cpu.cc = 1
 				}
-			case OpOC:
+			case op.OpOC:
 				dest |= source
 				if dest != 0 {
 					cpu.cc = 1
 				}
-			case OpXC:
+			case op.OpXC:
 				dest ^= source
 				if dest != 0 {
 					cpu.cc = 1
@@ -1003,7 +1007,7 @@ func (cpu *cpuState) opTR(step *stepInfo) uint16 {
 		return err
 	}
 
-	if step.opcode == OpTRT {
+	if step.opcode == op.OpTRT {
 		sysCPU.cc = 0
 	}
 
@@ -1018,7 +1022,7 @@ func (cpu *cpuState) opTR(step *stepInfo) uint16 {
 		if err != 0 {
 			return err
 		}
-		if step.opcode == OpTRT {
+		if step.opcode == op.OpTRT {
 			if xlatValue != 0 {
 				cpu.regs[1] &= 0xff000000
 				cpu.regs[1] |= step.address1 & AMASK
@@ -1561,7 +1565,7 @@ func (cpu *cpuState) opED(step *stepInfo) uint16 {
 
 			// Prepare for next trip
 			src2 = (src2 & 0xf) << 4
-			if step.opcode == OpEDMK && !sig && temp != 0 {
+			if step.opcode == op.OpEDMK && !sig && temp != 0 {
 				cpu.regs[1] &= 0xff000000
 				cpu.regs[1] |= step.address1 & AMASK
 				cpu.perRegMod |= 2

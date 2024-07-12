@@ -32,7 +32,9 @@ import (
 
 	config "github.com/rcornwell/S370/config/configparser"
 	Dv "github.com/rcornwell/S370/emu/device"
+	dis "github.com/rcornwell/S370/emu/disassemble"
 	mem "github.com/rcornwell/S370/emu/memory"
+	op "github.com/rcornwell/S370/emu/opcodemap"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
 )
 
@@ -171,6 +173,11 @@ func PostExtIrq() {
 	fmt.Println("CPU: Post ext")
 }
 
+// Return CPU PC.
+func PC() uint32 {
+	return sysCPU.PC
+}
+
 // Execute one instruction or take an interrupt.
 func CycleCPU() (int, bool) {
 	memCycle = 1 // Default to one cycle.
@@ -241,13 +248,13 @@ func CycleCPU() (int, bool) {
 		return memCycle, true
 	}
 
-	return sysCPU.fetch(), true
+	return sysCPU.fetch()
 }
 
-func (cpu *cpuState) fetch() int {
+func (cpu *cpuState) fetch() (int, bool) {
 	if (cpu.PC & 1) != 0 {
 		cpu.suppress(oPPSW, ircSpec)
-		return memCycle
+		return memCycle, true
 	}
 
 	// Check if triggered PER event.
@@ -262,7 +269,7 @@ func (cpu *cpuState) fetch() int {
 	word, err := cpu.readFull(cpu.PC & ^uint32(0x2))
 	if err != 0 {
 		cpu.suppress(oPPSW, err)
-		return memCycle
+		return memCycle, true
 	}
 
 	// Save instruction
@@ -271,16 +278,26 @@ func (cpu *cpuState) fetch() int {
 	} else {
 		opr = word & 0xffff
 	}
-	cpu.perRegMod = 0
-	cpu.perCode = 0
-	cpu.perAddr = cpu.PC
-	cpu.iPC = cpu.PC
+
 	cpu.ilc = 1
 	step.opcode = uint8((opr >> 8) & 0xff)
 	step.reg = uint8(opr & 0xff)
 	step.R1 = (step.reg >> 4) & 0xf
 	step.R2 = step.reg & 0xf
+
+	// brop := (step.opcode == op.OpBC || step.opcode == op.OpBCR)
+	// if cpu.iPC == cpu.PC && brop && (step.reg&0xf0) == 0xf0 {
+	// 	return memCycle, false
+	// }
+	cpu.perRegMod = 0
+	cpu.perCode = 0
+	cpu.perAddr = cpu.PC
+	cpu.iPC = cpu.PC
+
 	cpu.PC += 2
+	inst := make([]byte, 6)
+	inst[0] = step.opcode
+	inst[1] = step.reg
 
 	// fmt.Printf(" Fetch %08x: %02x %02x\n", cpu.PC-2, step.opcode, step.reg)
 
@@ -293,12 +310,14 @@ func (cpu *cpuState) fetch() int {
 			word, err = cpu.readFull(cpu.PC & ^uint32(0x2))
 			if err != 0 {
 				cpu.suppress(oPPSW, err)
-				return memCycle
+				return memCycle, true
 			}
 			step.address1 = (word >> 16)
 		} else {
 			step.address1 = word
 		}
+		inst[2] = byte(word >> 8)
+		inst[3] = byte(word & 0xff)
 		step.address1 &= 0xffff
 		cpu.PC += 2
 	}
@@ -311,16 +330,21 @@ func (cpu *cpuState) fetch() int {
 			word, err = cpu.readFull(cpu.PC & ^uint32(0x2))
 			if err != 0 {
 				cpu.suppress(oPPSW, err)
-				return memCycle
+				return memCycle, true
 			}
 			step.address2 = (word >> 16)
 		} else {
 			step.address2 = word
 		}
+		inst[4] = byte(word >> 8)
+		inst[5] = byte(word & 0xff)
 		step.address2 &= 0xffff
 		cpu.PC += 2
 	}
 
+	symbolic, _ := dis.Disasemble(inst)
+	symbolic += " "
+	// fmt.Printf("Op: %08x %02x %02x   %s\n", cpu.iPC, uint32(step.opcode), uint32(step.reg), symbolic)
 	err = cpu.execute(&step)
 	if err != 0 {
 		cpu.suppress(oPPSW, err)
@@ -330,7 +354,7 @@ func (cpu *cpuState) fetch() int {
 	if cpu.perEnb && cpu.perCode != 0 {
 		cpu.suppress(oPPSW, 0)
 	}
-	return memCycle
+	return memCycle, true
 }
 
 // Generate addresses for operands and if
@@ -379,7 +403,7 @@ func (cpu *cpuState) execute(step *stepInfo) uint16 {
 		step.src1 = cpu.regs[step.R1]
 		step.src2 = step.address1
 		// Read half word if 010010xx or 01001100
-		if (step.opcode&0xfc) == 0x48 || step.opcode == OpMH {
+		if (step.opcode&0xfc) == 0x48 || step.opcode == op.OpMH {
 			step.src2, err = cpu.readHalf(step.address1)
 			if err != 0 {
 				return err
@@ -633,6 +657,7 @@ func (cpu *cpuState) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 	var word1, word2 uint32
 	irqaddr = vector + 0x40
 
+	// fmt.Printf("Store PSW: %08x %04x\n", vector, irqcode)
 	if vector == oPPSW && cpu.perEnb && cpu.perCode != 0 {
 		irqcode |= ircPer
 	}
@@ -889,7 +914,7 @@ func (cpu *cpuState) readByte(virtAddr uint32) (uint32, uint16) {
 
 	// Read actual data
 	memCycle++
-	word, err := mem.GetWord(virtAddr)
+	word, err := mem.GetWord(physAddr)
 	if err {
 		return 0, ircAddr
 	}
@@ -1131,6 +1156,7 @@ func (cpu *cpuState) lpsw(src1, src2 uint32) {
 	cpu.stKey = uint8((src1 >> 16) & 0xf0)
 	cpu.flags = uint8((src1 >> 16) & 0x7)
 	cpu.PC = src2 & AMASK
+	// fmt.Printf("LPSW %08x: %08x %08x\n", cpu.iPC, src1, src2)
 	//	sim_debug(DEBUG_INST, &cpu_dev, "PSW=%08x %08x  ", src1, src2)
 	if cpu.ecMode && ((src1&0xb800c0ff) != 0 || (src2&0xff000000) != 0) {
 		cpu.suppress(oPPSW, ircSpec)

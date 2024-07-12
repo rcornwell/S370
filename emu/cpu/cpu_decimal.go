@@ -24,6 +24,10 @@
 
 package cpu
 
+import (
+	op "github.com/rcornwell/S370/emu/opcodemap"
+)
+
 // Load decimal number into temp storage
 // return error or zero.
 func (cpu *cpuState) decLoad(data *[32]uint8, addr uint32, length int, sign *bool) uint16 {
@@ -213,7 +217,7 @@ func (cpu *cpuState) opDecAdd(step *stepInfo) uint16 {
 	}
 
 	// Do not store results for compare
-	if step.opcode == OpCP {
+	if step.opcode == op.OpCP {
 		return err
 	}
 
