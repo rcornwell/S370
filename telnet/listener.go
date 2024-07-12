@@ -83,6 +83,14 @@ func (s *Server) handleConnections() {
 		case <-s.shutdown:
 			return
 		case conn := <-s.connection:
+			host, port, err := net.SplitHostPort(conn.RemoteAddr().String())
+			if err != nil {
+				panic(err)
+			}
+			if host == "::" {
+				host = "localhost"
+			}
+			fmt.Printf("Connection from %s:%s\n", host, port)
 			go handleClient(conn, s.master)
 		}
 	}
@@ -90,7 +98,15 @@ func (s *Server) handleConnections() {
 
 // Start a new server.
 func (s *Server) Start(master chan master.Packet) {
-	fmt.Println("Server started")
+	host, port, err := net.SplitHostPort(s.listener.Addr().String())
+	if err != nil {
+		panic(err)
+	}
+	if host == "::" {
+		host = "localhost"
+	}
+	fmt.Printf("Server started on %s:%s\n", host, port)
+
 	s.wg.Add(2)
 	s.master = master
 	go s.acceptConnections()
