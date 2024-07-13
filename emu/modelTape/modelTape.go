@@ -278,13 +278,23 @@ func (device *Model2400ctx) InitDev() uint8 {
 }
 
 // Attach file to device.
-func (device *Model2400ctx) Attach(fileName string) error {
-	return device.context.Attach(fileName)
+func (device *Model2400ctx) Attach(_ []dev.CmdOption) error {
+	return nil
 }
 
 // Detach device.
 func (device *Model2400ctx) Detach() error {
-	return device.context.Detach()
+	return nil
+}
+
+// Set command.
+func (device *Model2400ctx) Set(_ []dev.CmdOption) error {
+	return nil
+}
+
+// Show command.
+func (device *Model2400ctx) Show(_ []dev.CmdOption) error {
+	return nil
 }
 
 // Callback for reqind commands.

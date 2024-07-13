@@ -137,12 +137,22 @@ func (d *TestDev) InitDev() uint8 {
 }
 
 // Attach file to device.
-func (d *TestDev) Attach(_ string) error {
+func (device *TestDev) Attach(_ []Dv.CmdOption) error {
 	return nil
 }
 
 // Detach device.
-func (d *TestDev) Detach() error {
+func (device *TestDev) Detach() error {
+	return nil
+}
+
+// Set command.
+func (device *TestDev) Set(_ []Dv.CmdOption) error {
+	return nil
+}
+
+// Show command.
+func (device *TestDev) Show(_ []Dv.CmdOption) error {
 	return nil
 }
 

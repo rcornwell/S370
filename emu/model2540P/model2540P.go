@@ -135,13 +135,23 @@ func (device *Model2540Pctx) InitDev() uint8 {
 }
 
 // Attach file to device.
-func (device *Model2540Pctx) Attach(fileName string) error {
-	return device.context.Attach(fileName, true, true)
+func (device *Model2540Pctx) Attach(_ []dev.CmdOption) error {
+	return nil
 }
 
 // Detach device.
 func (device *Model2540Pctx) Detach() error {
-	return device.context.Detach()
+	return nil
+}
+
+// Set command.
+func (device *Model2540Pctx) Set(_ []dev.CmdOption) error {
+	return nil
+}
+
+// Show command.
+func (device *Model2540Pctx) Show(_ []dev.CmdOption) error {
+	return nil
 }
 
 // Process card punch operations.

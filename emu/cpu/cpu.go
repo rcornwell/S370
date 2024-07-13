@@ -266,7 +266,7 @@ func (cpu *cpuState) fetch() (int, bool) {
 	var step stepInfo
 
 	// Fetch the next instruction
-	word, err := cpu.readFull(cpu.PC & ^uint32(0x2))
+	word, err := cpu.readFullAligned(cpu.PC)
 	if err != 0 {
 		cpu.suppress(oPPSW, err)
 		return memCycle, true
@@ -299,27 +299,32 @@ func (cpu *cpuState) fetch() (int, bool) {
 	inst[0] = step.opcode
 	inst[1] = step.reg
 
-	// fmt.Printf(" Fetch %08x: %02x %02x\n", cpu.PC-2, step.opcode, step.reg)
-
+	//	fmt.Printf("Op: %08x %02x %02x ", cpu.iPC, uint32(step.opcode), uint32(step.reg))
 	// Check type of instruction
 	if (step.opcode & 0xc0) != 0 {
 		// RX, RS, SI, SS
 		cpu.ilc++
 		// Check if we need new word?
 		if (cpu.PC & 2) == 0 {
-			word, err = cpu.readFull(cpu.PC & ^uint32(0x2))
+			word, err = cpu.readFullAligned(cpu.PC)
 			if err != 0 {
 				cpu.suppress(oPPSW, err)
 				return memCycle, true
 			}
 			step.address1 = (word >> 16)
+			inst[2] = byte((word >> 24) & 0xff)
+			inst[3] = byte((word >> 16) & 0xff)
 		} else {
 			step.address1 = word
+			inst[2] = byte(word >> 8)
+			inst[3] = byte(word & 0xff)
 		}
-		inst[2] = byte(word >> 8)
-		inst[3] = byte(word & 0xff)
+
+		//	fmt.Printf("%02x%02x ", inst[2], inst[3])
 		step.address1 &= 0xffff
 		cpu.PC += 2
+	} else {
+		//	fmt.Printf("     ")
 	}
 
 	// If SS
@@ -327,24 +332,29 @@ func (cpu *cpuState) fetch() (int, bool) {
 		cpu.ilc++
 		// Do we need another word?
 		if (cpu.PC & 2) == 0 {
-			word, err = cpu.readFull(cpu.PC & ^uint32(0x2))
+			word, err = cpu.readFullAligned(cpu.PC)
 			if err != 0 {
 				cpu.suppress(oPPSW, err)
 				return memCycle, true
 			}
 			step.address2 = (word >> 16)
+			inst[4] = byte(word >> 8)
+			inst[5] = byte(word & 0xff)
 		} else {
 			step.address2 = word
+			inst[4] = byte(word >> 8)
+			inst[5] = byte(word & 0xff)
 		}
-		inst[4] = byte(word >> 8)
-		inst[5] = byte(word & 0xff)
+		//		fmt.Printf("%02x%02x ", inst[4], inst[5])
 		step.address2 &= 0xffff
 		cpu.PC += 2
+	} else {
+		//	fmt.Printf("     ")
 	}
 
 	symbolic, _ := dis.Disasemble(inst)
 	symbolic += " "
-	// fmt.Printf("Op: %08x %02x %02x   %s\n", cpu.iPC, uint32(step.opcode), uint32(step.reg), symbolic)
+	//fmt.Printf("   %s\n", symbolic)
 	err = cpu.execute(&step)
 	if err != 0 {
 		cpu.suppress(oPPSW, err)
@@ -826,6 +836,32 @@ func (cpu *cpuState) readFull(virtAddr uint32) (uint32, uint16) {
 	word |= (word2 >> (8 * (4 - offset)))
 
 	//	sim_debug(DEBUG_DATA, &cpu_dev, "RD A=%08x %08x\n", addr, *v)
+	return word, 0
+}
+
+/*
+ * Read a full word from memory, checking protection
+ * ignore lower bits to and always reads an aligned work.
+ */
+func (cpu *cpuState) readFullAligned(virtAddr uint32) (uint32, uint16) {
+
+	// Validate address
+	physAddr, pageErr := cpu.transAddr(virtAddr)
+	if pageErr != 0 {
+		return 0, pageErr
+	}
+
+	if cpu.checkProtect(physAddr, false) {
+		return 0, ircProt
+	}
+
+	// Read actual data
+	memCycle++
+	word, err := mem.GetWord(virtAddr)
+	if err {
+		return 0, ircAddr
+	}
+
 	return word, 0
 }
 

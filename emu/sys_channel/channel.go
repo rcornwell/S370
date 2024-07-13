@@ -506,6 +506,7 @@ func ChanWriteByte(devNum uint16, data uint8) bool {
 		return true
 	}
 	cUnit := chanUnit[(devNum>>8)&0xf]
+
 	// Check if count zero
 	if subChan.ccwCount == 0 {
 		if subChan.chanDirty {
@@ -723,15 +724,8 @@ func ResetChannels() {
 	}
 }
 
-// Scan all channels and see if one is ready to start or has interrupt pending.
-func ChanScan(mask uint16, irqEnb bool) uint16 {
-	// Quick exit if no pending IRQ's
-	if !IrqPending {
-		return dev.NoDev
-	}
-
-	// Clear pending flag
-	IrqPending = false
+// Scan channels looking for ready device.
+func scanChannels(mask uint16, irqEnb bool) uint16 {
 	pendDev := dev.NoDev // Device with Pending interrupt
 	// Start with channel 0 and work through all channels
 	for i, cUnit := range chanUnit {
@@ -787,6 +781,19 @@ func ChanScan(mask uint16, irqEnb bool) uint16 {
 			}
 		}
 	}
+	return pendDev
+}
+
+// Scan all channels and see if one is ready to start or has interrupt pending.
+func ChanScan(mask uint16, irqEnb bool) uint16 {
+	// Quick exit if no pending IRQ's
+	if !IrqPending {
+		return dev.NoDev
+	}
+
+	// Clear pending flag
+	IrqPending = false
+	pendDev := scanChannels(mask, irqEnb)
 
 	// Only return loading unit on loading
 	if Loading != dev.NoDev && Loading != pendDev {
@@ -848,16 +855,16 @@ func IPLDevice(devNum uint16) error {
 
 	// Check if channel exists
 	if cUnit == nil {
-		return fmt.Errorf("Channel %d does not exist", ch)
+		return fmt.Errorf("channel %d does not exist", ch)
 	}
 
 	if subChan == nil {
-		return fmt.Errorf("No subchannel for %03x", devNum)
+		return fmt.Errorf("no subchannel for %03x", devNum)
 	}
 
 	// If no device or channel, return CC = 3
 	if cUnit.devTab[dNum] == nil {
-		return fmt.Errorf("Device %03x does not exist", devNum)
+		return fmt.Errorf("device %03x does not exist", devNum)
 	}
 
 	// Clear all channels before staring new device.
@@ -866,7 +873,7 @@ func IPLDevice(devNum uint16) error {
 	// Try to start I/O chain on device.
 	status := cUnit.devTab[dNum].StartIO()
 	if status != 0 {
-		return fmt.Errorf("Device %03x gave none zero status to IPL command: %02x", devNum, status)
+		return fmt.Errorf("device %03x gave none zero status to IPL command: %02x", devNum, status)
 	}
 
 	// Create IPL command.
@@ -889,36 +896,36 @@ func IPLDevice(devNum uint16) error {
 		subChan.ccwCmd = 0
 		subChan.ccwFlags = 0
 		if status != 0 {
-			return fmt.Errorf("Device %03x gave none zero status to IPL command: %02x", devNum, status)
+			return fmt.Errorf("device %03x gave none zero status to IPL command: %02x", devNum, status)
 		}
 	}
 	Loading = devNum
 	return nil
 }
 
-// Attach a file to a device.
-func Attach(devNum uint16, fileName string) error {
-	ch := (devNum >> 8) & 0xf
-	dNum := devNum & 0xff
-	cUnit := chanUnit[ch]
-	dev := cUnit.devTab[dNum]
-	if dev == nil {
-		return fmt.Errorf("No device: %03x", devNum)
-	}
-	return dev.Attach(fileName)
-}
+// // Attach a file to a device.
+// func Attach(devNum uint16, fileName string) error {
+// 	ch := (devNum >> 8) & 0xf
+// 	dNum := devNum & 0xff
+// 	cUnit := chanUnit[ch]
+// 	dev := cUnit.devTab[dNum]
+// 	if dev == nil {
+// 		return fmt.Errorf("No device: %03x", devNum)
+// 	}
+// 	return dev.Attach(fileName)
+// }
 
-// Detach whatever file the device has attached.
-func Detach(devNum uint16) error {
-	ch := (devNum >> 8) & 0xf
-	dNum := devNum & 0xff
-	cUnit := chanUnit[ch]
-	dev := cUnit.devTab[dNum]
-	if dev == nil {
-		return fmt.Errorf("No device: %03x", devNum)
-	}
-	return dev.Detach()
-}
+// // Detach whatever file the device has attached.
+// func Detach(devNum uint16) error {
+// 	ch := (devNum >> 8) & 0xf
+// 	dNum := devNum & 0xff
+// 	cUnit := chanUnit[ch]
+// 	dev := cUnit.devTab[dNum]
+// 	if dev == nil {
+// 		return fmt.Errorf("No device: %03x", devNum)
+// 	}
+// 	return dev.Detach()
+// }
 
 // Add a device at given address.
 func AddDevice(dev dev.Device, devNum uint16) error {
@@ -927,12 +934,12 @@ func AddDevice(dev dev.Device, devNum uint16) error {
 	cUnit := chanUnit[ch]
 	// Check if channel exists
 	if cUnit == nil {
-		return fmt.Errorf("Channel %d does not exist", ch)
+		return fmt.Errorf("channel %d does not exist", ch)
 	}
 
 	// Check if device already exists.
 	if cUnit.devTab[dNum] != nil {
-		return fmt.Errorf("Device %03x already exists", devNum)
+		return fmt.Errorf("device %03x already exists", devNum)
 	}
 	cUnit.devTab[dNum] = dev
 	return nil
@@ -945,12 +952,12 @@ func GetDevice(devNum uint16) (dev.Device, error) {
 	cUnit := chanUnit[ch]
 	// Check if channel exists
 	if cUnit == nil {
-		return nil, fmt.Errorf("Channel %d does not exist", ch)
+		return nil, fmt.Errorf("channel %d does not exist", ch)
 	}
 
 	// Check if device exists.
 	if cUnit.devTab[dNum] == nil {
-		return nil, fmt.Errorf("Device %03x doesn't exist", devNum)
+		return nil, fmt.Errorf("device %03x doesn't exist", devNum)
 	}
 	return cUnit.devTab[dNum], nil
 }
@@ -1096,9 +1103,7 @@ func findSubChannel(devNum uint16) *chanCtl {
 func storeCSW(cUnit *chanCtl) {
 	mem.SetMemory(CSW, (uint32(cUnit.ccwKey)<<24)|cUnit.caw)
 	mem.SetMemory(CSW+4, uint32(cUnit.ccwCount)|(uint32(cUnit.chanStatus)<<16))
-	//	word1 := mem.GetMemory(CSW)
-	//	word2 := mem.GetMemory(CSW + 4)
-	//	fmt.Printf("CSW %08x %08x\n", word1, word2)
+	fmt.Printf("CSW %08x %08x\n", mem.GetMemory(CSW), mem.GetMemory(CSW+4))
 	if (cUnit.chanStatus & statusPCI) != 0 {
 		cUnit.chanStatus &= ^statusPCI
 	} else {
@@ -1186,7 +1191,7 @@ loop:
 		subChan.caw &= addrMask
 		subChan.ccwCount = uint16(word & countMask)
 
-		//	fmt.Printf("CCW %08x %02x%06x, %08x\n", subChan.caw-8, subChan.ccwCmd, subChan.ccwAddr, word)
+		fmt.Printf("CCW %03x %08x %02x%06x, %08x\n", subChan.devAddr, subChan.caw-8, subChan.ccwCmd, subChan.ccwAddr, word)
 		// Copy SLI indicator in CD command
 		if (subChan.ccwFlags & (chainData | flagSLI)) == (chainData | flagSLI) {
 			word |= uint32(flagSLI) << 16

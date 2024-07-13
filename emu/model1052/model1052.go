@@ -94,7 +94,7 @@ func (device *Model1052ctx) StartCmd(cmd uint8) uint8 {
 	if device.busy {
 		return dev.CStatusBusy
 	}
-
+	fmt.Printf("Terminal cmd %02x\n", cmd)
 	tel := device.telctx
 	// Decode command
 	switch cmd {
@@ -232,12 +232,22 @@ func (device *Model1052ctx) InitDev() uint8 {
 }
 
 // Attach file to device.
-func (device *Model1052ctx) Attach(_ string) error {
+func (device *Model1052ctx) Attach(_ []dev.CmdOption) error {
 	return nil
 }
 
 // Detach device.
 func (device *Model1052ctx) Detach() error {
+	return nil
+}
+
+// Set command.
+func (device *Model1052ctx) Set(_ []dev.CmdOption) error {
+	return nil
+}
+
+// Show command.
+func (device *Model1052ctx) Show(_ []dev.CmdOption) error {
 	return nil
 }
 
@@ -261,6 +271,7 @@ func (device *Model1052ctx) callback(cmd int) {
 
 	case cmdWrite, cmdWriteACR:
 		by, end := ch.ChanReadByte(device.addr)
+		//	fmt.Printf("Write character %02x\n", by)
 		if end {
 			if uint8(cmd) == cmdWriteACR {
 				// send \r\n

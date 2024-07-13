@@ -167,13 +167,23 @@ func (device *Model2540Rctx) InitDev() uint8 {
 }
 
 // Attach file to device.
-func (device *Model2540Rctx) Attach(fileName string) error {
-	return device.context.Attach(fileName, false, false)
+func (device *Model2540Rctx) Attach(_ []dev.CmdOption) error {
+	return nil
 }
 
 // Detach device.
 func (device *Model2540Rctx) Detach() error {
-	return device.context.Detach()
+	return nil
+}
+
+// Set command.
+func (device *Model2540Rctx) Set(_ []dev.CmdOption) error {
+	return nil
+}
+
+// Show command.
+func (device *Model2540Rctx) Show(_ []dev.CmdOption) error {
+	return nil
 }
 
 // Handle channel operations.

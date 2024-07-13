@@ -27,6 +27,8 @@ package event
 
 import (
 	"testing"
+
+	dev "github.com/rcornwell/S370/emu/device"
 )
 
 var stepCount uint64
@@ -85,7 +87,7 @@ func (d device) InitDev() uint8 {
 }
 
 // Attach file to device.
-func (d device) Attach(_ string) error {
+func (d device) Attach(_ []dev.CmdOption) error {
 	return nil
 }
 
@@ -94,6 +96,17 @@ func (d device) Detach() error {
 	return nil
 }
 
+// Set command.
+func (d device) Set(_ []dev.CmdOption) error {
+	return nil
+}
+
+// Show command.
+func (d device) Show(_ []dev.CmdOption) error {
+	return nil
+}
+
+// Initialize for each test.
 func initTest() {
 	stepCount = 0
 	deviceA.time = 0
