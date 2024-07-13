@@ -164,27 +164,23 @@ func (state *tnState) sendOption(setState, option byte) {
 func (state *tnState) handleDO(input byte) {
 	switch input {
 	case tnOptionTerm:
-		fmt.Println("Do Term")
+		// fmt.Println("Do Term")
 
 	case tnOptionSGA:
-		fmt.Println("Do SGA")
+		// fmt.Println("Do SGA")
 		if (state.optionState[input] & tnFlagWill) != 0 {
-			//	if (state.optionState[input] & tnFlagDo) == 0 {
 			state.optionState[input] |= tnFlagDont
-			//		}
 		}
 	case tnOptionEcho:
-		fmt.Println("Do Echo")
+		//	fmt.Println("Do Echo")
 		if (state.optionState[input] & tnFlagWill) != 0 {
-			//	if (state.optionState[input] & tnFlagDo) == 0 {
 			state.optionState[input] |= tnFlagDont
-			//		}
 		}
 	case tnOptionEOR:
-		fmt.Println("Do EOR")
+		//		fmt.Println("Do EOR")
 		state.optionState[input] |= tnFlagDo
 	case tnOptionBinary:
-		fmt.Println("Do Binary")
+		//		fmt.Println("Do Binary")
 		if (state.optionState[input] & tnFlagDo) == 0 {
 			state.sendOption(tnDO, input)
 		}
@@ -199,10 +195,10 @@ func (state *tnState) handleDO(input byte) {
 func (state *tnState) handleWILL(input byte) {
 	switch input {
 	case tnOptionTerm: // Collect option
-		fmt.Println("Will Term")
+		//		fmt.Println("Will Term")
 		if (state.optionState[input] & tnFlagWill) == 0 {
 			state.optionState[input] |= tnFlagWill
-			fmt.Println("Send term request")
+			//		fmt.Println("Send term request")
 			send := []byte{tnIAC, tnSB, tnOptionTerm, tnSend, tnIAC, tnSE}
 			_, err := state.conn.Write(send)
 			if err != nil {
@@ -212,7 +208,7 @@ func (state *tnState) handleWILL(input byte) {
 	case tnOptionENV:
 		if (state.optionState[input] & tnFlagWill) == 0 {
 			state.optionState[input] |= tnFlagWill
-			fmt.Println("Send env request")
+			//		fmt.Println("Send env request")
 			send := []byte{tnIAC, tnSB, tnOptionENV, tnSend, tnVar, 'U', 'S', 'E', 'R', tnIAC, tnSE}
 			_, err := state.conn.Write(send)
 			if err != nil {
@@ -220,32 +216,24 @@ func (state *tnState) handleWILL(input byte) {
 			}
 		}
 	case tnOptionEOR:
-		fmt.Println("Will EOR")
+		//fmt.Println("Will EOR")
 		if (state.optionState[input] & tnFlagWill) == 0 {
 			state.optionState[input] |= tnFlagWill
-			//			state.sendOption(tnWILL, tnOptionBinary)
-			//			state.optionState[tnOptionBinary] &= ^tnFlagWill
-			//		state.sendOption(tnDO, tnOptionBinary)
 		}
 	case tnOptionSGA:
-		fmt.Print("Will SGA")
+		//		fmt.Print("Will SGA")
 		if (state.optionState[input] & tnFlagWill) == 0 {
 			state.sendOption(tnDO, input)
-			//		send := []byte{tnIAC, tnDO, input}
-			//		_, err := state.conn.Write(send)
-			//		if err != nil {
-			//			fmt.Println("Send error: ", err)
-			// }
 		}
 	case tnOptionEcho:
-		fmt.Println("Will Echo")
+		//		fmt.Println("Will Echo")
 		if (state.optionState[input] & tnFlagWill) == 0 {
 			state.optionState[input] |= tnFlagWill
 			state.sendOption(tnDONT, input)
 			state.sendOption(tnWONT, input)
 		}
 	case tnOptionBinary:
-		fmt.Println("Will Bin")
+		//		fmt.Println("Will Bin")
 		if (state.optionState[input] & tnFlagWill) == 0 {
 			state.optionState[input] |= tnFlagWill
 			// Send clear screen to 3270 terminals
@@ -296,9 +284,9 @@ func handleClient(conn net.Conn, master chan master.Packet) {
 			case tnStateData: // normal
 				if input == tnIAC {
 					state.state = tnStateIAC
-					fmt.Println("data: IAC")
+					//	fmt.Println("data: IAC")
 				} else {
-					fmt.Printf("data: %02x %c\n", input, input)
+					//		fmt.Printf("data: %02x %c\n", input, input)
 					out = append(out, input)
 				}
 			// Otherwise send character to device.
@@ -307,62 +295,62 @@ func handleClient(conn net.Conn, master chan master.Packet) {
 				case tnIAC:
 					// Send character to device
 					state.state = tnStateData
-					fmt.Println("IAC")
+					// fmt.Println("IAC")
 				case tnBRK:
 					state.state = tnStateData
-					fmt.Println("BRK")
+					//		fmt.Println("BRK")
 				case tnWILL:
 					state.state = tnStateWILL
-					fmt.Println("WILL")
+					//		fmt.Println("WILL")
 				case tnWONT:
 					state.state = tnStateWONT
-					fmt.Println("WONT")
+					//		fmt.Println("WONT")
 				case tnDO:
 					state.state = tnStateDO
-					fmt.Println("DO")
+				//	fmt.Println("DO")
 				case tnDONT:
 					state.state = tnStateDONT
-					fmt.Println("DONT")
+					//		fmt.Println("DONT")
 				case tnSB:
 					state.state = tnStateSB
-					fmt.Println("SB")
+					//		fmt.Println("SB")
 				default:
-					fmt.Printf("IAC Char: %02x\n", input)
+					//		fmt.Printf("IAC Char: %02x\n", input)
 					state.state = tnStateSKIP
 				}
 
 			case tnStateWILL: // WILL seen
-				fmt.Printf("Will %s\n", optName(input))
+				//	fmt.Printf("Will %s\n", optName(input))
 				state.handleWILL(input)
 				state.state = tnStateData
 
 			case tnStateWONT: // WONT seen
-				fmt.Printf("Wont %s\n", optName(input))
+				//	fmt.Printf("Wont %s\n", optName(input))
 				if (state.optionState[input] & tnFlagWont) == 0 {
 					state.sendOption(tnWONT, input)
 				}
 				state.state = tnStateData
 
 			case tnStateDO: // DO seen
-				fmt.Printf("Do %s\n", optName(input))
+				//	fmt.Printf("Do %s\n", optName(input))
 				state.handleDO(input)
 				state.state = tnStateData
 
 			case tnStateDONT:
-				fmt.Printf("Dont %s\n", optName(input))
+				//		fmt.Printf("Dont %s\n", optName(input))
 				state.state = tnStateData
 
 			case tnStateSKIP: // skip next cmd
-				fmt.Print("Skip")
+				//	fmt.Print("Skip")
 				state.state = tnStateData
 
 			case tnStateSB: // Start of SB expect type
-				fmt.Printf("SB: %s\n", optName(input))
+				//	fmt.Printf("SB: %s\n", optName(input))
 				state.sbtype = input
 				state.state = tnStateSBIS
 
 			case tnStateSBIS: // Waiting for IS
-				fmt.Printf("SB IS %s\n", optName(state.sbtype))
+				//	fmt.Printf("SB IS %s\n", optName(state.sbtype))
 				switch state.sbtype {
 				case tnOptionTerm:
 					state.state = tnStateSTerm
@@ -375,7 +363,7 @@ func handleClient(conn net.Conn, master chan master.Packet) {
 			case tnStateSTerm:
 				if input == tnIAC {
 					state.state = tnStateSE
-					fmt.Println("term type: ", string(term))
+					//		fmt.Println("term type: ", string(term))
 				} else {
 					term = append(term, input)
 				}
@@ -418,7 +406,7 @@ func handleClient(conn net.Conn, master chan master.Packet) {
 			case tnStateSE:
 				if input == tnSE {
 					state.state = tnStateData
-					fmt.Println("SE")
+					//		fmt.Println("SE")
 					state.handleSE(term)
 				}
 			}

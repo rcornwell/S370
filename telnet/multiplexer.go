@@ -50,15 +50,41 @@ type termMap struct {
 	inUse bool   // Device is in use.
 }
 
+type portMap struct {
+	port    string    // Port to connect to.
+	group   string    // Group this port serves.
+	devices []termMap // List of devices on this port
+	server  *Server   // Server listening on this port
+}
+
 var mapLock sync.Mutex
 
 var terminals = map[uint16]termMap{}
+
+var ports = map[string]portMap{}
+
+// Register a port and group.
+func RegisterPort(group string, port string) {
+	_, ok := ports[port] // See if exists.
+
+	// If it does not exist, find port with no group.
+	if !ok {
+		ports[port] = portMap{port: port, group: group}
+	}
+}
 
 // Register a device of type.
 func RegisterTerminal(dev Telnet, devNum uint16, model byte, group string) {
 	// No need to lock map here since this will be used during configuration
 	// Also should be no duplicates sent here.
 	terminals[devNum] = termMap{dev: dev, model: model, group: group}
+	for _, p := range ports { // We can find it.
+		if p.group == group {
+			p.devices = append(p.devices, terminals[devNum])
+			return
+		}
+	}
+	fmt.Printf("no port found")
 }
 
 // Find a terminal by type.

@@ -112,10 +112,10 @@ loop:
 		case <-sigChan:
 			fmt.Println("Got quit signal")
 			break loop
-		case input := <-msg:
-			_ = syschannel.Detach(0x00c)
-			_ = syschannel.Attach(0x00c, *optDeck)
-			fmt.Printf("IPL device: %s\n", input)
+		case <-msg:
+			//			_ = syschannel.Detach(0x00c)
+			//			_ = syschannel.Attach(0x00c, *optDeck)
+			fmt.Printf("IPL device: %03x\n", core.IPLDevice())
 			masterChannel <- master.Packet{DevNum: core.IPLDevice(), Msg: master.IPLdevice}
 		}
 	}
