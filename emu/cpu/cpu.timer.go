@@ -74,13 +74,7 @@ func (cpu *cpuState) updateClock() {
 		cpu.todClock[1] = t
 
 		// Check if we should post a TOD irq
-		cpu.todIrq = false
-		if (cpu.clkCmp[0] < cpu.todClock[0]) ||
-			((cpu.clkCmp[0] == cpu.todClock[0]) && (cpu.clkCmp[1] < cpu.todClock[1])) {
-			//     sim_debug(DEBUG_INST, &cpu_dev, "CPU TIMER CCK IRQ %08x %08x\n", clk_cmp[0],
-			//               clk_cmp[1]);
-			cpu.todIrq = true
-		}
+		cpu.checkTODIrq()
 	}
 
 	// Update CPU timer, updated 300 times per second.
@@ -92,5 +86,17 @@ func (cpu *cpuState) updateClock() {
 	cpu.timerTics = 6666 // 2 * 1/300 of a second.
 	if (cpu.cpuTimer[0] & MSIGN) != 0 {
 		cpu.clkIrq = true
+	}
+}
+
+// Check if we should generate a TOD interrupt
+func (cpu *cpuState) checkTODIrq() {
+	// Check if we should post a TOD irq
+	cpu.todIrq = false
+	if (cpu.clkCmp[0] < cpu.todClock[0]) ||
+		((cpu.clkCmp[0] == cpu.todClock[0]) && (cpu.clkCmp[1] < cpu.todClock[1])) {
+		//     sim_debug(DEBUG_INST, &cpu_dev, "CPU TIMER CCK IRQ %08x %08x\n", clk_cmp[0],
+		//               clk_cmp[1]);
+		cpu.todIrq = true
 	}
 }

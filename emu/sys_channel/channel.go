@@ -454,7 +454,7 @@ func ChanReadByte(devNum uint16) (uint8, bool) {
 		if readBuffer(cUnit, subChan) {
 			return 0, true
 		}
-		//	fmt.Printf("Read  %08x %08x\n", subChan.ccwAddr, subChan.chanBuffer)
+		//		fmt.Printf("Read  %03x: %08x %08x\n", subChan.devAddr, subChan.ccwAddr, subChan.chanBuffer)
 		if nextAddress(cUnit, subChan) {
 			return 0, true
 		}
@@ -510,6 +510,7 @@ func ChanWriteByte(devNum uint16, data uint8) bool {
 	// Check if count zero
 	if subChan.ccwCount == 0 {
 		if subChan.chanDirty {
+			//		fmt.Printf("Write %03x: %08x %08x\n", subChan.devAddr, subChan.ccwAddr, subChan.chanBuffer)
 			if writeBuffer(cUnit, subChan) {
 				return true
 			}
@@ -541,6 +542,7 @@ func ChanWriteByte(devNum uint16, data uint8) bool {
 		if writeBuffer(cUnit, subChan) {
 			return true
 		}
+		//	fmt.Printf("Write %03x: %08x %08x\n", subChan.devAddr, subChan.ccwAddr, subChan.chanBuffer)
 		if nextAddress(cUnit, subChan) {
 			return true
 		}
@@ -634,6 +636,7 @@ func ChanEnd(devNum uint16, flags uint8) {
 	ch := (devNum >> 8) & 0xf
 	cUnit := chanUnit[ch]
 	if subChan.chanDirty {
+		//	fmt.Printf("Write %03x: %08x %08x\n", subChan.devAddr, subChan.ccwAddr, subChan.chanBuffer)
 		_ = writeBuffer(cUnit, subChan)
 	}
 	subChan.chanStatus |= statusChnEnd
@@ -1119,7 +1122,7 @@ func findSubChannel(devNum uint16) *chanCtl {
 func storeCSW(cUnit *chanCtl) {
 	mem.SetMemory(CSW, (uint32(cUnit.ccwKey)<<24)|cUnit.caw)
 	mem.SetMemory(CSW+4, uint32(cUnit.ccwCount)|(uint32(cUnit.chanStatus)<<16))
-	fmt.Printf("CSW %08x %08x\n", mem.GetMemory(CSW), mem.GetMemory(CSW+4))
+	//	fmt.Printf("CSW %08x %08x\n", mem.GetMemory(CSW), mem.GetMemory(CSW+4))
 	if (cUnit.chanStatus & statusPCI) != 0 {
 		cUnit.chanStatus &= ^statusPCI
 	} else {
@@ -1182,7 +1185,7 @@ loop:
 			if ticOk {
 				subChan.caw = word & addrMask
 				ticOk = false
-				fmt.Printf("TIC %08x", subChan.caw)
+				//			fmt.Printf("TIC %08x", subChan.caw)
 				goto loop
 			}
 			subChan.chanStatus = statusPCHK
@@ -1207,7 +1210,7 @@ loop:
 		subChan.caw &= addrMask
 		subChan.ccwCount = uint16(word & countMask)
 
-		fmt.Printf("CCW %03x %08x %02x%06x, %08x\n", subChan.devAddr, subChan.caw-8, subChan.ccwCmd, subChan.ccwAddr, word)
+		//		fmt.Printf("CCW %03x %08x %02x%06x, %08x\n", subChan.devAddr, subChan.caw-8, subChan.ccwCmd, subChan.ccwAddr, word)
 		// Copy SLI indicator in CD command
 		if (subChan.ccwFlags & (chainData | flagSLI)) == (chainData | flagSLI) {
 			word |= uint32(flagSLI) << 16
@@ -1369,7 +1372,6 @@ func writeBuffer(cUnit *chanDev, subChan *chanCtl) bool {
 
 	// Write memory
 	err := mem.PutWord(addr, subChan.chanBuffer)
-	//	fmt.Printf("Write %08x %08x\n", addr, subChan.chanBuffer)
 	subChan.chanByte = bufEmpty
 	subChan.chanDirty = false
 	return err

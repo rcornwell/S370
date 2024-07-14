@@ -26,15 +26,14 @@ package cpu
 
 // Floating point half register.
 func (cpu *cpuState) opFPHalf(step *stepInfo) uint16 {
-	var exponent int
-	var sign bool
+	var err uint16
 
 	// Split number apart
-	exponent = int((step.fsrc2 & EMASKL) >> 56)
-	if (step.opcode & 0x10) != 0 {
-		step.fsrc2 &= HMASKL
-	}
-	sign = (step.fsrc2 & MSIGNL) != 0
+	exponent := int((step.fsrc2 & EMASKL) >> 56)
+	sign := (step.fsrc2 & MSIGNL) != 0
+	// if (step.opcode & 0x10) != 0 {
+	// 	step.fsrc2 &= HMASKL
+	// }
 	// Create guard digit
 	step.fsrc2 = (step.fsrc2 & MMASKL) << 4
 	// Divide by 2
@@ -48,11 +47,12 @@ func (cpu *cpuState) opFPHalf(step *stepInfo) uint16 {
 		// Check if underflow
 		if exponent < 0 {
 			if (cpu.progMask & EXPUNDER) != 0 {
-				return ircExpUnder
+				err = ircExpUnder
+			} else {
+				sign = false
+				step.fsrc2 = 0
+				exponent = 0
 			}
-			sign = false
-			step.fsrc2 = 0
-			exponent = 0
 		}
 
 		// Remove guard digit
@@ -70,7 +70,14 @@ func (cpu *cpuState) opFPHalf(step *stepInfo) uint16 {
 	if sign {
 		step.fsrc2 |= MSIGNL
 	}
-	return cpu.opFPLoad(step)
+
+	// Store results.
+	if (step.opcode & 0x10) == 0 {
+		cpu.fpregs[step.R1] = step.fsrc2
+	} else {
+		cpu.fpregs[step.R1] = (step.fsrc2 & HMASKL) | (cpu.fpregs[step.R1] & LMASKL)
+	}
+	return err
 }
 
 // Floating load register.
@@ -98,7 +105,7 @@ func (cpu *cpuState) opFPLCS(step *stepInfo) uint16 {
 	} else {
 		cpu.fpregs[step.R1] = (step.fsrc2 & HMASKL) | (cpu.fpregs[step.R1] & LMASKL)
 	}
-	if fsrc1 != 0 {
+	if (fsrc1 & MMASKL) != 0 {
 		if (step.fsrc2 & MSIGNL) != 0 {
 			cpu.cc = 1
 		} else {
@@ -255,12 +262,13 @@ func (cpu *cpuState) opFPAdd(step *stepInfo) uint16 {
 		sum = value1 + value2
 	}
 
+	var err uint16
 	// If v1 not normal shift left + expo
 	if (sum & CMASK) != 0 {
 		sum >>= 4
 		exponent1++
 		if exponent1 >= 128 {
-			return ircExpOver
+			err = ircExpOver
 		}
 	}
 
@@ -296,7 +304,6 @@ func (cpu *cpuState) opFPAdd(step *stepInfo) uint16 {
 		}
 	}
 
-	var err uint16
 	// Check signifigance exceptions
 	if cpu.cc == 0 && (cpu.progMask&SIGMASK) != 0 {
 		err = ircSignif
@@ -311,11 +318,12 @@ func (cpu *cpuState) opFPAdd(step *stepInfo) uint16 {
 			// Check if underflow
 			if exponent1 < 0 {
 				if (cpu.progMask & EXPUNDER) != 0 {
-					return ircExpUnder
+					err = ircExpUnder
+				} else {
+					sum = 0
+					sign1 = false
+					exponent1 = 0
 				}
-				sum = 0
-				sign1 = false
-				exponent1 = 0
 			}
 		}
 	}
@@ -472,12 +480,13 @@ func (cpu *cpuState) opFPAddD(step *stepInfo) uint16 {
 		sum = value1 + value2
 	}
 
+	var err uint16
 	// If v1 not normal shift left + expo
 	if (sum & CMASKL) != 0 {
 		sum >>= 4
 		exponent1++
 		if exponent1 >= 128 {
-			return ircExpOver
+			err = ircExpOver
 		}
 	}
 
@@ -513,7 +522,6 @@ func (cpu *cpuState) opFPAddD(step *stepInfo) uint16 {
 		}
 	}
 
-	var err uint16
 	// Check signifigance exceptions
 	if cpu.cc == 0 && (cpu.progMask&SIGMASK) != 0 {
 		err = ircSignif
@@ -530,11 +538,12 @@ func (cpu *cpuState) opFPAddD(step *stepInfo) uint16 {
 			// Check if underflow
 			if exponent1 < 0 {
 				if (cpu.progMask & EXPUNDER) != 0 {
-					return ircExpUnder
+					err = ircExpUnder
+				} else {
+					sum = 0
+					sign1 = false
+					exponent1 = 0
 				}
-				sum = 0
-				sign1 = false
-				exponent1 = 0
 			}
 		}
 	}

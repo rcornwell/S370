@@ -79,12 +79,7 @@ func (cpu *cpuState) opSVC(step *stepInfo) uint16 {
 	//  (cpu_unit[0].flags & (FEAT_370|FEAT_VMA)) == (FEAT_370|FEAT_VMA) && \
 	//  (cregs[6] & 0x88000000) == MSIGN && vma_stsvc(reg))
 	//  break
-	irqaddr := cpu.storePSW(oSPSW, uint16(step.reg))
-	memCycle++
-	src1 := memory.GetMemory(irqaddr)
-	memCycle++
-	src2 := memory.GetMemory(irqaddr + 0x4)
-	cpu.lpsw(src1, src2)
+	cpu.suppress(oSPSW, uint16(step.reg))
 	return 0
 }
 
@@ -144,11 +139,11 @@ func (cpu *cpuState) opLPSW(step *stepInfo) uint16 {
 	var src1, src2 uint32
 	var err uint16
 
-	src1, err = cpu.readFull(step.address1)
+	src1, err = cpu.readFullAligned(step.address1)
 	if err != 0 {
 		return err
 	}
-	src2, err = cpu.readFull(step.address1 + 4)
+	src2, err = cpu.readFullAligned(step.address1 + 4)
 	if err != 0 {
 		return err
 	}
@@ -318,6 +313,11 @@ func (cpu *cpuState) opLRA(step *stepInfo) uint16 {
 func (cpu *cpuState) opEX(step *stepInfo) uint16 {
 	var s stepInfo // New stepInfo
 
+	// Must be on half word boundary
+	if (step.address1 & 1) != 0 {
+		return ircSpec
+	}
+
 	// Fetch the next instruction
 	opr, err := cpu.readHalf(step.address1)
 	if err != 0 {
@@ -334,7 +334,10 @@ func (cpu *cpuState) opEX(step *stepInfo) uint16 {
 	if s.opcode == op.OpEX {
 		return ircExec
 	}
-	s.reg = uint8(step.src1 & 0xff)
+	s.reg = uint8(opr & 0xff)
+	if step.R1 != 0 {
+		s.reg |= uint8(step.src1 & 0xff)
+	}
 	s.R1 = (s.reg >> 4) & 0xf
 	s.R2 = s.reg & 0xf
 	step.address1 += 2
@@ -342,19 +345,17 @@ func (cpu *cpuState) opEX(step *stepInfo) uint16 {
 	// Check type of instruction
 	if (s.opcode & 0xc0) != 0 {
 		// Check if we need new word
-		a1, err := cpu.readHalf(step.address1)
+		s.address1, err = cpu.readHalf(step.address1)
 		if err != 0 {
 			return err
 		}
-		s.address1 = a1 & 0xffff
 		step.address1 += 2
-		// SI instruction
+		// SS instruction
 		if (s.opcode & 0xc0) == 0xc0 {
-			a2, err := cpu.readHalf(step.address1)
+			s.address2, err = cpu.readHalf(step.address1)
 			if err != 0 {
 				return err
 			}
-			s.address2 = a2 & 0xfff
 		}
 	}
 
@@ -459,10 +460,14 @@ func (cpu *cpuState) opLCTL(step *stepInfo) uint16 {
 		return ircPriv
 	}
 
+	if (step.address1 & 3) != 0 {
+		return ircSpec
+	}
+
 	for {
 		var temp uint32
 		var err uint16
-		if temp, err = cpu.readFull(step.address1); err != 0 {
+		if temp, err = cpu.readFullAligned(step.address1); err != 0 {
 			return err
 		}
 		cpu.cregs[step.R1] = temp
@@ -573,6 +578,11 @@ func (cpu *cpuState) opSTCTL(step *stepInfo) uint16 {
 		// return 0
 		return ircPriv
 	}
+
+	// Must be on word boundary
+	if (step.address1 & 3) != 0 {
+		return ircSpec
+	}
 	for {
 		if err := cpu.writeFull(step.address1, cpu.cregs[step.R1]); err != 0 {
 			return err
@@ -611,12 +621,14 @@ func (cpu *cpuState) opB2(step *stepInfo) uint16 {
 	case 0x00: // CONCS
 		// Connect channel set
 		fallthrough
-	case 0x01: // Disconnect channel set
+	case 0x01: // DISCS
+		// Disconnect channel set
 		if step.address1 == 0 {
 			cpu.cc = 0
 		} else {
 			cpu.cc = 3
 		}
+
 	case 0x02: // STIDP
 		// Store CPUID in double word
 		t1 := uint32(100)
@@ -626,6 +638,7 @@ func (cpu *cpuState) opB2(step *stepInfo) uint16 {
 		}
 		t2 := uint32(0x145) << 16
 		return cpu.writeFull(step.address1+4, t2)
+
 	case 0x03: // STIDC
 		// Store channel id
 		testChan := uint16(step.address1 & HMASK)
@@ -644,26 +657,37 @@ func (cpu *cpuState) opB2(step *stepInfo) uint16 {
 		memory.SetMemory(0xA8, result)
 		cpu.cc = 0
 		return 0
+
 	case 0x04: // SCK
 		var low, high uint32
 		var err uint16
 
-		// Load check with double word
-		low, err = cpu.readFull(step.address1)
+		// Must be on double word boundary
+		if (step.address1 & 7) != 0 {
+			return ircSpec
+		}
+
+		low, err = cpu.readFullAligned(step.address1)
 		if err != 0 {
 			return err
 		}
-		high, err = cpu.readFull(step.address1 + 4)
+		high, err = cpu.readFullAligned(step.address1 + 4)
 		if err != 0 {
 			return err
 		}
 		cpu.todClock[0] = low
 		cpu.todClock[1] = high
 		cpu.todSet = true
-		// cpu.check_tod_irq()
+		cpu.checkTODIrq()
 		cpu.cc = 0
+
 	case 0x05: // STCK
 		var low, high uint32
+
+		// Must be on double word boundary
+		if (step.address1 & 7) != 0 {
+			return ircSpec
+		}
 
 		// Store TOD clock in location
 		low = cpu.todClock[0]
@@ -683,6 +707,7 @@ func (cpu *cpuState) opB2(step *stepInfo) uint16 {
 		} else {
 			cpu.cc = 1
 		}
+
 	case 0x06: // SCKC
 		var low, high uint32
 		var err uint16
@@ -698,9 +723,15 @@ func (cpu *cpuState) opB2(step *stepInfo) uint16 {
 		}
 		cpu.clkCmp[0] = low
 		cpu.clkCmp[1] = high
-		// cpu.check_tod_irq()
+		cpu.checkTODIrq()
+
 	case 0x07: // STCKC
 		var low, high uint32
+
+		// Must be on double word boundary
+		if (step.address1 & 7) != 0 {
+			return ircSpec
+		}
 
 		// Store TOD clock in location
 		low = cpu.clkCmp[0]
@@ -713,31 +744,39 @@ func (cpu *cpuState) opB2(step *stepInfo) uint16 {
 		if err != 0 {
 			return err
 		}
+
 	case 0x08: // SPT
 		var low, high uint32
 		var err uint16
 
+		// Must be on double word boundary
+		if (step.address1 & 7) != 0 {
+			return ircSpec
+		}
+
 		// Set the CPU timer with double word
-		low, err = cpu.readFull(step.address1)
+		low, err = cpu.readFullAligned(step.address1)
 		if err != 0 {
 			return err
 		}
-		high, err = cpu.readFull(step.address1 + 4)
+		high, err = cpu.readFullAligned(step.address1 + 4)
 		if err != 0 {
 			return err
 		}
 		cpu.cpuTimer[0] = low
 		cpu.cpuTimer[1] = high
 		cpu.todSet = true
-		//                               if (sim_is_active(&cpu_unit[0])) {
-		//                                   double nus = sim_activate_time_usecs(&cpu_unit[0]);
-		//                                   timer_tics = (int)(nus);
-		//                               }
-		//                               clk_irq = (cpu_timer[0] & MSIGN) != 0;
+		cpu.clkIrq = (low & MSIGN) != 0
+
 	case 0x09: // STPT
+		// Store CPU timer.
 		var low, high uint32
 
-		// Store the CPU timer in double word
+		// Must be on double word boundary
+		if (step.address1 & 7) != 0 {
+			return ircSpec
+		}
+
 		low = cpu.cpuTimer[0]
 		high = cpu.cpuTimer[1]
 		// Update clock based on time before next irq
@@ -752,24 +791,30 @@ func (cpu *cpuState) opB2(step *stepInfo) uint16 {
 		}
 	case 0x0a: // SPKA
 		cpu.stKey = uint8(0xf0 & step.address1)
+
 	case 0x0b: // IPK
 		cpu.regs[2] = (cpu.regs[2] & 0xffffff00) | (uint32(cpu.stKey) & 0xf0)
 		cpu.perRegMod |= 1 << 2
+
 	case 0x0d: // PTLB
 		for i := range 256 {
 			cpu.tlb[i] = 0
 		}
 	case 0x10: // SPX
 		return ircOper
+
 	case 0x11: // SPTX
 		return ircOper
+
 	case 0x12: // STAP
 		return ircOper
+
 	case 0x13: // RRB
 		// Set storage block reference bit to zero
 		key := memory.GetKey(step.address1)
 		memory.PutKey(step.address1, key&0xfb)
 		cpu.cc = (key >> 1) & 0x3
+
 	default:
 		return ircOper
 	}

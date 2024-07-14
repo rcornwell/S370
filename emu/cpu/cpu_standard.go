@@ -894,6 +894,33 @@ func (cpu *cpuState) opSTM(step *stepInfo) uint16 {
 	}
 }
 
+// Handle memory to memory copy.
+func (cpu *cpuState) opMVC(step *stepInfo) uint16 {
+	if err := cpu.testAccess(step.address1, uint32(step.reg), true); err != 0 {
+		return err
+	}
+	if err := cpu.testAccess(step.address2, uint32(step.reg), false); err != 0 {
+		return err
+	}
+
+	for {
+		dest, err := cpu.readByte(step.address2)
+		if err != 0 {
+			return err
+		}
+		err = cpu.writeByte(step.address1, dest)
+		if err != 0 {
+			return err
+		}
+		step.address1++
+		step.address2++
+		step.reg--
+		if step.reg == 0xff {
+			return 0
+		}
+	}
+}
+
 // Handle memory to memory instructions.
 func (cpu *cpuState) opMem(step *stepInfo) uint16 {
 	if err := cpu.testAccess(step.address1, uint32(step.reg), true); err != 0 {
@@ -943,7 +970,8 @@ func (cpu *cpuState) opMem(step *stepInfo) uint16 {
 		} else {
 			dest = source
 		}
-		if err = cpu.writeByte(step.address1, dest); err != 0 {
+		err = cpu.writeByte(step.address1, dest)
+		if err != 0 {
 			return err
 		}
 		step.address1++

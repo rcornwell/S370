@@ -57,7 +57,6 @@ const (
 type Model1052ctx struct {
 	addr    uint16        // Current device address
 	col     int           // Current column
-	cmd     uint8         // Current command
 	busy    bool          // Reader busy
 	halt    bool          // Signal halt requested
 	sense   uint8         // Current sense byte
@@ -93,7 +92,9 @@ func (device *Model1052ctx) StartCmd(cmd uint8) uint8 {
 	if device.busy {
 		return dev.CStatusBusy
 	}
-	fmt.Printf("Terminal cmd %02x\n", cmd)
+	// if cmd != 0 {
+	// 	fmt.Printf("Terminal cmd %02x\n", cmd)
+	// }
 	tel := device.telctx
 	// Decode command
 	switch cmd {
@@ -137,8 +138,6 @@ func (device *Model1052ctx) StartCmd(cmd uint8) uint8 {
 		device.sense = 0
 		device.busy = true
 		device.read = true
-		device.input = false
-		device.cmd = cmd
 		ev.AddEvent(device, device.callback, 10, int(cmd))
 
 	case cmdWrite, cmdWriteACR:
@@ -170,14 +169,12 @@ func (device *Model1052ctx) StartCmd(cmd uint8) uint8 {
 
 		// Start device
 		device.busy = true
-		device.cmd = cmd
 		ev.AddEvent(device, device.callback, 10, int(cmd))
 
 	case dev.CmdSense:
 		// Queue up sense command
 		device.halt = false
 		device.busy = true
-		device.cmd = cmd
 		ev.AddEvent(device, device.callback, 10, int(cmd))
 
 	case cmdAlarm:
@@ -199,7 +196,6 @@ func (device *Model1052ctx) StartCmd(cmd uint8) uint8 {
 		r = dev.CStatusChnEnd
 		device.sense = 0
 		device.busy = true
-		device.cmd = cmd
 		ev.AddEvent(device, device.callback, 1000, int(cmd))
 
 	case dev.CmdCTL:
@@ -319,6 +315,7 @@ func (device *Model1052ctx) callback(cmd int) {
 			//			ev.AddEvent(d, d.callback, 1000, cmd)
 			break
 		}
+		//	fmt.Printf("Terminal send line\n")
 		device.request = false
 		// Check for empty line, or end of data
 		if device.inSize == 0 || device.inPtr == device.inSize {
@@ -375,9 +372,11 @@ func (telConn *model1052tel) ReceiveChar(data []byte) {
 	var err error
 	device := telConn.ctx
 	for _, by := range data {
+		//	fmt.Printf("Terminal got: %02x\n", by)
 		if !device.input {
 			switch by {
 			case '\r', '\n':
+				//			fmt.Printf("End of record\n")
 				device.input = true // Have input
 				device.cr = true    // Received a carrage return.
 				device.output = false
@@ -391,6 +390,7 @@ func (telConn *model1052tel) ReceiveChar(data []byte) {
 				fallthrough
 
 			case 0o033: // Esc, request key
+				//		fmt.Printf("Terminal request\n")
 				if !device.read {
 					device.request = true
 				}
@@ -472,6 +472,7 @@ func (telConn *model1052tel) ReceiveChar(data []byte) {
 			}
 		}
 	}
+	//	fmt.Printf("Done processing input: %t request: %t\n", device.busy, device.request)
 	if !device.busy && device.request {
 		ch.SetDevAttn(device.addr, dev.CStatusAttn)
 		device.request = false

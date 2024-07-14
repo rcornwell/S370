@@ -304,7 +304,9 @@ func (cpu *cpuState) fetch() (int, bool) {
 	inst[0] = step.opcode
 	inst[1] = step.reg
 
-	//	fmt.Printf("Op: %08x %02x %02x ", cpu.iPC, uint32(step.opcode), uint32(step.reg))
+	// if cpu.iPC != 0x0002026 {
+	// 	fmt.Printf("Op: %08x %02x %02x ", cpu.iPC, uint32(step.opcode), uint32(step.reg))
+	// }
 	// Check type of instruction
 	if (step.opcode & 0xc0) != 0 {
 		// RX, RS, SI, SS
@@ -324,12 +326,15 @@ func (cpu *cpuState) fetch() (int, bool) {
 			inst[2] = byte(word >> 8)
 			inst[3] = byte(word & 0xff)
 		}
-
-		//	fmt.Printf("%02x%02x ", inst[2], inst[3])
+		// if cpu.iPC != 0x0002026 {
+		// 	fmt.Printf("%02x%02x ", inst[2], inst[3])
+		// }
 		step.address1 &= 0xffff
 		cpu.PC += 2
-	} else {
-		//	fmt.Printf("     ")
+		// } else {
+		// 	if cpu.iPC != 0x0002026 {
+		// 		fmt.Printf("     ")
+		//	}
 	}
 
 	// If SS
@@ -350,16 +355,22 @@ func (cpu *cpuState) fetch() (int, bool) {
 			inst[4] = byte(word >> 8)
 			inst[5] = byte(word & 0xff)
 		}
-		//		fmt.Printf("%02x%02x ", inst[4], inst[5])
+		// if cpu.iPC != 0x0002026 {
+		// 	fmt.Printf("%02x%02x ", inst[4], inst[5])
+		// }
 		step.address2 &= 0xffff
 		cpu.PC += 2
-	} else {
-		//	fmt.Printf("     ")
+		// } else {
+		// 	if cpu.iPC != 0x0002026 {
+		// 		fmt.Printf("     ")
+		// 	}
 	}
 
+	// if cpu.iPC != 0x0002026 {
 	symbolic, _ := dis.Disasemble(inst)
 	symbolic += " "
-	//fmt.Printf("   %s\n", symbolic)
+	// 	fmt.Printf("   %s\n", symbolic)
+	//}
 	err = cpu.execute(&step)
 	if err != 0 {
 		cpu.suppress(oPPSW, err)
@@ -383,8 +394,6 @@ func (cpu *cpuState) execute(step *stepInfo) uint16 {
 		if indexReg != 0 {
 			step.address1 += cpu.regs[indexReg]
 		}
-		step.address1 &= AMASK
-		step.src1 = step.address1
 		switch step.opcode & 0xc0 {
 		case 0x40:
 			// Handle RX type operands
@@ -401,6 +410,8 @@ func (cpu *cpuState) execute(step *stepInfo) uint16 {
 			step.address2 &= AMASK
 		default:
 		}
+		step.address1 &= AMASK
+		step.src1 = step.address1
 	}
 
 	var err uint16
@@ -412,6 +423,21 @@ func (cpu *cpuState) execute(step *stepInfo) uint16 {
 		step.src1 = cpu.regs[step.R1]
 		step.src2 = cpu.regs[step.R2]
 		step.address1 = (step.src2) & AMASK
+
+	case 0x20:
+		// Floating point RR.
+		if (step.R1&0x9) != 0 || (step.R2&0x9) != 0 {
+			return ircSpec
+		}
+
+		// Load operands
+		step.fsrc1 = cpu.fpregs[step.R1]
+		step.fsrc2 = cpu.fpregs[step.R2]
+		// Check for short
+		if (step.opcode & 0x10) != 0 {
+			step.fsrc1 &= HMASKL
+			step.fsrc2 &= HMASKL
+		}
 
 	case 0x40:
 		// All RX integer ops
@@ -432,22 +458,8 @@ func (cpu *cpuState) execute(step *stepInfo) uint16 {
 			}
 		}
 
-	case 0x20:
-		// Floating point.
-		if (step.R1&0x9) != 0 || (step.R2&0x9) != 0 {
-			return ircSpec
-		}
-
-		// Load operands
-		step.fsrc1 = cpu.fpregs[step.R1]
-		step.fsrc2 = cpu.fpregs[step.R2]
-		// Check for short
-		if (step.opcode & 0x10) != 0 {
-			step.fsrc1 &= HMASKL
-			step.fsrc2 &= HMASKL
-		}
 	case 0x60:
-		// Floating point.
+		// Floating point RX.
 		if (step.R1 & 0x9) != 0 {
 			return ircSpec
 		}
@@ -472,6 +484,9 @@ func (cpu *cpuState) execute(step *stepInfo) uint16 {
 			step.fsrc1 &= HMASKL
 		}
 		step.fsrc2 = (uint64(src1) << 32) | uint64(src2)
+
+	case 0x80, 0xa0: // RS.
+	case 0xc0, 0xe0: // SS.
 	}
 
 	// Execute the instruction.
@@ -527,7 +542,7 @@ func (cpu *cpuState) createTable() {
 		cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, // Cx
 		cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk,
 
-		cpu.opUnk, cpu.opMem, cpu.opMem, cpu.opMem, cpu.opMem, cpu.opCLC, cpu.opMem, cpu.opMem, // Dx
+		cpu.opUnk, cpu.opMem, cpu.opMVC, cpu.opMem, cpu.opMem, cpu.opCLC, cpu.opMem, cpu.opMem, // Dx
 		cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opTR, cpu.opTR, cpu.opED, cpu.opED,
 
 		cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, // Ex
@@ -536,6 +551,131 @@ func (cpu *cpuState) createTable() {
 		cpu.opSRP, cpu.opMVO, cpu.opPACK, cpu.opUNPK, cpu.opUnk, cpu.opUnk, cpu.opUnk, cpu.opUnk, // Fx
 		cpu.opDecAdd, cpu.opDecAdd, cpu.opDecAdd, cpu.opDecAdd, cpu.opMP, cpu.opDP, cpu.opUnk, cpu.opUnk,
 	}
+}
+
+// Suppress execution of instruction.
+func (cpu *cpuState) suppress(code uint32, irc uint16) {
+	irqaddr := cpu.storePSW(code, irc)
+
+	memCycle++
+	src1, _ := mem.GetWord(irqaddr)
+	memCycle++
+	src2, _ := mem.GetWord(irqaddr + 0x4)
+	cpu.lpsw(src1, src2)
+}
+
+// Load new processor status double word.
+func (cpu *cpuState) lpsw(src1, src2 uint32) {
+	cpu.ecMode = (src1 & 0x00080000) != 0
+	cpu.extEnb = (src1 & 0x01000000) != 0
+
+	if cpu.ecMode {
+		cpu.irqEnb = (src1 & 0x02000000) != 0
+		cpu.pageEnb = (src1 & 0x04000000) != 0
+		cpu.cc = uint8((src1 >> 12) & 0x3)
+		cpu.progMask = uint8((src1 >> 8) & 0xf)
+		cpu.perEnb = (src1 & 0x40000000) != 0
+		cpu.sysMask = 0
+		if cpu.irqEnb {
+			cpu.sysMask = uint16(cpu.cregs[2] >> 16)
+		}
+	} else {
+		cpu.sysMask = uint16((src1 >> 16) & 0xfc00)
+		if (src1 & 0x2000000) != 0 {
+			cpu.sysMask |= uint16((cpu.cregs[2] >> 16) & 0x3ff)
+		}
+		cpu.irqEnb = cpu.sysMask != 0
+		cpu.perEnb = false
+		cpu.cc = uint8((src2 >> 28) & 0x3)
+		cpu.progMask = uint8((src2 >> 24) & 0xf)
+		cpu.pageEnb = false
+	}
+	ch.IrqPending = true
+	cpu.stKey = uint8((src1 >> 16) & 0xf0)
+	cpu.flags = uint8((src1 >> 16) & 0x7)
+	cpu.PC = src2 & AMASK
+	//	fmt.Printf("LPSW %08x: %08x %08x\n", cpu.iPC, src1, src2)
+	//	sim_debug(DEBUG_INST, &cpu_dev, "PSW=%08x %08x  ", src1, src2)
+	if cpu.ecMode && ((src1&0xb800c0ff) != 0 || (src2&0xff000000) != 0) {
+		cpu.suppress(oPPSW, ircSpec)
+	}
+}
+
+// Store the PSW at given address with irq value.
+func (cpu *cpuState) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
+	var word1, word2 uint32
+	irqaddr = vector + 0x40
+
+	if vector == oPPSW && cpu.perEnb && cpu.perCode != 0 {
+		irqcode |= ircPer
+	}
+
+	if cpu.ecMode {
+		// Generate first word
+		word1 = uint32(0x80000) |
+			(uint32(cpu.stKey) << 16) |
+			(uint32(cpu.flags) << 16) |
+			(uint32(cpu.cc) << 12) |
+			(uint32(cpu.progMask) << 8)
+		if cpu.pageEnb {
+			word1 |= uint32(datEnable) << 24
+		}
+		if cpu.perEnb {
+			word1 |= uint32(perEnable) << 24
+		}
+		if cpu.irqEnb {
+			word1 |= uint32(irqEnable) << 24
+		}
+
+		// Save code where 370 expects it to be
+		switch vector {
+		case oEPSW:
+			memCycle++
+			mem.SetMemoryMask(0x84, uint32(irqcode), LMASK)
+		case oSPSW:
+			memCycle++
+			mem.SetMemory(0x88, ((uint32(cpu.ilc) << 17) | uint32(irqcode)))
+		case oPPSW:
+			memCycle++
+			mem.SetMemory(0x8c, ((uint32(cpu.ilc) << 17) | uint32(irqcode)))
+		case oIOPSW:
+			memCycle++
+			mem.SetMemory(0xb8, uint32(irqcode))
+		}
+		if (irqcode & ircPer) != 0 {
+			memCycle++
+			mem.SetMemory(150, (uint32(cpu.perCode)<<16)|(cpu.perAddr>>16))
+			memCycle++
+			mem.SetMemoryMask(154, (cpu.perAddr&0xffff)<<16, LMASK)
+		}
+		// Generate second word.
+		word2 = cpu.PC
+	} else {
+		// Generate first word.
+		word1 = (uint32(cpu.sysMask&0xfe00) << 16) |
+			(uint32(cpu.stKey) << 16) |
+			(uint32(cpu.flags) << 16) |
+			uint32(irqcode)
+
+		// Generate second word. */
+		word2 = (uint32(cpu.ilc) << 30) |
+			(uint32(cpu.cc) << 28) |
+			(uint32(cpu.progMask) << 24) |
+			(cpu.PC & AMASK)
+	}
+
+	if cpu.extEnb {
+		word1 |= uint32(extEnable) << 24
+	}
+
+	//fmt.Printf("Store PSW: %08x %04x %08x %08x\n", vector, irqcode, word1, word2)
+	memCycle++
+	mem.SetMemory(vector, word1)
+	memCycle++
+	mem.SetMemory(vector+4, word2)
+	//	sim_debug(DEBUG_INST, &cpu_dev, "store %02x %d %x %03x PSW=%08x %08x\n", addr, ilc,
+	//		cc, ircode, word, word2)
+	return irqaddr
 }
 
 /*
@@ -667,82 +807,6 @@ func (cpu *cpuState) transAddr(virtAddr uint32) (uint32, uint16) {
 	return addr, 0
 }
 
-// Store the PSW at given address with irq value.
-func (cpu *cpuState) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
-	var word1, word2 uint32
-	irqaddr = vector + 0x40
-
-	// fmt.Printf("Store PSW: %08x %04x\n", vector, irqcode)
-	if vector == oPPSW && cpu.perEnb && cpu.perCode != 0 {
-		irqcode |= ircPer
-	}
-
-	if cpu.ecMode {
-		// Generate first word
-		word1 = uint32(0x80000) |
-			(uint32(cpu.stKey) << 16) |
-			(uint32(cpu.flags) << 16) |
-			(uint32(cpu.cc) << 12) |
-			(uint32(cpu.progMask) << 8)
-		if cpu.pageEnb {
-			word1 |= uint32(datEnable) << 24
-		}
-		if cpu.perEnb {
-			word1 |= uint32(perEnable) << 24
-		}
-		if cpu.irqEnb {
-			word1 |= uint32(irqEnable) << 24
-		}
-
-		// Save code where 370 expects it to be
-		switch vector {
-		case oEPSW:
-			memCycle++
-			mem.SetMemoryMask(0x84, uint32(irqcode), LMASK)
-		case oSPSW:
-			memCycle++
-			mem.SetMemory(0x88, ((uint32(cpu.ilc) << 17) | uint32(irqcode)))
-		case oPPSW:
-			memCycle++
-			mem.SetMemory(0x8c, ((uint32(cpu.ilc) << 17) | uint32(irqcode)))
-		case oIOPSW:
-			memCycle++
-			mem.SetMemory(0xb8, uint32(irqcode))
-		}
-		if (irqcode & ircPer) != 0 {
-			memCycle++
-			mem.SetMemory(150, (uint32(cpu.perCode)<<16)|(cpu.perAddr>>16))
-			memCycle++
-			mem.SetMemoryMask(154, (cpu.perAddr&0xffff)<<16, LMASK)
-		}
-		// Generate second word.
-		word2 = cpu.PC
-	} else {
-		// Generate first word.
-		word1 = (uint32(cpu.sysMask&0xfe00) << 16) |
-			(uint32(cpu.stKey) << 16) |
-			(uint32(cpu.flags) << 16) |
-			uint32(irqcode)
-
-		// Generate second word. */
-		word2 = (uint32(cpu.ilc) << 30) |
-			(uint32(cpu.cc) << 28) |
-			(uint32(cpu.progMask) << 24) |
-			(cpu.PC & AMASK)
-	}
-
-	if cpu.extEnb {
-		word1 |= uint32(extEnable) << 24
-	}
-	memCycle++
-	mem.SetMemory(vector, word1)
-	memCycle++
-	mem.SetMemory(vector+4, word2)
-	//	sim_debug(DEBUG_INST, &cpu_dev, "store %02x %d %x %03x PSW=%08x %08x\n", addr, ilc,
-	//		cc, ircode, word, word2)
-	return irqaddr
-}
-
 // Check for protection violation.
 func (cpu *cpuState) checkProtect(addr uint32, write bool) bool {
 	/* Check storage key */
@@ -806,7 +870,7 @@ func (cpu *cpuState) readFull(virtAddr uint32) (uint32, uint16) {
 
 	// Read actual data
 	memCycle++
-	word, err := mem.GetWord(virtAddr)
+	word, err := mem.GetWord(physAddr)
 	if err {
 		return 0, ircAddr
 	}
@@ -850,6 +914,8 @@ func (cpu *cpuState) readFull(virtAddr uint32) (uint32, uint16) {
  */
 func (cpu *cpuState) readFullAligned(virtAddr uint32) (uint32, uint16) {
 
+	// Ignore lower byte address and just read value.
+
 	// Validate address
 	physAddr, pageErr := cpu.transAddr(virtAddr)
 	if pageErr != 0 {
@@ -862,7 +928,7 @@ func (cpu *cpuState) readFullAligned(virtAddr uint32) (uint32, uint16) {
 
 	// Read actual data
 	memCycle++
-	word, err := mem.GetWord(virtAddr)
+	word, err := mem.GetWord(physAddr)
 	if err {
 		return 0, ircAddr
 	}
@@ -1154,54 +1220,6 @@ func (cpu *cpuState) writeByte(virtAddr, data uint32) uint16 {
 	}
 	//	sim_debug(DEBUG_DATA, &cpu_dev, "WR A=%08x %02x\n", addr, data)
 	return 0
-}
-
-// Suppress execution of instruction.
-func (cpu *cpuState) suppress(code uint32, irc uint16) {
-	irqaddr := cpu.storePSW(code, irc)
-
-	memCycle++
-	src1, _ := mem.GetWord(irqaddr)
-	memCycle++
-	src2, _ := mem.GetWord(irqaddr + 0x4)
-	cpu.lpsw(src1, src2)
-}
-
-// Load new processor status double word.
-func (cpu *cpuState) lpsw(src1, src2 uint32) {
-	cpu.ecMode = (src1 & 0x00080000) != 0
-	cpu.extEnb = (src1 & 0x01000000) != 0
-
-	if cpu.ecMode {
-		cpu.irqEnb = (src1 & 0x02000000) != 0
-		cpu.pageEnb = (src1 & 0x04000000) != 0
-		cpu.cc = uint8((src1 >> 12) & 0x3)
-		cpu.progMask = uint8((src1 >> 8) & 0xf)
-		cpu.perEnb = (src1 & 0x40000000) != 0
-		cpu.sysMask = 0
-		if cpu.irqEnb {
-			cpu.sysMask = uint16(cpu.cregs[2] >> 16)
-		}
-	} else {
-		cpu.sysMask = uint16((src1 >> 16) & 0xfc00)
-		if (src1 & 0x2000000) != 0 {
-			cpu.sysMask |= uint16((cpu.cregs[2] >> 16) & 0x3ff)
-		}
-		cpu.irqEnb = cpu.sysMask != 0
-		cpu.perEnb = false
-		cpu.cc = uint8((src2 >> 28) & 0x3)
-		cpu.progMask = uint8((src2 >> 24) & 0xf)
-		cpu.pageEnb = false
-	}
-	ch.IrqPending = true
-	cpu.stKey = uint8((src1 >> 16) & 0xf0)
-	cpu.flags = uint8((src1 >> 16) & 0x7)
-	cpu.PC = src2 & AMASK
-	// fmt.Printf("LPSW %08x: %08x %08x\n", cpu.iPC, src1, src2)
-	//	sim_debug(DEBUG_INST, &cpu_dev, "PSW=%08x %08x  ", src1, src2)
-	if cpu.ecMode && ((src1&0xb800c0ff) != 0 || (src2&0xff000000) != 0) {
-		cpu.suppress(oPPSW, ircSpec)
-	}
 }
 
 // Load register pair into 64 bit integer.
