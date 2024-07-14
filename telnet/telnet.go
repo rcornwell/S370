@@ -108,27 +108,27 @@ var initString = []byte{
 }
 
 // Convert option number to string.
-func optName(opt byte) string {
-	switch opt {
-	case tnOptionBinary:
-		return "bin"
-	case tnOptionEcho:
-		return "echo"
-	case tnOptionSGA:
-		return "sga"
-	case tnOptionTerm:
-		return "term"
-	case tnOptionEOR:
-		return "eor"
-	case tnOptionNAWS:
-		return "naws"
-	case tnOptionLINE:
-		return "line"
-	case tnOptionENV:
-		return "env"
-	}
-	return "unknown"
-}
+// func optName(opt byte) string {
+// 	switch opt {
+// 	case tnOptionBinary:
+// 		return "bin"
+// 	case tnOptionEcho:
+// 		return "echo"
+// 	case tnOptionSGA:
+// 		return "sga"
+// 	case tnOptionTerm:
+// 		return "term"
+// 	case tnOptionEOR:
+// 		return "eor"
+// 	case tnOptionNAWS:
+// 		return "naws"
+// 	case tnOptionLINE:
+// 		return "line"
+// 	case tnOptionENV:
+// 		return "env"
+// 	}
+// 	return "unknown"
+// }
 
 type tnState struct {
 	optionState [256]uint8 // Current state of telnet session
@@ -136,6 +136,7 @@ type tnState struct {
 	state       int        // Current line State
 	model       byte       // Terminal model
 	extatr      byte       // Extra type
+	port        string     // Port number device came from.
 	group       string     // Group user wants
 	//	luname      []byte             // Current user name
 	dev    Telnet             // Pointer to where to send data.
@@ -216,7 +217,7 @@ func (state *tnState) handleWILL(input byte) {
 			}
 		}
 	case tnOptionEOR:
-		//fmt.Println("Will EOR")
+		// fmt.Println("Will EOR")
 		if (state.optionState[input] & tnFlagWill) == 0 {
 			state.optionState[input] |= tnFlagWill
 		}
@@ -248,22 +249,33 @@ func (state *tnState) handleWILL(input byte) {
 func (state *tnState) handleSE(term []byte) {
 	if state.sbtype == tnOptionTerm {
 		state.determineTerm(term)
-		fmt.Printf("Terminal Model: %c ext: %c group: %s\n", state.model, state.extatr, state.group)
+		// fmt.Printf("Terminal Model: %d ext: %c group: %s\n", state.model, state.extatr, state.group)
 		if !state.findTerminal() {
 			fmt.Fprintf(state.conn, "No matching terminal type found\n\r")
 			state.conn.Close()
 			return
 		}
+		fmt.Printf("Connected to device: %03x\n", state.devNum)
 		state.SendConnect()
 	}
 }
 
 // Handle client connection.
-func handleClient(conn net.Conn, master chan master.Packet) {
+func handleClient(conn net.Conn, master chan master.Packet, port string) {
 	defer conn.Close()
 	var out []byte
 
 	state := tnState{conn: conn, state: tnStateData, devNum: D.NoDev}
+	remoteHost, remotePort, err := net.SplitHostPort(conn.RemoteAddr().String())
+	if err != nil {
+		panic(err)
+	}
+
+	if remoteHost == "::" {
+		remoteHost = "localhost"
+	}
+	fmt.Printf("Connection from %s:%s\n", remoteHost, remotePort)
+	state.port = port
 	buffer := make([]byte, 1024)
 	term := []byte{}
 	state.master = master
@@ -274,7 +286,7 @@ func handleClient(conn net.Conn, master chan master.Packet) {
 		num, err := state.conn.Read(buffer)
 		if err != nil {
 			// Tell device we got an error
-			fmt.Print("Error: ", err)
+			fmt.Println("Error: ", err)
 			return
 		}
 		out = []byte{}

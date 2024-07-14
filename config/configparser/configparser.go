@@ -481,9 +481,9 @@ func (line *optionLine) getName() (string, error) {
 		return "", nil
 	}
 
-	// First character must be alphabetic.
+	// First character must be alphanumeric.
 	by := line.line[line.pos]
-	if !unicode.IsLetter(rune(by)) {
+	if !unicode.IsLetter(rune(by)) && !unicode.IsNumber(rune(by)) {
 		if !line.isEOL() {
 			return "", fmt.Errorf("invalid option encountered line: %d [%d]", lineNumber, line.pos)
 		}

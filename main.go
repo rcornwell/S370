@@ -44,7 +44,7 @@ import (
 
 func main() {
 	optConfig := getopt.StringLong("config", 'c', "S370.cfg", "Configuration file")
-	optDeck := getopt.StringLong("deck", 'd', "", "Deck to load")
+	//	optDeck := getopt.StringLong("deck", 'd', "", "Deck to load")
 	optHelp := getopt.BoolLong("help", 'h', "Help")
 	getopt.Parse()
 
@@ -71,12 +71,14 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Create listener session
-	telServer, err := telnet.NewServer(":3270")
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	// Register default port
+	//telnet.RegisterPort("3270", "")
+	// // Create listener session
+	// telServer, err := telnet.NewServer(":3270")
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(1)
+	// }
 
 	masterChannel := make(chan master.Packet)
 
@@ -86,8 +88,12 @@ func main() {
 	// Configure I/O devices.
 	syschannel.ResetChannels()
 
-	// Start telnet server.
-	telServer.Start(masterChannel)
+	// Start telnet servers.
+	err = telnet.Start(masterChannel)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 	// Start main emulator.
 	go cpu.Start()
@@ -113,8 +119,6 @@ loop:
 			fmt.Println("Got quit signal")
 			break loop
 		case <-msg:
-			//			_ = syschannel.Detach(0x00c)
-			//			_ = syschannel.Attach(0x00c, *optDeck)
 			fmt.Printf("IPL device: %03x\n", core.IPLDevice())
 			masterChannel <- master.Packet{DevNum: core.IPLDevice(), Msg: master.IPLdevice}
 		}
@@ -123,6 +127,6 @@ loop:
 	fmt.Println("Shutting down CPU")
 	cpu.Stop()
 	fmt.Println("Shutting down server...")
-	telServer.Stop()
+	telnet.Stop()
 	fmt.Println("Servers stopped.")
 }

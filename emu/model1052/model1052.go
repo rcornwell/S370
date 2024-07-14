@@ -495,7 +495,7 @@ func create(devNum uint16, _ string, options []config.Option) error {
 	port := ""
 	group := ""
 	for _, option := range options {
-		if option.EqualOpt == "" {
+		if option.EqualOpt != "" {
 			return errors.New("equal option not supported on: " + option.Name)
 		}
 		_, err := strconv.ParseUint(option.Name, 10, 32)

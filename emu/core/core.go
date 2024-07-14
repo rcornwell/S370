@@ -95,6 +95,16 @@ func (core *core) Stop() {
 	}
 }
 
+// Post an external interrupt to CPU.
+func PostExtIrq() {
+	cpu.PostExtIrq()
+}
+
+// Get IPL line option.
+func IPLDevice() uint16 {
+	return cpu.IPLDev
+}
+
 // Process a packet sent to system simulation.
 func (core *core) processPacket(packet master.Packet) {
 	switch packet.Msg {
@@ -118,14 +128,4 @@ func (core *core) processPacket(packet master.Packet) {
 	case master.Stop:
 		core.running = false
 	}
-}
-
-// Post an external interrupt to CPU.
-func PostExtIrq() {
-	cpu.PostExtIrq()
-}
-
-// Get IPL line option.
-func IPLDevice() uint16 {
-	return cpu.IPLDev
 }

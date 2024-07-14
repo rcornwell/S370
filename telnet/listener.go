@@ -40,11 +40,75 @@ type Server struct {
 	shutdown   chan struct{}
 	connection chan net.Conn
 	master     chan master.Packet
+	port       string
+}
+
+var servers []*Server
+
+// Start a new server.
+func Start(master chan master.Packet) error {
+	for port := range ports {
+		s, err := newServer(port)
+		if err != nil {
+			return err
+		}
+		servers = append(servers, s)
+		host, lport, err := net.SplitHostPort(s.listener.Addr().String())
+		if err != nil {
+			panic(err)
+		}
+		if lport[0] == ':' {
+			lport = lport[1:]
+		}
+		if host == "::" {
+			host = "localhost"
+		}
+		fmt.Printf("Server started on %s:%s\n", host, lport)
+
+		s.wg.Add(2)
+		s.master = master
+		go s.acceptConnections()
+		go s.handleConnections()
+	}
+	return nil
+}
+
+// Stop a running servers.
+func Stop() {
+	for _, s := range servers {
+		if s == nil {
+			fmt.Println("No server attached to port")
+			continue
+		}
+		_, portNum, err := net.SplitHostPort(s.listener.Addr().String())
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println("Shutdown port: ", portNum)
+
+		close(s.shutdown)
+		s.listener.Close()
+
+		done := make(chan struct{})
+		go func() {
+			s.wg.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			break
+		case <-time.After(time.Second):
+			fmt.Println("Timed out waiting for connections to finish on port: ", portNum)
+			break
+		}
+	}
 }
 
 // Open new listener.
 func newServer(address string) (*Server, error) {
-	listener, err := net.Listen("tcp", address)
+	listener, err := net.Listen("tcp", ":"+address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen on address %s: %w", address, err)
 	}
@@ -53,6 +117,7 @@ func newServer(address string) (*Server, error) {
 		listener:   listener,
 		shutdown:   make(chan struct{}),
 		connection: make(chan net.Conn),
+		port:       address,
 	}, nil
 }
 
@@ -83,65 +148,7 @@ func (s *Server) handleConnections() {
 		case <-s.shutdown:
 			return
 		case conn := <-s.connection:
-			host, port, err := net.SplitHostPort(conn.RemoteAddr().String())
-			if err != nil {
-				panic(err)
-			}
-			if host == "::" {
-				host = "localhost"
-			}
-			fmt.Printf("Connection from %s:%s\n", host, port)
-			go handleClient(conn, s.master)
-		}
-	}
-}
-
-// Start a new server.
-func Start(master chan master.Packet) error {
-	for portNum, p := range ports {
-		s, err := newServer(":" + portNum)
-		if err != nil {
-			return err
-		}
-		p.server = s
-		host, port, err := net.SplitHostPort(s.listener.Addr().String())
-		if err != nil {
-			panic(err)
-		}
-		if host == "::" {
-			host = "localhost"
-		}
-		fmt.Printf("Server started on %s:%s\n", host, port)
-
-		s.wg.Add(2)
-		s.master = master
-		go s.acceptConnections()
-		go s.handleConnections()
-	}
-	return nil
-}
-
-// Stop a running servers.
-func Stop() {
-	for portNum, p := range ports {
-
-		fmt.Println("Shutdown port: ", portNum)
-		s := p.server
-		close(s.shutdown)
-		s.listener.Close()
-
-		done := make(chan struct{})
-		go func() {
-			s.wg.Wait()
-			close(done)
-		}()
-
-		select {
-		case <-done:
-			return
-		case <-time.After(time.Second):
-			fmt.Println("Timed out waiting for connections to finish.")
-			return
+			go handleClient(conn, s.master, s.port)
 		}
 	}
 }
