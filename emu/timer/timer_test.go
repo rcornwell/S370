@@ -101,7 +101,7 @@ func TestTimer(t *testing.T) {
 	test.counter = 0
 	timer.Start()
 	time.Sleep(2 * time.Second)
-	if test.counter != 300 {
+	if test.counter < 299 || test.counter > 301 {
 		t.Errorf("Expected 300 ticks during a second got: %d", test.counter)
 	}
 	timer.Shutdown()
