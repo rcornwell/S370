@@ -73,8 +73,8 @@ func TestTimer(t *testing.T) {
 
 	// Start timer and wait for 1/2 second and make sure count is correct.
 	timer.Start()
-	time.Sleep(500 * time.Millisecond)
-	if test.counter < 74 || test.counter > 75 {
+	time.Sleep(time.Second)
+	if test.counter < 148 || test.counter > 152 {
 		t.Errorf("Expected 75 ticks during a second got: %d", test.counter)
 	}
 
@@ -101,8 +101,8 @@ func TestTimer(t *testing.T) {
 	test.counter = 0
 	timer.Start()
 	time.Sleep(2 * time.Second)
-	if test.counter != 299 {
-		t.Errorf("Expected 75 ticks during a second got: %d", test.counter)
+	if test.counter != 300 {
+		t.Errorf("Expected 300 ticks during a second got: %d", test.counter)
 	}
 	timer.Shutdown()
 }
