@@ -213,12 +213,19 @@ func LoadConfigFile(name string) error {
 
 	line := optionLine{}
 	for scanner.Scan() {
-		line.line = scanner.Text()
+		line.line += scanner.Text()
 		line.pos = 0
 		lineNumber++
 
+		// If last character is \, append next line.
+		if line.line != "" && line.line[len(line.line)-1:] == "\\" {
+			line.line = line.line[:len(line.line)-1]
+			continue
+		}
+
 		// We can skip blank lines and lines that begin with a #.
 		if line.line == "" || line.line[0] == '#' {
+			line.line = ""
 			continue
 		}
 		fmt.Printf("line %d: '%s' \n", lineNumber, line.line)
@@ -226,6 +233,7 @@ func LoadConfigFile(name string) error {
 		if err != nil {
 			return err
 		}
+		line.line = ""
 	}
 	return nil
 }
@@ -477,7 +485,7 @@ func (line *optionLine) getName() (string, error) {
 	by := line.line[line.pos]
 	if !unicode.IsLetter(rune(by)) {
 		if !line.isEOL() {
-			return "", fmt.Errorf("Invalid option encountered line: %d [%d]", lineNumber, line.pos)
+			return "", fmt.Errorf("invalid option encountered line: %d [%d]", lineNumber, line.pos)
 		}
 		return "", nil
 	}
@@ -521,7 +529,7 @@ func (line *optionLine) parseOption() (*Option, error) {
 		if ok {
 			option.EqualOpt = v
 		} else {
-			return nil, fmt.Errorf("Invalid quoted string line: %d [%d]", lineNumber, line.pos)
+			return nil, fmt.Errorf("invalid quoted string line: %d [%d]", lineNumber, line.pos)
 		}
 	}
 
