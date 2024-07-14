@@ -173,6 +173,11 @@ func PostExtIrq() {
 	fmt.Println("CPU: Post ext")
 }
 
+// Shutdown the CPU, request channel to shutdown all devices.
+func Shutdown() {
+	ch.Shutdown()
+}
+
 // Return CPU PC.
 func PC() uint32 {
 	return sysCPU.PC

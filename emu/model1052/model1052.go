@@ -36,7 +36,6 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"strings"
 
 	config "github.com/rcornwell/S370/config/configparser"
 	core "github.com/rcornwell/S370/emu/core"
@@ -249,6 +248,10 @@ func (device *Model1052ctx) Set(_ []dev.CmdOption) error {
 // Show command.
 func (device *Model1052ctx) Show(_ []dev.CmdOption) error {
 	return nil
+}
+
+// Shutdown device.
+func (device *Model1052ctx) Shutdown() {
 }
 
 // Handle channel operations.
@@ -485,38 +488,34 @@ func create(devNum uint16, _ string, options []config.Option) error {
 	dev := Model1052ctx{addr: devNum}
 	err := ch.AddDevice(&dev, devNum)
 	if err != nil {
-		return fmt.Errorf("Unable to create 1052 at %03x", devNum)
+		return fmt.Errorf("unable to create 1052 at %03x", devNum)
 	}
 	console := model1052tel{ctx: &dev}
 	dev.telctx = &console
-	//	portNum := 3270
+	port := ""
 	group := ""
 	for _, option := range options {
-		switch strings.ToUpper(option.Name) {
-		// case "PORT":
-		// 	if option.EqualOpt == "" {
-		// 		fmt.Println("Port option missing port number")
-		// 		return false
-		// 	}
-		// port, err := strconv.ParseUint(option.EqualOpt, 10, 32)
-		// if err != nil {
-		// 	fmt.Println("Port requires number: ", option.EqualOpt)
-		// }
-		// portNum = int(port)
-		case "GROUP":
-			if option.EqualOpt == "" {
-				return errors.New("Group option missing group name")
-			}
-			group = option.EqualOpt
-		default:
-			return errors.New("10552 invalid option: " + option.Name)
+		if option.EqualOpt == "" {
+			return errors.New("equal option not supported on: " + option.Name)
 		}
+		_, err := strconv.ParseUint(option.Name, 10, 32)
+		if err != nil { // If not number, assume group.
+			if group != "" {
+				return errors.New("only one group allowed: " + group)
+			}
+			group = option.Name
+		} else { // Port number
+			if port != "" {
+				return errors.New("only one group allowed: " + group)
+			}
+			port = option.Name
+		}
+
 		if option.Value != nil {
-			return errors.New("Extra options not supported on: " + option.Name)
+			return errors.New("extra options not supported on: " + option.Name)
 		}
 	}
 
-	telnet.RegisterTerminal(&console, devNum, 0, group)
 	ch.SetTelnet(&console, devNum)
-	return nil
+	return telnet.RegisterTerminal(&console, devNum, 0, port, group)
 }

@@ -693,8 +693,7 @@ func SetDevAttn(devNum uint16, flags uint8) {
 
 // Reset all channels.
 func ResetChannels() {
-	for i := range len(chanUnit) {
-		cUnit := chanUnit[i]
+	for _, cUnit := range chanUnit {
 
 		if cUnit == nil {
 			continue
@@ -720,6 +719,23 @@ func ResetChannels() {
 			}
 			// Clear any pending status.
 			cUnit.devStatus[j] = 0
+		}
+	}
+}
+
+// Shutdown all devices.
+func Shutdown() {
+	for i, cUnit := range chanUnit {
+		if cUnit == nil {
+			continue
+		}
+
+		fmt.Printf("Shutdown channel: %d\n", i)
+		// Call Shutdown function for each device.
+		for j := range 256 {
+			if cUnit.devTab[j] != nil {
+				cUnit.devTab[j].Shutdown()
+			}
 		}
 	}
 }

@@ -173,7 +173,7 @@ func (device *Model2540Rctx) Attach(_ []dev.CmdOption) error {
 
 // Detach device.
 func (device *Model2540Rctx) Detach() error {
-	return nil
+	return device.context.Detach()
 }
 
 // Set command.
@@ -184,6 +184,11 @@ func (device *Model2540Rctx) Set(_ []dev.CmdOption) error {
 // Show command.
 func (device *Model2540Rctx) Show(_ []dev.CmdOption) error {
 	return nil
+}
+
+// Shutdown device.
+func (device *Model2540Rctx) Shutdown() {
+	_ = device.context.Detach()
 }
 
 // Handle channel operations.

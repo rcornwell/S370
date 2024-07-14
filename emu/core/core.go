@@ -1,4 +1,5 @@
-/* Core S370 emulator loop.
+/*
+   Core S370 emulator loop.
 
    Copyright (c) 2024, Richard Cornwell
 
@@ -35,25 +36,27 @@ import (
 )
 
 type core struct {
-	wg       sync.WaitGroup
-	shutdown bool // Signal to shutdown simulator.
-	running  bool // Indicate when simulator should run or not.
-	master   chan master.Packet
+	wg      sync.WaitGroup
+	done    chan struct{} // Signal to shutdown simulator.
+	running bool          // Indicate when simulator should run or not.
+	master  chan master.Packet
 }
 
 // Create instance of CPU.
 func NewCPU(master chan master.Packet) *core {
 	return &core{
 		master: master,
+		done:   make(chan struct{}),
 	}
 }
 
 // Start CPU running.
 func (core *core) Start() {
 	core.wg.Add(1)
+	defer core.wg.Done()
 	cpu.InitializeCPU()
 	cpu.SetTod()
-	for !core.shutdown {
+	for {
 		if core.running {
 			var cycle int
 			cycle, core.running = cpu.CycleCPU()
@@ -62,6 +65,11 @@ func (core *core) Start() {
 			event.Advance(1)
 		}
 		select {
+		case <-core.done:
+			// Shutdone all devices.
+			cpu.Shutdown()
+			fmt.Println("Shutdown CPU core")
+			return
 		case packet := <-core.master:
 			core.processPacket(packet)
 		default:
@@ -71,7 +79,7 @@ func (core *core) Start() {
 
 // Stop a running server.
 func (core *core) Stop() {
-	core.shutdown = true
+	close(core.done)
 	done := make(chan struct{})
 	go func() {
 		core.wg.Wait()
@@ -82,7 +90,7 @@ func (core *core) Stop() {
 	case <-done:
 		return
 	case <-time.After(time.Second):
-		fmt.Println("Timed out waiting for connections to finish.")
+		fmt.Println("Timed out waiting for CPU to finish.")
 		return
 	}
 }
@@ -109,8 +117,6 @@ func (core *core) processPacket(packet master.Packet) {
 		core.running = true
 	case master.Stop:
 		core.running = false
-	case master.Shutdown:
-		core.shutdown = true
 	}
 }
 

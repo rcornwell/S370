@@ -30,14 +30,15 @@ type CmdOption struct {
 
 // Interface for devices to handle commands.
 type Device interface {
-	StartIO() uint8
-	StartCmd(cmd uint8) uint8
-	HaltIO() uint8
-	InitDev() uint8
-	Attach([]CmdOption) error
-	Detach() error
-	Set([]CmdOption) error
-	Show([]CmdOption) error
+	StartIO() uint8           // Start of command chain.
+	StartCmd(cmd uint8) uint8 // Start command.
+	HaltIO() uint8            // Halt I/O instruction issued.
+	InitDev() uint8           // Initialize device.
+	Attach([]CmdOption) error // Attach device to file.
+	Detach() error            // Detach a device.
+	Set([]CmdOption) error    // Do set command.
+	Show([]CmdOption) error   // Do show command.
+	Shutdown()                // Shutdown device, close any open files.
 }
 
 // Channel types.

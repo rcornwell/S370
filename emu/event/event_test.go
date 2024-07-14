@@ -106,6 +106,10 @@ func (d device) Show(_ []dev.CmdOption) error {
 	return nil
 }
 
+// Shutdown device.
+func (d device) Shutdown() {
+}
+
 // Initialize for each test.
 func initTest() {
 	stepCount = 0

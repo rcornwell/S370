@@ -78,7 +78,7 @@ func (timer *Timer) Shutdown() {
 	case <-done:
 		return
 	case <-time.After(time.Second):
-		fmt.Println("Timed out waiting for connections to finish.")
+		fmt.Println("Timed out waiting for timer to finish.")
 		return
 	}
 }

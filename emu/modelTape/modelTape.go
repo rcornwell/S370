@@ -284,7 +284,7 @@ func (device *Model2400ctx) Attach(_ []dev.CmdOption) error {
 
 // Detach device.
 func (device *Model2400ctx) Detach() error {
-	return nil
+	return device.context.Detach()
 }
 
 // Set command.
@@ -295,6 +295,11 @@ func (device *Model2400ctx) Set(_ []dev.CmdOption) error {
 // Show command.
 func (device *Model2400ctx) Show(_ []dev.CmdOption) error {
 	return nil
+}
+
+// Shutdown device.
+func (device *Model2400ctx) Shutdown() {
+	_ = device.context.Detach()
 }
 
 // Callback for reqind commands.
