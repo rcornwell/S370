@@ -240,7 +240,7 @@ func CycleCPU() (int, bool) {
 
 	// Check if we have wait we can't exit
 	if ch.Loading == Dv.NoDev && !sysCPU.irqEnb && (sysCPU.flags&wait != 0) {
-		fmt.Printf("Uninterupable wait state %08x\n", sysCPU.PC)
+		fmt.Printf("Uninterupable wait state %08x %s\n", sysCPU.PC, sysCPU.getPSW())
 		return 1, false
 	}
 
@@ -254,6 +254,34 @@ func CycleCPU() (int, bool) {
 	}
 
 	return sysCPU.fetch()
+}
+
+// Return PSW as string.
+func (cpu *cpuState) getPSW() string {
+	var word1, word2 uint32
+	word1 = (uint32(cpu.stKey) << 16) | (uint32(cpu.flags) << 16)
+	word2 = cpu.PC
+	if cpu.extEnb {
+		word1 |= 1 << 24
+	}
+	if cpu.ecMode {
+		word1 |= 0x80000
+		word1 |= (uint32(cpu.cc) << 12) | (uint32(cpu.progMask) << 8)
+		if cpu.pageEnb {
+			word1 |= 1 << 26
+		}
+		if cpu.perEnb {
+			word1 |= 1 << 30
+		}
+		if cpu.intIrq {
+			word1 |= 1 << 25
+		}
+	} else {
+		word1 |= (uint32(cpu.sysMask&0xfe00) << 16)
+		word2 |= (uint32(cpu.ilc) << 30) | (uint32(cpu.cc) << 28) | (uint32(cpu.progMask) << 24)
+	}
+
+	return fmt.Sprintf("PSW %08x %08x", word1, word2)
 }
 
 func (cpu *cpuState) fetch() (int, bool) {
