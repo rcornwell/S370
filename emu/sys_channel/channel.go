@@ -139,14 +139,14 @@ func GetType(devNum uint16) int {
 // Process SIO instruction.
 func StartIO(devNum uint16) uint8 {
 	chNum := (devNum >> 8) & 0xf
-	dNum := devNum & 0xff
-	subChan := findSubChannel(devNum)
 	cUnit := chanUnit[chNum]
 	// Check if channel disabled
 	if cUnit == nil {
 		return 3
 	}
 
+	subChan := findSubChannel(devNum)
+	dNum := devNum & 0xff
 	// If no device or channel, return CC = 3
 	if cUnit.devTab[dNum] == nil || subChan == nil {
 		return 3
@@ -246,14 +246,14 @@ func StartIO(devNum uint16) uint8 {
 // Handle TIO instruction.
 func TestIO(devNum uint16) uint8 {
 	ch := (devNum >> 8) & 0xf
-	dNum := devNum & 0xff
-	subChan := findSubChannel(devNum)
-
 	cUnit := chanUnit[ch]
 	// Check if channel disabled
 	if cUnit == nil {
 		return 3
 	}
+
+	subChan := findSubChannel(devNum)
+	dNum := devNum & 0xff
 
 	// If no device or channel, return CC = 3
 	if cUnit.devTab[dNum] == nil || subChan == nil {
@@ -275,6 +275,7 @@ func TestIO(devNum uint16) uint8 {
 	if subChan.ccwCmd == 0 && subChan.chanStatus != 0 {
 		storeCSW(subChan)
 		subChan.devAddr = dev.NoDev
+		cUnit.devStatus[dNum] = 0
 		return 1
 	}
 
@@ -324,15 +325,14 @@ func TestIO(devNum uint16) uint8 {
 // Handle HIO instruction.
 func HaltIO(devNum uint16) uint8 {
 	ch := (devNum >> 8) & 0xf
-	dNum := devNum & 0xff
-	subChan := findSubChannel(devNum)
-
 	cUnit := chanUnit[ch]
 	// Check if channel disabled
 	if cUnit == nil {
 		return 3
 	}
 
+	subChan := findSubChannel(devNum)
+	dNum := devNum & 0xff
 	// If no device or channel, return CC = 3
 	if cUnit.devTab[dNum] == nil || subChan == nil {
 		return 3
@@ -341,20 +341,37 @@ func HaltIO(devNum uint16) uint8 {
 	// Generic halt I/O, tell device to stop end
 	// If any error pending save csw and return cc = 1
 	if (subChan.chanStatus & errorStatus) != 0 {
+		mem.SetMemoryMask(CSW+4, (uint32(subChan.chanStatus) << 16), statusMask)
 		return 1
 	}
 
-	// If channel active, tell it to terminate
-	if subChan.ccwCmd != 0 {
-		subChan.chanByte = bufEmpty
-		subChan.ccwFlags &= ^(chainCmd | chainData)
+	// Device not working at all.
+	if subChan.devAddr == dev.NoDev {
+		mem.SetMemoryMask(CSW+4, (uint32(subChan.chanStatus) << 16), statusMask)
+		return 1
+	}
+	// Channel working on another device.
+	if subChan.ccwCmd != 0 && subChan.devAddr != devNum {
+		return 2
+	}
+
+	// Interrupt pending on subchannel.
+	if (subChan.chanStatus & errorStatus) != 0 {
+		return 0
+	}
+	if subChan.ccwCmd == 0 && subChan.devAddr == devNum && subChan.chanStatus != 0 {
+		return 0
 	}
 
 	// Executing a command, issue halt if available
 	// Let device try to halt
 	cc := cUnit.devTab[dNum].HaltIO()
-	if cc == 1 {
+	switch cc {
+	case 1:
 		mem.SetMemoryMask(CSW+4, (uint32(subChan.chanStatus) << 16), statusMask)
+	case 2:
+		subChan.chanByte = bufEmpty
+		subChan.ccwFlags &= ^(chainCmd | chainData)
 	}
 	return cc
 }
@@ -390,14 +407,23 @@ func TestChan(devNum uint16) uint8 {
 	}
 
 	// Multiplexer channel always returns available
-	if cUnit.chanType == dev.TypeMux {
+	if cUnit.chanType == dev.TypeMux || (cUnit.chanType == dev.TypeBMux && bmuxEnable) {
+		// If interrupt pending on channel return 1.
+		// if cUnit.irqPending {
+		// 	// Check if might be false
+		// 	for d := range uint16(256) {
+		// 		if cUnit.devStatus[d] != 0 {
+		// 			return 1
+		// 		}
+		// 	}
+		// }
 		return 0
 	}
 
 	// If Block Multiplexer channel operating in select mode
-	if cUnit.chanType == dev.TypeBMux && bmuxEnable {
-		return 0
-	}
+	// if cUnit.chanType == dev.TypeBMux && bmuxEnable {
+	// 	return 0
+	// }
 
 	subChan := cUnit.subChans[0]
 	// If channel is executing a command, return cc = 2
@@ -697,7 +723,6 @@ func SetDevAttn(devNum uint16, flags uint8) {
 // Reset all channels.
 func ResetChannels() {
 	for _, cUnit := range chanUnit {
-
 		if cUnit == nil {
 			continue
 		}
@@ -1122,7 +1147,7 @@ func findSubChannel(devNum uint16) *chanCtl {
 func storeCSW(cUnit *chanCtl) {
 	mem.SetMemory(CSW, (uint32(cUnit.ccwKey)<<24)|cUnit.caw)
 	mem.SetMemory(CSW+4, uint32(cUnit.ccwCount)|(uint32(cUnit.chanStatus)<<16))
-	//	fmt.Printf("CSW %08x %08x\n", mem.GetMemory(CSW), mem.GetMemory(CSW+4))
+	fmt.Printf("CSW %08x %08x\n", mem.GetMemory(CSW), mem.GetMemory(CSW+4))
 	if (cUnit.chanStatus & statusPCI) != 0 {
 		cUnit.chanStatus &= ^statusPCI
 	} else {
@@ -1210,7 +1235,7 @@ loop:
 		subChan.caw &= addrMask
 		subChan.ccwCount = uint16(word & countMask)
 
-		//		fmt.Printf("CCW %03x %08x %02x%06x, %08x\n", subChan.devAddr, subChan.caw-8, subChan.ccwCmd, subChan.ccwAddr, word)
+		fmt.Printf("CCW %03x %08x %02x%06x, %08x\n", subChan.devAddr, subChan.caw-8, subChan.ccwCmd, subChan.ccwAddr, word)
 		// Copy SLI indicator in CD command
 		if (subChan.ccwFlags & (chainData | flagSLI)) == (chainData | flagSLI) {
 			word |= uint32(flagSLI) << 16
