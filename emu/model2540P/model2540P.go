@@ -94,7 +94,7 @@ func (device *Model2540Pctx) StartCmd(cmd uint8) uint8 {
 			device.sense |= dev.SenseCMDREJ
 		} else {
 			device.busy = true
-			event.AddEvent(device, device.callback, 10, int(cmd))
+			event.AddEvent(device, device.callback, 100, int(cmd))
 			status = 0
 		}
 	case dev.CmdCTL:
@@ -120,7 +120,10 @@ func (device *Model2540Pctx) StartCmd(cmd uint8) uint8 {
 
 // Handle HIO instruction.
 func (device *Model2540Pctx) HaltIO() uint8 {
-	device.halt = true
+	if device.busy {
+		device.halt = true
+		return 2
+	}
 	return 1
 }
 
@@ -171,6 +174,7 @@ func (device *Model2540Pctx) callback(cmd int) {
 
 	// If ready, punch out current card.
 	if device.ready {
+		fmt.Println("Punch card")
 		switch device.context.PunchCard(device.image) {
 		case card.CardOK:
 			ch.SetDevAttn(device.addr, dev.CStatusDevEnd)
@@ -197,6 +201,7 @@ func (device *Model2540Pctx) callback(cmd int) {
 		}
 	}
 	if device.ready {
+		fmt.Println("Transfer done")
 		ch.ChanEnd(device.addr, dev.CStatusChnEnd)
 		event.AddEvent(device, device.callback, 1000, cmd)
 		device.ready = true
@@ -222,14 +227,14 @@ func create(devNum uint16, _ string, options []config.Option) error {
 	for _, option := range options {
 		switch strings.ToUpper(option.Name) {
 		case "FORMAT", "FMT":
-			if !dev.context.SetFormat(option.Name) {
-				return errors.New("Invalid Card formt type: " + option.Name)
+			if !dev.context.SetFormat(option.EqualOpt) {
+				return errors.New("Invalid Card format type: " + option.EqualOpt)
 			}
 		case "FILE":
 			if option.EqualOpt == "" {
 				return errors.New("File option missing filename")
 			}
-			err := dev.context.Attach(option.EqualOpt, false, eof)
+			err := dev.context.Attach(option.EqualOpt, true, eof)
 			if err != nil {
 				return err
 			}
