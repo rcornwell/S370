@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -481,7 +482,8 @@ func (ctx *CardContext) readDeck(fileName string) error {
 		}
 	}
 	ctx.file.Close()
-	fmt.Printf("Read %d cards\n", ctx.HopperSize())
+	msg := fmt.Sprintf("Read %d cards", ctx.HopperSize())
+	slog.Info(msg)
 	return err
 }
 

@@ -27,6 +27,7 @@ package cpu
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 	"unicode"
 
@@ -170,7 +171,7 @@ func IPLDevice(devNum uint16) error {
 // Post an external interrupt to CPU.
 func PostExtIrq() {
 	sysCPU.extIrq = true
-	fmt.Println("CPU: Post ext")
+	slog.Debug("CPU: Post ext")
 }
 
 // Shutdown the CPU, request channel to shutdown all devices.
@@ -215,7 +216,7 @@ func CycleCPU() (int, bool) {
 			if !sysCPU.ecMode || (sysCPU.cregs[0]&0x20) != 0 ||
 				(sysCPU.cregs[6]&0x40) != 0 {
 				sysCPU.extIrq = false
-				fmt.Println("CPU: Ext IRQ")
+				//fmt.Println("CPU: Ext IRQ")
 				sysCPU.suppress(oEPSW, 0x40)
 				return memCycle, true
 			}
@@ -240,7 +241,8 @@ func CycleCPU() (int, bool) {
 
 	// Check if we have wait we can't exit
 	if ch.Loading == Dv.NoDev && !sysCPU.irqEnb && (sysCPU.flags&wait != 0) {
-		fmt.Printf("Uninterupable wait state %08x %s\n", sysCPU.PC, sysCPU.getPSW())
+		msg := fmt.Sprintf("Uninterupable wait state %08x %s", sysCPU.PC, sysCPU.getPSW())
+		slog.Warn(msg)
 		return 1, false
 	}
 
@@ -1330,7 +1332,7 @@ func setIPLDev(devNum uint16, _ string, _ []config.Option) error {
 //     /* Make sure devices are mapped correctly */
 //     chan_set_devs();
 //     sim_vm_fprint_stopped = &cpu_fprint_stopped;
-//     /* Create memory array if it does not exist. */
+//     /* Create memory array if it does not exist. */%s\n
 //     if (M == NULL) {                        /* first time init? */
 //         sim_brk_types = sim_brk_dflt = SWMASK ('E');
 //         M = (uint32 *) calloc (((uint32) MEMSIZE) >> 2, sizeof (uint32));

@@ -29,6 +29,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -116,7 +117,7 @@ func getModel(mod string) int {
 // func RegisterModel(mod string, ty int, fn func(uint16, byte, byte, string, []*Option) bool) {.
 func RegisterModel(mod string, ty int, fn func(uint16, string, []Option) error) {
 	mod = strings.ToUpper(mod)
-	fmt.Println("Registering device: ", mod)
+	slog.Debug("Registering device: " + mod)
 	model := modelDef{create: fn, ty: ty}
 	models[mod] = model
 }
@@ -124,7 +125,7 @@ func RegisterModel(mod string, ty int, fn func(uint16, string, []Option) error) 
 // Register should be called from init functions.
 func RegisterSwitch(mod string, fn func(uint16, string, []Option) error) {
 	mod = strings.ToUpper(mod)
-	fmt.Println("Registering switch: ", mod)
+	slog.Debug("Registering switch: " + mod)
 	model := modelDef{create: fn, ty: TypeSwitch}
 	models[mod] = model
 }
@@ -132,7 +133,7 @@ func RegisterSwitch(mod string, fn func(uint16, string, []Option) error) {
 // Register should be called from init functions.
 func RegisterOption(mod string, fn func(uint16, string, []Option) error) {
 	mod = strings.ToUpper(mod)
-	fmt.Println("Registering simple option: ", mod)
+	slog.Debug("Registering simple option: " + mod)
 	model := modelDef{create: fn, ty: TypeOption}
 	models[mod] = model
 }
@@ -228,9 +229,11 @@ func LoadConfigFile(name string) error {
 			line.line = ""
 			continue
 		}
-		fmt.Printf("line %d: '%s' \n", lineNumber, line.line)
+		msg := fmt.Sprintf("line %d: %s", lineNumber, line.line)
+		slog.Debug(msg)
 		err = line.parseLine()
 		if err != nil {
+			err := fmt.Errorf("line %d: %w", lineNumber, err)
 			return err
 		}
 		line.line = ""

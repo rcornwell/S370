@@ -26,6 +26,7 @@ package syschannel
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"strconv"
 	"strings"
@@ -758,7 +759,8 @@ func Shutdown() {
 			continue
 		}
 
-		fmt.Printf("Shutdown channel: %d\n", i)
+		msg := fmt.Sprintf("Shutdown channel: %d", i)
+		slog.Info(msg)
 		// Call Shutdown function for each device.
 		for j := range 256 {
 			if cUnit.devTab[j] != nil {

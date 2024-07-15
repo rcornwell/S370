@@ -28,6 +28,7 @@ package telnet
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"sync"
 
@@ -80,7 +81,8 @@ func (state *tnState) SendConnect() {
 func (state *tnState) SendDisconnect() {
 	packet := master.Packet{DevNum: state.devNum, Msg: master.TelDisconnect}
 	state.master <- packet
-	fmt.Printf("Device: %03x disconnected\n", state.devNum)
+	msg := fmt.Sprintf("Device: %03x disconnected\n", state.devNum)
+	slog.Info(msg)
 	term := terminals[state.devNum]
 	term.inUse = false
 	state.devNum = 0
@@ -124,11 +126,13 @@ func RegisterTerminal(dev Telnet, devNum uint16, model byte, port string, group 
 	}
 	pm.devices = append(pm.devices, terminals[devNum])
 
+	var msg string
 	if pm.group != "" {
-		fmt.Printf("Registering %03x on port: %s group: %s\n", devNum, pm.port, pm.group)
+		msg = fmt.Sprintf("Registering %03x on port: %s group: %s\n", devNum, pm.port, pm.group)
 	} else {
-		fmt.Printf("Registering %03x on port: %s no group\n", devNum, pm.port)
+		msg = fmt.Sprintf("Registering %03x on port: %s no group\n", devNum, pm.port)
 	}
+	slog.Debug(msg)
 	return nil
 }
 
@@ -139,7 +143,7 @@ func (state *tnState) findTerminal() bool {
 	defer mapLock.Unlock()      // Make sure we unlock it
 	pm, ok := ports[state.port] // See if exists.
 	if !ok {
-		fmt.Println("Connection from unregistered port: " + state.port)
+		slog.Warn("Connection from unregistered port: " + state.port)
 		return false
 	}
 
@@ -149,11 +153,13 @@ func (state *tnState) findTerminal() bool {
 		if err == nil {
 			term := terminals[uint16(devNum)]
 			if term.inUse {
-				fmt.Println("Terminal already in use")
+				msg := fmt.Sprintf("Terminal already in use: %03x", devNum)
+				slog.Warn(msg)
 				return false
 			}
 			if term.model != state.model {
-				fmt.Printf("Terminal types don't match")
+				msg := fmt.Sprintf("Terminal types don't match for: %03x", devNum)
+				slog.Warn(msg)
 				return false
 			}
 			state.dev = term.dev
@@ -202,7 +208,7 @@ func registerPort(port string, group string) *portMap {
 	groupPort, okgrp := groups[group]
 	if okgrp {
 		if port != "" && port != groupPort {
-			fmt.Printf("Duplicate group found on another port: " + groupPort)
+			slog.Warn("Duplicate group found on another port: " + groupPort)
 			return nil
 		}
 	}
@@ -210,7 +216,7 @@ func registerPort(port string, group string) *portMap {
 	// If it does not exist, find port with no group.
 	pm, ok := ports[port] // See if exists.
 	if !ok {
-		fmt.Printf("Registering port: %s group: %s\n", port, group)
+		slog.Info("Registering port: " + port + " group: " + group)
 		newmap := &portMap{port: port, group: group}
 		ports[port] = append(ports[port], newmap)
 		if group != "" {

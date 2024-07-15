@@ -25,7 +25,7 @@
 package timer
 
 import (
-	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -78,7 +78,7 @@ func (timer *Timer) Shutdown() {
 	case <-done:
 		return
 	case <-time.After(time.Second):
-		fmt.Println("Timed out waiting for timer to finish.")
+		slog.Warn("Timed out waiting for timer to finish.")
 		return
 	}
 }

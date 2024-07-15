@@ -34,6 +34,7 @@ package model2540r
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	config "github.com/rcornwell/S370/config/configparser"
@@ -86,7 +87,8 @@ func (device *Model2540Rctx) StartCmd(cmd uint8) uint8 {
 			device.sense = dev.SenseINTVENT
 			return dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck
 		}
-		fmt.Printf("Rd Cmd: %02x\n", cmd)
+		msg := fmt.Sprintf("Rd Cmd: %02x\n", cmd)
+		slog.Debug(msg)
 		device.sense = 0
 		device.currentCol = 0
 		if device.eof {
@@ -124,7 +126,8 @@ func (device *Model2540Rctx) StartCmd(cmd uint8) uint8 {
 		}
 
 	case dev.CmdSense:
-		fmt.Printf("Rd Cmd: %02x\n", cmd)
+		msg := fmt.Sprintf("Rd Cmd: %02x\n", cmd)
+		slog.Debug(msg)
 		if cmd != dev.CmdSense {
 			device.sense |= dev.SenseCMDREJ
 		} else {
@@ -134,7 +137,8 @@ func (device *Model2540Rctx) StartCmd(cmd uint8) uint8 {
 		}
 
 	case dev.CmdCTL: // Feed or nop.
-		fmt.Printf("Rd Cmd: %02x\n", cmd)
+		msg := fmt.Sprintf("Rd Cmd: %02x\n", cmd)
+		slog.Debug(msg)
 		device.sense = 0
 		if cmd == dev.CmdCTL {
 			r = dev.CStatusChnEnd | dev.CStatusDevEnd
@@ -226,7 +230,7 @@ func (device *Model2540Rctx) callback(cmd int) {
 
 	// Handle feed end
 	if cmd == 0x100 {
-		fmt.Println("Read feed end")
+		slog.Debug("Read feed end")
 		device.busy = false
 		device.halt = false
 		ch.SetDevAttn(device.addr, dev.CStatusDevEnd)
@@ -236,7 +240,7 @@ func (device *Model2540Rctx) callback(cmd int) {
 	// Check if new card requested
 	if !device.ready {
 		// Read next card.
-		fmt.Println("Read next card")
+		slog.Debug("Read next card")
 		device.image, err = device.context.ReadCard()
 		switch err {
 		case card.CardOK:
@@ -302,7 +306,7 @@ func (device *Model2540Rctx) callback(cmd int) {
 feed:
 	// If feed give, request a new card
 	if (cmd & maskStack) != maskStack {
-		fmt.Println("Start feed")
+		slog.Debug("Start feed")
 		device.ready = false
 		// If read command, return channel end.
 		if (cmd & 1) == 0 {

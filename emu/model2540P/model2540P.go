@@ -34,6 +34,7 @@ package model2540p
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	config "github.com/rcornwell/S370/config/configparser"
@@ -174,7 +175,7 @@ func (device *Model2540Pctx) callback(cmd int) {
 
 	// If ready, punch out current card.
 	if device.ready {
-		fmt.Println("Punch card")
+		slog.Debug("Punch card")
 		switch device.context.PunchCard(device.image) {
 		case card.CardOK:
 			ch.SetDevAttn(device.addr, dev.CStatusDevEnd)
@@ -201,7 +202,7 @@ func (device *Model2540Pctx) callback(cmd int) {
 		}
 	}
 	if device.ready {
-		fmt.Println("Transfer done")
+		slog.Debug("Transfer done")
 		ch.ChanEnd(device.addr, dev.CStatusChnEnd)
 		event.AddEvent(device, device.callback, 1000, cmd)
 		device.ready = true

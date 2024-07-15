@@ -412,7 +412,7 @@ func (tape *TapeContext) ReadForwStart() error {
 		}
 
 		tape.lrecl = (uint32(hdr[1]) << 8) | uint32(hdr[0])
-		fmt.Printf("Header %02x %02x\n", hdr[4], hdr[5])
+	//	fmt.Printf("Header %02x %02x\n", hdr[4], hdr[5])
 	default:
 		return errTapeTYPE
 	}
@@ -523,7 +523,7 @@ func (tape *TapeContext) ReadBackStart() error {
 		}
 
 		tape.lrecl = (uint32(hdr[3]) << 8) | uint32(hdr[2])
-		fmt.Printf("Header %02x %02x\n", hdr[4], hdr[5])
+	//	fmt.Printf("Header %02x %02x\n", hdr[4], hdr[5])
 	default:
 		return errTapeTYPE
 	}
@@ -892,7 +892,7 @@ func (tape *TapeContext) finishAWSfunc() error {
 		}
 
 		lrecl := (uint32(hdr[1]) << 8) | uint32(hdr[0])
-		fmt.Printf("Header %02x %02x\n", hdr[4], hdr[5])
+		//fmt.Printf("Header %02x %02x\n", hdr[4], hdr[5])
 		if lrecl != tape.lrecl {
 			return errTapeFORMAT
 		}
@@ -1073,7 +1073,7 @@ func (tape *TapeContext) readPrevFrame() (byte, error) {
 
 	// If at beging of tape, return BOT status.
 	if tape.bot {
-		fmt.Println("At BOT")
+		//		fmt.Println("At BOT")
 		return 0, TapeBOT
 	}
 

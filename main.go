@@ -28,6 +28,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -38,12 +39,16 @@ import (
 	master "github.com/rcornwell/S370/emu/master"
 	syschannel "github.com/rcornwell/S370/emu/sys_channel"
 	telnet "github.com/rcornwell/S370/telnet"
+	logger "github.com/rcornwell/S370/util/logger"
 
 	_ "github.com/rcornwell/S370/emu/models"
 )
 
+var Logger *slog.Logger
+
 func main() {
 	optConfig := getopt.StringLong("config", 'c', "S370.cfg", "Configuration file")
+	optLogFile := getopt.StringLong("log", 'l', "", "Log file")
 	//	optDeck := getopt.StringLong("deck", 'd', "", "Deck to load")
 	optHelp := getopt.BoolLong("help", 'h', "Help")
 	getopt.Parse()
@@ -53,21 +58,31 @@ func main() {
 		os.Exit(0)
 	}
 
+	var file *os.File
+	if optLogFile != nil {
+		file, _ = os.Create(*optLogFile)
+	}
+	programLevel := new(slog.LevelVar)
+	programLevel.Set(slog.LevelDebug)
+	Logger = slog.New(logger.NewHandler(file, &slog.HandlerOptions{Level: programLevel, AddSource: false}))
+	slog.SetDefault(Logger)
+
+	Logger.Info("S370 Started")
 	if optConfig == nil {
-		fmt.Println("Please specify a configuration file")
+		Logger.Error("Please specify a configuration file")
 		os.Exit(0)
 	}
 
 	_, err := os.Stat(*optConfig)
 	if os.IsNotExist(err) {
-		fmt.Println("Configuration file ", *optConfig, " can't be found")
+		Logger.Error("Configuration file ", *optConfig, " can't be found")
 		os.Exit(0)
 	}
 
 	syschannel.InitializeChannels()
 	err = config.LoadConfigFile(*optConfig)
 	if err != nil {
-		fmt.Println(err)
+		Logger.Error(err.Error())
 		os.Exit(0)
 	}
 
@@ -91,7 +106,7 @@ func main() {
 	// Start telnet servers.
 	err = telnet.Start(masterChannel)
 	if err != nil {
-		fmt.Println(err)
+		Logger.Error(err.Error())
 		os.Exit(1)
 	}
 
@@ -124,9 +139,9 @@ loop:
 		}
 	}
 
-	fmt.Println("Shutting down CPU")
+	Logger.Info("Shutting down CPU")
 	cpu.Stop()
-	fmt.Println("Shutting down server...")
+	Logger.Info("Shutting down server...")
 	telnet.Stop()
-	fmt.Println("Servers stopped.")
+	Logger.Info("Servers stopped.")
 }

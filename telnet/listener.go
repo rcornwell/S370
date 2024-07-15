@@ -27,6 +27,7 @@ package telnet
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"sync"
 	"time"
@@ -63,7 +64,8 @@ func Start(master chan master.Packet) error {
 		if host == "::" {
 			host = "localhost"
 		}
-		fmt.Printf("Server started on %s:%s\n", host, lport)
+
+		slog.Info("Server started on " + host + ":" + lport)
 
 		s.wg.Add(2)
 		s.master = master
@@ -77,7 +79,7 @@ func Start(master chan master.Packet) error {
 func Stop() {
 	for _, s := range servers {
 		if s == nil {
-			fmt.Println("No server attached to port")
+			slog.Error("No server attached to port")
 			continue
 		}
 		_, portNum, err := net.SplitHostPort(s.listener.Addr().String())
@@ -85,7 +87,7 @@ func Stop() {
 			panic(err)
 		}
 
-		fmt.Println("Shutdown port: ", portNum)
+		slog.Info("Shutdown port: " + portNum)
 
 		close(s.shutdown)
 		s.listener.Close()
@@ -100,7 +102,7 @@ func Stop() {
 		case <-done:
 			break
 		case <-time.After(time.Second):
-			fmt.Println("Timed out waiting for connections to finish on port: ", portNum)
+			slog.Warn("Timed out waiting for connections to finish on port: " + portNum)
 			break
 		}
 	}

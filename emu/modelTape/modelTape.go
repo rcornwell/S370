@@ -26,6 +26,7 @@ package modelTape
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	config "github.com/rcornwell/S370/config/configparser"
@@ -395,7 +396,7 @@ func (device *Model2400ctx) callbackData(cmd int) {
 			err := device.context.WriteFrame(device.hold)
 			device.cc = 0
 			if err != nil {
-				fmt.Println(err)
+				slog.Error(err.Error())
 				event.AddEvent(device, device.callbackFinish, 1000, cmd)
 			} else {
 				event.AddEvent(device, device.callbackData, 100, cmd)
@@ -449,9 +450,8 @@ func (device *Model2400ctx) callbackData(cmd int) {
 
 		err := device.context.WriteFrame(data)
 		if err != nil {
-			fmt.Println(err)
+			//		fmt.Println(err)
 			event.AddEvent(device, device.callbackFinish, 1000, cmd)
-
 		}
 		// Indicate we wrote at least one character.
 		device.sense[0] &= ^senseZero
@@ -501,7 +501,7 @@ func (device *Model2400ctx) callbackData(cmd int) {
 	case cmdWTM: // Write Tape Mark
 		err := device.context.WriteMark()
 		if err != nil {
-			fmt.Println(err)
+			slog.Error(err.Error())
 		}
 		event.AddEvent(device, device.callbackFinish, 1000, cmd)
 		return
@@ -520,7 +520,7 @@ func (device *Model2400ctx) callbackFinish(cmd int) {
 	case dev.CmdRead, dev.CmdRDBWD, dev.CmdWrite:
 		err := device.context.FinishRecord()
 		if err != nil {
-			fmt.Println(err)
+			slog.Error(err.Error())
 		}
 
 		//	fmt.Printf("Finish read %t\n", device.mark)
@@ -534,7 +534,7 @@ func (device *Model2400ctx) callbackFinish(cmd int) {
 	case cmdFSF, cmdBSF:
 		err := device.context.FinishRecord()
 		if err != nil {
-			fmt.Println(err)
+			slog.Error(err.Error())
 		}
 
 		//	fmt.Printf("Finish space %t\n", device.mark)
@@ -547,7 +547,7 @@ func (device *Model2400ctx) callbackFinish(cmd int) {
 	case cmdFSR, cmdBSR:
 		err := device.context.FinishRecord()
 		if err != nil {
-			fmt.Println(err)
+			slog.Error(err.Error())
 		}
 
 		if device.mark {
@@ -624,7 +624,7 @@ func (device *Model2400ctx) callback(cmd int) {
 			return
 		}
 		if err != nil {
-			fmt.Println(err)
+			slog.Error(err.Error())
 			device.busy = false
 			device.halt = false
 			event.AddEvent(device, device.callbackFinish, 1000, cmd)
@@ -650,7 +650,7 @@ func (device *Model2400ctx) callback(cmd int) {
 		if err != nil {
 			device.busy = false
 			device.halt = false
-			fmt.Println(err)
+			slog.Error(err.Error())
 			event.AddEvent(device, device.callbackFinish, 1000, cmd)
 			ch.ChanEnd(device.addr, dev.CStatusChnEnd)
 			return
@@ -668,7 +668,7 @@ func (device *Model2400ctx) callback(cmd int) {
 		}
 		err := device.context.WriteStart()
 		if err != nil {
-			fmt.Println(err)
+			slog.Error(err.Error())
 			device.busy = false
 			device.halt = false
 			ch.ChanEnd(device.addr, dev.CStatusChnEnd|dev.CStatusDevEnd|dev.CStatusCheck)
@@ -686,7 +686,7 @@ func (device *Model2400ctx) callback(cmd int) {
 		device.rewind = true
 		err := device.context.StartRewind()
 		if err != nil {
-			fmt.Println(err)
+			slog.Error(err.Error())
 			device.busy = false
 			device.halt = false
 			event.AddEvent(device, device.callbackRewind, 1000, cmd)
@@ -713,7 +713,7 @@ func (device *Model2400ctx) callback(cmd int) {
 			return
 		}
 		if err != nil {
-			fmt.Println(err)
+			slog.Error(err.Error())
 			event.AddEvent(device, device.callbackFinish, 100, cmd)
 			return
 		}
@@ -727,7 +727,7 @@ func (device *Model2400ctx) callback(cmd int) {
 			return
 		}
 		if err != nil {
-			fmt.Println(err)
+			slog.Error(err.Error())
 			event.AddEvent(device, device.callbackFinish, 100, cmd)
 			return
 		}

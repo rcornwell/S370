@@ -26,7 +26,10 @@
 package telnet
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net"
 	"strings"
 
@@ -203,7 +206,7 @@ func (state *tnState) handleWILL(input byte) {
 			send := []byte{tnIAC, tnSB, tnOptionTerm, tnSend, tnIAC, tnSE}
 			_, err := state.conn.Write(send)
 			if err != nil {
-				fmt.Println("Send error: ", err)
+				slog.Warn("Send error: " + err.Error() + "on Port: " + state.port)
 			}
 		}
 	case tnOptionENV:
@@ -213,7 +216,7 @@ func (state *tnState) handleWILL(input byte) {
 			send := []byte{tnIAC, tnSB, tnOptionENV, tnSend, tnVar, 'U', 'S', 'E', 'R', tnIAC, tnSE}
 			_, err := state.conn.Write(send)
 			if err != nil {
-				fmt.Println("Send error: ", err)
+				slog.Warn("Send error: " + err.Error() + "on Port: " + state.port)
 			}
 		}
 	case tnOptionEOR:
@@ -255,7 +258,8 @@ func (state *tnState) handleSE(term []byte) {
 			state.conn.Close()
 			return
 		}
-		fmt.Printf("Connected to device: %03x\n", state.devNum)
+		msg := fmt.Sprintf("Connected to device: %03x", state.devNum)
+		slog.Info(msg)
 		state.SendConnect()
 	}
 }
@@ -274,7 +278,7 @@ func handleClient(conn net.Conn, master chan master.Packet, port string) {
 	if remoteHost == "::" {
 		remoteHost = "localhost"
 	}
-	fmt.Printf("Connection from %s:%s\n", remoteHost, remotePort)
+	slog.Info("Connection from " + remoteHost + ":" + remotePort)
 	state.port = port
 	buffer := make([]byte, 1024)
 	term := []byte{}
@@ -285,8 +289,10 @@ func handleClient(conn net.Conn, master chan master.Packet, port string) {
 	for {
 		num, err := state.conn.Read(buffer)
 		if err != nil {
-			// Tell device we got an error
-			fmt.Println("Error: ", err)
+			if errors.Is(err, io.EOF) {
+				// Tell device we got an error
+				slog.Debug("Error: " + err.Error())
+			}
 			return
 		}
 		out = []byte{}

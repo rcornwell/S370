@@ -25,7 +25,7 @@
 package core
 
 import (
-	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -68,7 +68,7 @@ func (core *core) Start() {
 		case <-core.done:
 			// Shutdone all devices.
 			cpu.Shutdown()
-			fmt.Println("Shutdown CPU core")
+			slog.Info("Shutdown CPU core")
 			return
 		case packet := <-core.master:
 			core.processPacket(packet)
@@ -90,7 +90,7 @@ func (core *core) Stop() {
 	case <-done:
 		return
 	case <-time.After(time.Second):
-		fmt.Println("Timed out waiting for CPU to finish.")
+		slog.Warn("Timed out waiting for CPU to finish.")
 		return
 	}
 }
@@ -119,7 +119,7 @@ func (core *core) processPacket(packet master.Packet) {
 	case master.IPLdevice:
 		err := cpu.IPLDevice(packet.DevNum)
 		if err != nil {
-			fmt.Println(err)
+			slog.Error(err.Error())
 		} else {
 			core.running = true
 		}

@@ -26,7 +26,6 @@
 package configparser
 
 import (
-	"fmt"
 	"testing"
 
 	D "github.com/rcornwell/S370/emu/device"
@@ -49,7 +48,6 @@ func resetTest() {
 func cleanUpConfig() {
 	models = map[string]modelDef{}
 	resetTest()
-	fmt.Println("Cleanup")
 }
 
 // Create a device.
