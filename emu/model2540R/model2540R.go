@@ -86,6 +86,7 @@ func (device *Model2540Rctx) StartCmd(cmd uint8) uint8 {
 			device.sense = dev.SenseINTVENT
 			return dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck
 		}
+		fmt.Printf("Rd Cmd: %02x\n", cmd)
 		device.sense = 0
 		device.currentCol = 0
 		if device.eof {
@@ -104,37 +105,52 @@ func (device *Model2540Rctx) StartCmd(cmd uint8) uint8 {
 				device.err = true
 				device.ready = true
 			}
-			r = dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusExpt
+			if !device.ready {
+				device.halt = false
+				return dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusExpt
+			}
 		}
+
 		// Check if no more cards left in deck
 		if device.context.HopperSize() == 0 {
 			device.sense = dev.SenseINTVENT
 		} else {
 			device.busy = true
-			event.AddEvent(device, device.callback, 100, int(cmd))
-			return 0
+			if device.ready {
+				event.AddEvent(device, device.callback, 100, int(cmd))
+			} else {
+				event.AddEvent(device, device.callback, 1000, int(cmd))
+			}
 		}
-		// Queue up sense command
+
 	case dev.CmdSense:
+		fmt.Printf("Rd Cmd: %02x\n", cmd)
 		if cmd != dev.CmdSense {
 			device.sense |= dev.SenseCMDREJ
 		} else {
 			device.busy = true
-			event.AddEvent(device, device.callback, 10, int(cmd))
+			event.AddEvent(device, device.callback, 100, int(cmd))
 			r = 0
 		}
-	case dev.CmdCTL:
+
+	case dev.CmdCTL: // Feed or nop.
+		fmt.Printf("Rd Cmd: %02x\n", cmd)
 		device.sense = 0
 		if cmd == dev.CmdCTL {
 			r = dev.CStatusChnEnd | dev.CStatusDevEnd
 			break
 		}
+		if !device.context.Attached() {
+			device.halt = false
+			device.sense = dev.SenseINTVENT
+			break
+		}
 		if (cmd&0x30) != 0x20 || (cmd&maskStack) == maskStack {
 			device.sense |= dev.SenseCMDREJ
-			r = dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck
+			break
 		} else {
 			device.busy = true
-			event.AddEvent(device, device.callback, 1000, int(cmd))
+			event.AddEvent(device, device.callback, 100, int(cmd))
 			r = dev.CStatusChnEnd
 		}
 
@@ -151,7 +167,10 @@ func (device *Model2540Rctx) StartCmd(cmd uint8) uint8 {
 
 // Handle HIO instruction.
 func (device *Model2540Rctx) HaltIO() uint8 {
-	device.halt = true
+	if device.busy {
+		device.halt = true
+		return 2
+	}
 	return 1
 }
 
@@ -207,81 +226,97 @@ func (device *Model2540Rctx) callback(cmd int) {
 
 	// Handle feed end
 	if cmd == 0x100 {
+		fmt.Println("Read feed end")
 		device.busy = false
+		device.halt = false
 		ch.SetDevAttn(device.addr, dev.CStatusDevEnd)
 		return
-	}
-	if device.halt {
-		goto feed
 	}
 
 	// Check if new card requested
 	if !device.ready {
 		// Read next card.
+		fmt.Println("Read next card")
 		device.image, err = device.context.ReadCard()
 		switch err {
 		case card.CardOK:
 			device.ready = true
 		case card.CardEOF:
 			device.eof = true
-			device.busy = false
-			device.halt = false
-			ch.SetDevAttn(device.addr, dev.CStatusDevEnd|status)
-			return
 		case card.CardEmpty:
-			device.busy = false
-			device.halt = false
-			ch.SetDevAttn(device.addr, dev.CStatusDevEnd|status)
-			return
 		case card.CardError:
 			device.err = true
 			device.ready = true
-			device.busy = false
-			device.halt = false
+			device.sense = dev.SenseDATCHK
 		}
 
+		// If we did not get a card, return error status
+		if !device.ready || device.sense != 0 {
+			device.busy = false
+			device.halt = false
+			ch.ChanEnd(device.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck))
+			return
+		}
+	}
+
+	// If not reading, go feed card.
+	if (cmd & 1) != 0 {
+		goto feed
+	}
+
+	// If device halt, go feed another card if feed option.
+	if device.halt {
+		device.halt = false
+		// If feeding, channel end, and go feed.
+		if (cmd & maskStack) != maskStack {
+			ch.ChanEnd(device.addr, dev.CStatusChnEnd)
+			goto feed
+		}
 		if device.err {
 			status = dev.CStatusCheck
 		}
+		device.busy = false
+		ch.ChanEnd(device.addr, dev.CStatusChnEnd|dev.CStatusDevEnd|status)
+		return
 	}
 
 	// Copy next column of card over
-	if (cmd & maskCMD) == int(dev.CmdRead) {
-		if device.err {
-			device.sense = dev.SenseDATCHK
-			goto feed
-		}
-	}
 	xlat = card.HolToEBCDIC(device.image.Image[device.currentCol])
-
 	if xlat == 0x100 {
 		device.sense = dev.SenseDATCHK
 		xlat = 0
 	} else {
 		xlat &= 0xff
 	}
-	if ch.ChanWriteByte(device.addr, uint8(xlat)) {
-		goto feed
-	}
-	device.currentCol++
-	if device.currentCol != 80 {
-		event.AddEvent(device, device.callback, 20, cmd)
-		return
+
+	// Transfer data.
+	if !ch.ChanWriteByte(device.addr, uint8(xlat)) {
+		// Update column
+		device.currentCol++
+		if device.currentCol != 80 {
+			event.AddEvent(device, device.callback, 20, cmd)
+			return
+		}
 	}
 
 feed:
-	device.halt = false
 	// If feed give, request a new card
 	if (cmd & maskStack) != maskStack {
+		fmt.Println("Start feed")
 		device.ready = false
-		ch.ChanEnd(device.addr, dev.CStatusChnEnd)
+		// If read command, return channel end.
+		if (cmd & 1) == 0 {
+			ch.ChanEnd(device.addr, dev.CStatusChnEnd)
+		}
 		event.AddEvent(device, device.callback, 1000, 0x100) // Feed the card
 	} else {
+		// No feed, read same card again.
 		if device.err {
 			status = dev.CStatusCheck
 		}
+		device.halt = false
 		device.busy = false
-		ch.ChanEnd(device.addr, (dev.CStatusChnEnd | dev.CStatusDevEnd | status))
+		ch.ChanEnd(device.addr, dev.CStatusChnEnd|dev.CStatusDevEnd|status)
 	}
 }
 
