@@ -160,6 +160,11 @@ func (d *TestDev) Show(_ []Dv.CmdOption) error {
 func (d *TestDev) Shutdown() {
 }
 
+// Enable debug options.
+func (d *TestDev) Debug(_ string) error {
+	return nil
+}
+
 // // register a device on initialize
 // func init() {
 // 	reg.RegisterModel("testdev", create)

@@ -34,7 +34,6 @@ package model2540r
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	config "github.com/rcornwell/S370/config/configparser"
@@ -42,6 +41,7 @@ import (
 	event "github.com/rcornwell/S370/emu/event"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
 	card "github.com/rcornwell/S370/util/card"
+	"github.com/rcornwell/S370/util/debug"
 )
 
 const (
@@ -49,17 +49,31 @@ const (
 	maskCMD   = 0x27 // Mask command part of
 )
 
+const (
+	// Debug options.
+	debugCmd = 1 << iota
+	debugData
+	debugDetail
+)
+
+var debugOption = map[string]int{
+	"CMD":    debugCmd,
+	"DATA":   debugData,
+	"DETAIL": debugDetail,
+}
+
 type Model2540Rctx struct {
-	addr       uint16            // Current device address
-	currentCol int               // Current column
-	busy       bool              // Reader busy
-	eof        bool              // EOF pending
-	err        bool              // Error pending
-	ready      bool              // Have card ready to read
-	halt       bool              // Signal halt requested
-	sense      uint8             // Current sense byte
-	image      card.Card         // Current card image
-	context    *card.CardContext // Context for card reader.
+	addr       uint16        // Current device address
+	currentCol int           // Current column
+	busy       bool          // Reader busy
+	eof        bool          // EOF pending
+	err        bool          // Error pending
+	ready      bool          // Have card ready to read
+	halt       bool          // Signal halt requested
+	sense      uint8         // Current sense byte
+	image      card.Card     // Current card image
+	context    *card.Context // Context for card reader.
+	debugMsk   int           // Debug mask.
 }
 
 // Handle start of CCW chain.
@@ -87,8 +101,7 @@ func (device *Model2540Rctx) StartCmd(cmd uint8) uint8 {
 			device.sense = dev.SenseINTVENT
 			return dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck
 		}
-		msg := fmt.Sprintf("Rd Cmd: %02x\n", cmd)
-		slog.Debug(msg)
+		debug.DebugDevf(device.addr, device.debugMsk, debugCmd, "Reader cmd: %d", cmd)
 		device.sense = 0
 		device.currentCol = 0
 		if device.eof {
@@ -126,8 +139,7 @@ func (device *Model2540Rctx) StartCmd(cmd uint8) uint8 {
 		}
 
 	case dev.CmdSense:
-		msg := fmt.Sprintf("Rd Cmd: %02x\n", cmd)
-		slog.Debug(msg)
+		debug.DebugDevf(device.addr, device.debugMsk, debugCmd, "Reader cmd: %d", cmd)
 		if cmd != dev.CmdSense {
 			device.sense |= dev.SenseCMDREJ
 		} else {
@@ -137,8 +149,7 @@ func (device *Model2540Rctx) StartCmd(cmd uint8) uint8 {
 		}
 
 	case dev.CmdCTL: // Feed or nop.
-		msg := fmt.Sprintf("Rd Cmd: %02x\n", cmd)
-		slog.Debug(msg)
+		debug.DebugDevf(device.addr, device.debugMsk, debugCmd, "Reader cmd: %d", cmd)
 		device.sense = 0
 		if cmd == dev.CmdCTL {
 			r = dev.CStatusChnEnd | dev.CStatusDevEnd
@@ -214,6 +225,16 @@ func (device *Model2540Rctx) Shutdown() {
 	_ = device.context.Detach()
 }
 
+// Enable debug options.
+func (device *Model2540Rctx) Debug(opt string) error {
+	flag, ok := debugOption[opt]
+	if !ok {
+		return errors.New("2540R debug option invalid: " + opt)
+	}
+	device.debugMsk |= flag
+	return nil
+}
+
 // Handle channel operations.
 func (device *Model2540Rctx) callback(cmd int) {
 	var status uint8
@@ -230,7 +251,7 @@ func (device *Model2540Rctx) callback(cmd int) {
 
 	// Handle feed end
 	if cmd == 0x100 {
-		slog.Debug("Read feed end")
+		debug.DebugDevf(device.addr, device.debugMsk, debugDetail, "Read feed end")
 		device.busy = false
 		device.halt = false
 		ch.SetDevAttn(device.addr, dev.CStatusDevEnd)
@@ -240,7 +261,7 @@ func (device *Model2540Rctx) callback(cmd int) {
 	// Check if new card requested
 	if !device.ready {
 		// Read next card.
-		slog.Debug("Read next card")
+		debug.DebugDevf(device.addr, device.debugMsk, debugDetail, "Read next card")
 		device.image, err = device.context.ReadCard()
 		switch err {
 		case card.CardOK:
@@ -306,7 +327,7 @@ func (device *Model2540Rctx) callback(cmd int) {
 feed:
 	// If feed give, request a new card
 	if (cmd & maskStack) != maskStack {
-		slog.Debug("Start feed")
+		debug.DebugDevf(device.addr, device.debugMsk, debugDetail, "Start feed")
 		device.ready = false
 		// If read command, return channel end.
 		if (cmd & 1) == 0 {
@@ -334,7 +355,7 @@ func create(devNum uint16, _ string, options []config.Option) error {
 	dev := Model2540Rctx{addr: devNum}
 	err := ch.AddDevice(&dev, devNum)
 	if err != nil {
-		return fmt.Errorf("Unable to create 2540R at %03x", devNum)
+		return fmt.Errorf("unable to create 2540R at %03x", devNum)
 	}
 	dev.context = card.NewCardContext(card.ModeAuto)
 	eof := false
@@ -342,7 +363,7 @@ func create(devNum uint16, _ string, options []config.Option) error {
 		switch strings.ToUpper(option.Name) {
 		case "FORMAT", "FMT":
 			if !dev.context.SetFormat(option.EqualOpt) {
-				return errors.New("Invalid Card formt type: " + option.EqualOpt)
+				return errors.New("invalid Card formt type: " + option.EqualOpt)
 			}
 		case "EOF":
 			eof = true
@@ -350,17 +371,17 @@ func create(devNum uint16, _ string, options []config.Option) error {
 			eof = false
 		case "FILE":
 			if option.EqualOpt == "" {
-				return errors.New("File option missing filename")
+				return errors.New("file option missing filename")
 			}
 			err := dev.context.Attach(option.EqualOpt, false, eof)
 			if err != nil {
 				return err
 			}
 		default:
-			return errors.New("Reader invalid option: " + option.Name)
+			return errors.New("reader invalid option: " + option.Name)
 		}
 		if option.Value != nil {
-			return errors.New("Extra options not supported on: " + option.Name)
+			return errors.New("extra options not supported on: " + option.Name)
 		}
 	}
 	return nil

@@ -29,6 +29,8 @@ import (
 	"github.com/rcornwell/S370/emu/memory"
 	op "github.com/rcornwell/S370/emu/opcodemap"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
+	"github.com/rcornwell/S370/util/debug"
+	// debug "github.com/rcornwell/S370/util/debug"
 )
 
 // Set storage key.
@@ -827,6 +829,7 @@ func (cpu *cpuState) opSIO(step *stepInfo) uint16 {
 		return ircPriv
 	}
 	cpu.cc = ch.StartIO(uint16(step.address1 & 0xfff))
+	debug.Debugf("CPU", debugMsk, debugIO, "SIO %08x %03x %d", cpu.iPC, step.address1, cpu.cc)
 	return 0
 }
 
@@ -836,6 +839,7 @@ func (cpu *cpuState) opTIO(step *stepInfo) uint16 {
 		return ircPriv
 	}
 	cpu.cc = ch.TestIO(uint16(step.address1 & 0xfff))
+	// fmt.Printf("TIO %08x %03x %d\n", cpu.iPC, step.address1, cpu.cc)
 	return 0
 }
 
@@ -845,6 +849,7 @@ func (cpu *cpuState) opHIO(step *stepInfo) uint16 {
 		return ircPriv
 	}
 	cpu.cc = ch.HaltIO(uint16(step.address1 & 0xfff))
+	debug.Debugf("CPU", debugMsk, debugIO, "HIO %08x %03x %d", cpu.iPC, step.address1, cpu.cc)
 	return 0
 }
 
@@ -854,5 +859,6 @@ func (cpu *cpuState) opTCH(step *stepInfo) uint16 {
 		return ircPriv
 	}
 	cpu.cc = ch.TestChan(uint16(step.address1 & 0xfff))
+	debug.Debugf("CPU", debugMsk, debugIO, "TCH %08x %03x %d", cpu.iPC, step.address1, cpu.cc)
 	return 0
 }

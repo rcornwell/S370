@@ -72,7 +72,7 @@ var (
 )
 
 // Structure to hold tape information.
-type TapeContext struct {
+type Context struct {
 	file     *os.File        // file handle
 	mode     int             // Current input/output mode
 	format   int             // Tape format
@@ -100,7 +100,32 @@ var formats = map[string]int{
 	"AWS":  TapeFmtAWS,
 }
 
-func (tape *TapeContext) SetFormat(fmt string) error {
+const (
+	// Debug options.
+	debugCmd = 1 << iota
+	debugData
+	debugDetail
+)
+
+var debugOption = map[string]int{
+	"CMD":    debugCmd,
+	"DATA":   debugData,
+	"DETAIL": debugDetail,
+}
+
+var debugMsk int
+
+// Enable debug options.
+func Debug(opt string) error {
+	flag, ok := debugOption[opt]
+	if !ok {
+		return errors.New("tape debug option invalid: " + opt)
+	}
+	debugMsk |= flag
+	return nil
+}
+
+func (tape *Context) SetFormat(fmt string) error {
 	newMode, ok := formats[strings.ToUpper(fmt)]
 	if !ok {
 		tape.format = TapeFmtTap
@@ -111,52 +136,52 @@ func (tape *TapeContext) SetFormat(fmt string) error {
 }
 
 // Check if tape is at load point.
-func (tape *TapeContext) TapeAtLoadPt() bool {
+func (tape *Context) TapeAtLoadPt() bool {
 	return tape.bot
 }
 
 // Determine if tape is attached and ready.
-func (tape *TapeContext) TapeReady() bool {
+func (tape *Context) TapeReady() bool {
 	return tape.file != nil
 }
 
 // Set tape ring in place, allow for write.
-func (tape *TapeContext) SetRing() {
+func (tape *Context) SetRing() {
 	tape.ring = true
 }
 
 // Set tape no ring, read only.
-func (tape *TapeContext) SetNoRing() {
+func (tape *Context) SetNoRing() {
 	tape.ring = false
 }
 
 // Determine if tape can be written.
-func (tape *TapeContext) TapeRing() bool {
+func (tape *Context) TapeRing() bool {
 	return tape.ring
 }
 
 // Set tape to 9 track.
-func (tape *TapeContext) Set9Track() {
+func (tape *Context) Set9Track() {
 	tape.seven = false
 }
 
 // Set tape to 7 track.
-func (tape *TapeContext) Set7Track() {
+func (tape *Context) Set7Track() {
 	tape.seven = true
 }
 
 // Determine if tape is 7 track or 9 track.
-func (tape *TapeContext) Tape9Track() bool {
+func (tape *Context) Tape9Track() bool {
 	return !tape.seven
 }
 
 // Return if attached to a file.
-func (tape *TapeContext) Attached() bool {
+func (tape *Context) Attached() bool {
 	return tape.file != nil
 }
 
 // Attach file to tape context.
-func (tape *TapeContext) Attach(fileName string) error {
+func (tape *Context) Attach(fileName string) error {
 	var err error
 	if tape.ring {
 		tape.file, err = os.Create(fileName)
@@ -176,7 +201,7 @@ func (tape *TapeContext) Attach(fileName string) error {
 }
 
 // Detach a tape file from a tape context.
-func (tape *TapeContext) Detach() error {
+func (tape *Context) Detach() error {
 	var err error
 	// If buffer is dirty flush it to the file
 	if tape.dirty {
@@ -194,7 +219,7 @@ func (tape *TapeContext) Detach() error {
 }
 
 // Start a tape write operation.
-func (tape *TapeContext) WriteStart() error {
+func (tape *Context) WriteStart() error {
 	// Error if not attached.
 	if tape.file == nil {
 		return errors.New("tape not attached")
@@ -228,7 +253,8 @@ func (tape *TapeContext) WriteStart() error {
 
 	case TapeFmtP7B:
 	case TapeFmtAWS:
-		hdr := []byte{0, 0,
+		hdr := []byte{
+			0, 0,
 			byte((tape.lrecl >> 8) & 0xff),
 			byte(tape.lrecl & 0xff),
 			0xA, 0,
@@ -254,7 +280,7 @@ func (tape *TapeContext) WriteStart() error {
 }
 
 // Write Mark to tape.
-func (tape *TapeContext) WriteMark() error {
+func (tape *Context) WriteMark() error {
 	// Error if not attached.
 	if tape.file == nil {
 		return errors.New("tape not attached")
@@ -299,7 +325,7 @@ func (tape *TapeContext) WriteMark() error {
 }
 
 // Start a tape read forward operation.
-func (tape *TapeContext) ReadForwStart() error {
+func (tape *Context) ReadForwStart() error {
 	// Error if not attached.
 	if tape.file == nil {
 		return errors.New("tape not attached")
@@ -346,24 +372,6 @@ func (tape *TapeContext) ReadForwStart() error {
 			return TapeMARK
 		}
 
-		// Debug log data.
-		// 					j = tape->lrecl;
-		// 					if (j > tape->len_buff)
-		// 						j = tape->len_buff;
-		// 					k = 0;
-		// 					while (j > 0 && (tape->pos_buff + k + 16) < sizeof(tape->buffer)) {
-		// 						log_tape_s("data ");
-		// 						for(i = 0; i < j && i < 16; i++)
-		// 							log_tape_c ("%02x ", tape->buffer[tape->pos_buff + i + k]);
-		// 						log_tape_c(" ");
-		// 						for(i = 0; i < j && i < 16; i++) {
-		// 							uint8_t ch = ebcdic_to_ascii[tape->buffer[tape->pos_buff + i + k]];
-		// 							log_tape_c ("%c", isprint(ch) ? ch : '.');
-		// 						}
-		// 						j -= 16;
-		// 						k += 16;
-		// 					}
-
 		tape.recPos = 0 // Posision in logical record
 
 	case TapeFmtP7B:
@@ -383,23 +391,7 @@ func (tape *TapeContext) ReadForwStart() error {
 			return TapeMARK
 		}
 		tape.lrecl = 0
-		// 					tape->srec = tape->pos + tape->pos_buff;
-		// 					r = tape_peek_byte(tape, &lrecl[0]);
-		// 					tape->lrecl = 2;
-		// 					if (r != 1)
-		// 						return r;
-		// 					/* If tape mark, move over it */
-		// 					if (lrecl[0] == (IRG_MASK|BCD_TM)) {
-		// 						r = tape_read_byte(tape, &lrecl[0]);
-		// 						if (r < 0)
-		// 							return r;
-		// 						tape->pos_frame += IRG_LEN;
-		// 						tape->format |= TAPE_MARK;
-		// 						log_tape("Tape mark %d\n", r);
-		// 						return (r == 0) ? 0 : 2;
-		// 					}
-		// 					tape->lrecl = 0;  /* Flag at beginning of record */
-		// 					break;
+
 	case TapeFmtAWS:
 		//  Read record header
 		hdr := [6]byte{}
@@ -412,7 +404,7 @@ func (tape *TapeContext) ReadForwStart() error {
 		}
 
 		tape.lrecl = (uint32(hdr[1]) << 8) | uint32(hdr[0])
-	//	fmt.Printf("Header %02x %02x\n", hdr[4], hdr[5])
+
 	default:
 		return errTapeTYPE
 	}
@@ -421,7 +413,7 @@ func (tape *TapeContext) ReadForwStart() error {
 }
 
 // Start a tape read backword operation.
-func (tape *TapeContext) ReadBackStart() error {
+func (tape *Context) ReadBackStart() error {
 	// Error if not attached.
 	if tape.file == nil {
 		return errors.New("tape not attached")
@@ -471,23 +463,6 @@ func (tape *TapeContext) ReadBackStart() error {
 		}
 
 		tape.recPos = tape.lrecl
-		// Debug log data.
-		// 					j = tape->lrecl;
-		// 					if (j > tape->len_buff)
-		// 						j = tape->len_buff;
-		// 					k = 0;
-		// 					while (j > 0 && (tape->pos_buff + k + 16) < sizeof(tape->buffer)) {
-		// 						log_tape_s("data ");
-		// 						for(i = 0; i < j && i < 16; i++)
-		// 							log_tape_c ("%02x ", tape->buffer[tape->pos_buff + i + k]);
-		// 						log_tape_c(" ");
-		// 						for(i = 0; i < j && i < 16; i++) {
-		// 							uint8_t ch = ebcdic_to_ascii[tape->buffer[tape->pos_buff + i + k]];
-		// 							log_tape_c ("%c", isprint(ch) ? ch : '.');
-		// 						}
-		// 						j -= 16;
-		// 						k += 16;
-		// 					}
 
 	case TapeFmtP7B:
 		// Peek at current character.
@@ -532,7 +507,7 @@ func (tape *TapeContext) ReadBackStart() error {
 }
 
 // Read one frame from tape.
-func (tape *TapeContext) ReadFrame() (byte, error) {
+func (tape *Context) ReadFrame() (byte, error) {
 	// Error if not attached.
 	if tape.file == nil {
 		return 0, errors.New("tape not attached")
@@ -617,7 +592,7 @@ func (tape *TapeContext) ReadFrame() (byte, error) {
 }
 
 // Write one frame to tape.
-func (tape *TapeContext) WriteFrame(data byte) error {
+func (tape *Context) WriteFrame(data byte) error {
 	// Error if not attached.
 	if tape.file == nil {
 		return errors.New("tape not attached")
@@ -637,7 +612,7 @@ func (tape *TapeContext) WriteFrame(data byte) error {
 }
 
 // Finsh a record.
-func (tape *TapeContext) FinishRecord() error {
+func (tape *Context) FinishRecord() error {
 	// Error if not attached.
 	if tape.file == nil {
 		return errors.New("tape not attached")
@@ -677,7 +652,7 @@ func (tape *TapeContext) FinishRecord() error {
 }
 
 // Start rewind.
-func (tape *TapeContext) StartRewind() error {
+func (tape *Context) StartRewind() error {
 	// Error if not attached.
 	if tape.file == nil {
 		return errors.New("tape not attached")
@@ -701,7 +676,7 @@ func (tape *TapeContext) StartRewind() error {
 }
 
 // Rewind tape by number of frames.
-func (tape *TapeContext) RewindFrames(frames int) bool {
+func (tape *Context) RewindFrames(frames int) bool {
 	// If we hit beginning of tape set position to zero.
 	if tape.frame < frames {
 		tape.frame = 0
@@ -715,12 +690,12 @@ func (tape *TapeContext) RewindFrames(frames int) bool {
 	return false
 }
 
-func NewTapeContext() *TapeContext {
-	return &TapeContext{}
+func NewTapeContext() *Context {
+	return &Context{}
 }
 
 // Finish TAP operations.
-func (tape *TapeContext) finishTAPfunc() error {
+func (tape *Context) finishTAPfunc() error {
 	switch tape.mode {
 	case funcRead:
 		// Make sure we read all of record.
@@ -812,7 +787,7 @@ func (tape *TapeContext) finishTAPfunc() error {
 }
 
 // Finish TAP operations.
-func (tape *TapeContext) finishAWSfunc() error {
+func (tape *Context) finishAWSfunc() error {
 	switch tape.mode {
 	case funcRead:
 		// Make sure we read all of record.
@@ -892,7 +867,7 @@ func (tape *TapeContext) finishAWSfunc() error {
 		}
 
 		lrecl := (uint32(hdr[1]) << 8) | uint32(hdr[0])
-		//fmt.Printf("Header %02x %02x\n", hdr[4], hdr[5])
+		// fmt.Printf("Header %02x %02x\n", hdr[4], hdr[5])
 		if lrecl != tape.lrecl {
 			return errTapeFORMAT
 		}
@@ -906,7 +881,7 @@ func (tape *TapeContext) finishAWSfunc() error {
 }
 
 // Read next frame from tape buffer.
-func (tape *TapeContext) readNextFrame() (byte, error) {
+func (tape *Context) readNextFrame() (byte, error) {
 	if tape.file == nil {
 		return 0, errors.New("tape not attached")
 	}
@@ -925,7 +900,7 @@ func (tape *TapeContext) readNextFrame() (byte, error) {
 }
 
 // Peek at next frame from tape buffer.
-func (tape *TapeContext) peekNextFrame() (byte, error) {
+func (tape *Context) peekNextFrame() (byte, error) {
 	if tape.file == nil {
 		return 0, errors.New("tape not attached")
 	}
@@ -943,7 +918,7 @@ func (tape *TapeContext) peekNextFrame() (byte, error) {
 }
 
 // Write character to tape.
-func (tape *TapeContext) writeNextFrame(data byte) error {
+func (tape *Context) writeNextFrame(data byte) error {
 	if tape.file == nil {
 		return errors.New("tape not attached")
 	}
@@ -980,7 +955,7 @@ func (tape *TapeContext) writeNextFrame(data byte) error {
 }
 
 // Write to previous tape byte.
-func (tape *TapeContext) writePrevByte(data byte) error {
+func (tape *Context) writePrevByte(data byte) error {
 	if tape.file == nil {
 		return errors.New("tape not attached")
 	}
@@ -1006,7 +981,7 @@ func (tape *TapeContext) writePrevByte(data byte) error {
 }
 
 // Flush a buffer and read in new one if needed.
-func (tape *TapeContext) flushBuffer() error {
+func (tape *Context) flushBuffer() error {
 	if tape.bufPos < tape.bufLen {
 		return nil
 	}
@@ -1029,7 +1004,7 @@ func (tape *TapeContext) flushBuffer() error {
 }
 
 // Read in buffer.
-func (tape *TapeContext) readBuffer() error {
+func (tape *Context) readBuffer() error {
 	if tape.bufPos < tape.bufLen {
 		return nil
 	}
@@ -1046,7 +1021,7 @@ func (tape *TapeContext) readBuffer() error {
 }
 
 // Read previous frame from tape.
-func (tape *TapeContext) readPrevFrame() (byte, error) {
+func (tape *Context) readPrevFrame() (byte, error) {
 	if tape.file == nil {
 		return 0, errors.New("tape not attached")
 	}

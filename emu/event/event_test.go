@@ -110,6 +110,11 @@ func (d device) Show(_ []dev.CmdOption) error {
 func (d device) Shutdown() {
 }
 
+// Set debug options.
+func (d device) Debug(_ string) error {
+	return nil
+}
+
 // Initialize for each test.
 func initTest() {
 	stepCount = 0

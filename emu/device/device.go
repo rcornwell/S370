@@ -39,6 +39,7 @@ type Device interface {
 	Set([]CmdOption) error    // Do set command.
 	Show([]CmdOption) error   // Do show command.
 	Shutdown()                // Shutdown device, close any open files.
+	Debug(string) error       // Enable debug option.
 }
 
 // Channel types.

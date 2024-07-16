@@ -46,7 +46,7 @@ var (
 	deck2 string
 	deck3 string
 	deck4 string
-	ctx   *CardContext
+	ctx   *Context
 )
 
 func numToHol(v int) uint16 {

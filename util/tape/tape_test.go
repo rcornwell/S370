@@ -38,7 +38,7 @@ var (
 	fileE11  string
 	fileP7B  string
 	fileTemp string
-	ctx      *TapeContext
+	ctx      *Context
 )
 
 // Write out tape block.

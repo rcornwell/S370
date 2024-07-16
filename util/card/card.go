@@ -70,7 +70,7 @@ type Card struct {
 	Image [80]uint16 // Image of individual cards
 }
 
-type CardContext struct {
+type Context struct {
 	file        *os.File // file handle
 	mode        int      // Current input/output mode
 	hopperCards int      // Number of cards in hopper
@@ -87,6 +87,31 @@ type cardBuffer struct {
 }
 
 var emptyCard Card
+
+const (
+	// Debug options.
+	debugCmd = 1 << iota
+	debugData
+	debugDetail
+)
+
+var debugOption = map[string]int{
+	"CMD":    debugCmd,
+	"DATA":   debugData,
+	"DETAIL": debugDetail,
+}
+
+var debugMsk int
+
+// Enable debug options.
+func Debug(opt string) error {
+	flag, ok := debugOption[opt]
+	if !ok {
+		return errors.New("tape debug option invalid: " + opt)
+	}
+	debugMsk |= flag
+	return nil
+}
 
 /* Generic Card read/punch routines for simulators.
 
@@ -135,7 +160,7 @@ var formats = map[string]int{
 	"CBN":    ModeCBN,
 }
 
-func (ctx *CardContext) SetFormat(fmt string) bool {
+func (ctx *Context) SetFormat(fmt string) bool {
 	newMode, ok := formats[strings.ToUpper(fmt)]
 	if !ok {
 		ctx.mode = ModeAuto
@@ -146,12 +171,12 @@ func (ctx *CardContext) SetFormat(fmt string) bool {
 }
 
 // Return if attached to a file.
-func (ctx *CardContext) Attached() bool {
+func (ctx *Context) Attached() bool {
 	return ctx.attached
 }
 
 // Attach a context to a file.
-func (ctx *CardContext) Attach(fileName string, punch bool, eof bool) error {
+func (ctx *Context) Attach(fileName string, punch bool, eof bool) error {
 	var err error
 
 	ctx.file = nil
@@ -176,7 +201,7 @@ func (ctx *CardContext) Attach(fileName string, punch bool, eof bool) error {
 }
 
 // Detach from file.
-func (ctx *CardContext) Detach() error {
+func (ctx *Context) Detach() error {
 	if ctx.file != nil {
 		ctx.file.Close()
 		ctx.file = nil
@@ -187,15 +212,15 @@ func (ctx *CardContext) Detach() error {
 	return nil
 }
 
-func (ctx CardContext) HopperSize() int {
+func (ctx Context) HopperSize() int {
 	return ctx.hopperCards - ctx.hopperPos
 }
 
-func (ctx CardContext) StackSize() int {
+func (ctx Context) StackSize() int {
 	return ctx.hopperCards
 }
 
-func (ctx *CardContext) CardEOF() bool {
+func (ctx *Context) CardEOF() bool {
 	if ctx.hopperCards == 0 || ctx.hopperPos >= ctx.hopperCards {
 		return true
 	}
@@ -203,7 +228,7 @@ func (ctx *CardContext) CardEOF() bool {
 	return (c.Image[0] & flagEOF) != 0
 }
 
-func (ctx *CardContext) FileName() string {
+func (ctx *Context) FileName() string {
 	if ctx.file == nil {
 		return ""
 	}
@@ -211,13 +236,13 @@ func (ctx *CardContext) FileName() string {
 }
 
 // Set end of file flag on last card in deck.
-func (ctx *CardContext) SetEOF() {
+func (ctx *Context) SetEOF() {
 	if ctx.hopperCards != 0 {
 		ctx.deck[ctx.hopperCards-1].Image[0] |= flagEOF
 	}
 }
 
-func (ctx *CardContext) ReadCard() (Card, int) {
+func (ctx *Context) ReadCard() (Card, int) {
 	// fmt.Println("Read new card")
 	if ctx.eofPending {
 		ctx.eofPending = false
@@ -274,7 +299,7 @@ func cmpCard(buf *cardBuffer, s string) bool {
 // Check output type, if auto or text, try and convert record to bcd first
 // If failed and text report error and dump what we have
 // Else if binary or not convertable, dump as image.
-func (ctx *CardContext) PunchCard(img Card) int {
+func (ctx *Context) PunchCard(img Card) int {
 	mode := ctx.mode
 
 	// Fix mode if in auto mode
@@ -416,13 +441,13 @@ func (ctx *CardContext) PunchCard(img Card) int {
 }
 
 // Empty hopper of cards.
-func (ctx *CardContext) EmptyDeck() {
+func (ctx *Context) EmptyDeck() {
 	ctx.deck = ctx.deck[0:0]
 	ctx.hopperPos = 0
 	ctx.hopperCards = 0
 }
 
-func (ctx *CardContext) BlankDeck(n int) {
+func (ctx *Context) BlankDeck(n int) {
 	var c Card
 	for i := range 80 {
 		c.Image[i] = 0
@@ -433,19 +458,19 @@ func (ctx *CardContext) BlankDeck(n int) {
 	}
 }
 
-func (ctx *CardContext) SetTable(table int) {
+func (ctx *Context) SetTable(table int) {
 	ctx.table = table
 }
 
-func NewCardContext(mode int) *CardContext {
-	return &CardContext{
+func NewCardContext(mode int) *Context {
+	return &Context{
 		mode:  mode,
 		table: Type029,
 	}
 }
 
 // Read file into hopper.
-func (ctx *CardContext) readDeck(fileName string) error {
+func (ctx *Context) readDeck(fileName string) error {
 	var buffer cardBuffer
 	eof := false
 	buffer.len = 0
@@ -488,7 +513,7 @@ func (ctx *CardContext) readDeck(fileName string) error {
 }
 
 // Convert head of buffer to a card image.
-func (ctx *CardContext) parseCard(buf *cardBuffer) {
+func (ctx *Context) parseCard(buf *cardBuffer) {
 	var ch byte
 	c := Card{}
 	var p int

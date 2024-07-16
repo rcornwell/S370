@@ -216,7 +216,7 @@ func registerPort(port string, group string) *portMap {
 	// If it does not exist, find port with no group.
 	pm, ok := ports[port] // See if exists.
 	if !ok {
-		slog.Info("Registering port: " + port + " group: " + group)
+		slog.Debug("Registering port: " + port + " group: " + group)
 		newmap := &portMap{port: port, group: group}
 		ports[port] = append(ports[port], newmap)
 		if group != "" {

@@ -38,55 +38,49 @@ type stepInfo struct {
 }
 
 type cpuState struct {
-	PC       uint32      // Program counter
-	iPC      uint32      // Initial PC for instruction
-	regs     [16]uint32  // Internal registers
-	fpregs   [8]uint64   // Floating point registers
-	cregs    [16]uint32  // Control registers /67 or 370 only
-	sysMask  uint16      // Channel interrupt enable
-	stKey    uint8       // Current storage key
-	ecMode   bool        // Current PSW is EC Mode
-	cc       uint8       // Current CC code
-	ilc      uint8       // Current instruction length
-	progMask uint8       // Program mask
-	flags    uint8       // System flags
-	pageEnb  bool        // Paging enabled
-	tlb      [256]uint32 // Translation Lookaside Buffer
+	PC       uint32     // Program counter
+	iPC      uint32     // Initial PC for instruction
+	regs     [16]uint32 // Internal registers
+	fpregs   [8]uint64  // Floating point registers
+	cregs    [16]uint32 // Control registers /67 or 370 only
+	sysMask  uint16     // Channel interrupt enable
+	stKey    uint8      // Current storage key
+	ecMode   bool       // Current PSW is EC Mode
+	cc       uint8      // Current CC code
+	ilc      uint8      // Current instruction length
+	progMask uint8      // Program mask
+	flags    uint8      // System flags
+	pageEnb  bool       // Paging enabled
 
-	//  uint8        ext_en;                    // Enable external and timer IRQ's
-	//  uint8        irq_en;                    // Enable channel IRQ's
-	//  uint8        tod_en;                    // Enable TOD compare irq's
-	//  uint8        intval_en;                 // Enable interval irq's
+	tlb         [256]uint32 // Translation Lookaside Buffer
+	pageShift   uint32      // Amount to shift for page
+	pageMask    uint32      // Mask of bits in page address
+	pageIndex   uint32      // PTE index mask
+	segShift    uint32      // Amount to shift for segment
+	segMask     uint32      // Mask bits for segment
+	segLen      uint32      // Length of segment table
+	segAddr     uint32      // Address of segment table
+	pteLenShift uint32      // Shift to Check if out of page table
+	pteAvail    uint32      // Mask of available bit in PTE
+	pteMBZ      uint32      // Bits that must be zero in PTE
+	pteShift    uint32      // Bits to shift a PTE entry
 
-	//  uint16       irqcode;                   // Interrupt code
+	perEnb    bool   // Enable PER tracing
+	perRegMod uint32 // Module modification mask
+	perCode   uint16 // Code for PER
+	perAddr   uint32 // Address of last reference
+	perBranch bool   // Trap on successful branch
+	perFetch  bool   // Trap Fetch of instructions
+	perStore  bool   // Trap on storage modify
+	perReg    bool   // Trap on register modify
 
-	pageShift uint32 // Amount to shift for page
-	pageMask  uint32 // Mask of bits in page address
-	pageIndex uint32 // PTE index mask
-	segShift  uint32 // Amount to shift for segment
-	segMask   uint32 // Mask bits for segment
-	segLen    uint32 // Length of segment table
-
-	segAddr     uint32    // Address of segment table
-	pteLenShift uint32    // Shift to Check if out of page table
-	pteAvail    uint32    // Mask of available bit in PTE
-	pteMBZ      uint32    // Bits that must be zero in PTE
-	pteShift    uint32    // Bits to shift a PTE entry
-	perEnb      bool      // Enable PER tracing
-	perRegMod   uint32    // Module modification mask
-	perCode     uint16    // Code for PER
-	perAddr     uint32    // Address of last reference
-	perBranch   bool      // Trap on successful branch
-	perFetch    bool      // Trap Fetch of instructions
-	perStore    bool      // Trap on storage modify
-	perReg      bool      // Trap on register modify
-	irqEnb      bool      // Interrupts enabled
-	extEnb      bool      // External interrupts enabled
-	extIrq      bool      // External interrupt pending
-	intIrq      bool      // Interval timer interrupt
-	intEnb      bool      // Interval timer enable
-	todClock    [2]uint32 // Current Time of Day Clock
-	todSet      bool      // TOD set to correct time
+	irqEnb   bool      // Interrupts enabled
+	extEnb   bool      // External interrupts enabled
+	extIrq   bool      // External interrupt pending
+	intIrq   bool      // Interval timer interrupt
+	intEnb   bool      // Interval timer enable
+	todClock [2]uint32 // Current Time of Day Clock
+	todSet   bool      // TOD set to correct time
 
 	//	clk_en        bool      // Clock interrupt enable
 	todEnb    bool      // TOD enable
@@ -200,3 +194,22 @@ const (
 	OMASKL  uint64 = 0xffffffff80000000 // Mask of upper half plus sign used in CVB
 	RMASKL  uint64 = 0x0000000080000000 // Long rounding bit
 )
+
+const (
+	// Debug options.
+	debugCmd = 1 << iota
+	debugInst
+	debugData
+	debugDetail
+	debugIO
+)
+
+var debugOption = map[string]int{
+	"CMD":    debugCmd,  // Debug I/O commands.
+	"INST":   debugInst, // Debug instruction execution.
+	"DATA":   debugData,
+	"DETAIL": debugDetail,
+	"IO":     debugIO,
+}
+
+var debugMsk int

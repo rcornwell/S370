@@ -37,6 +37,7 @@ import (
 	mem "github.com/rcornwell/S370/emu/memory"
 	op "github.com/rcornwell/S370/emu/opcodemap"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
+	"github.com/rcornwell/S370/util/debug"
 )
 
 /*
@@ -177,6 +178,16 @@ func PostExtIrq() {
 // Shutdown the CPU, request channel to shutdown all devices.
 func Shutdown() {
 	ch.Shutdown()
+}
+
+// Enable debug options.
+func Debug(opt string) error {
+	flag, ok := debugOption[opt]
+	if !ok {
+		return errors.New("CPU debug option invalid: " + opt)
+	}
+	debugMsk |= flag
+	return nil
 }
 
 // Return CPU PC.
@@ -320,10 +331,10 @@ func (cpu *cpuState) fetch() (int, bool) {
 	step.R1 = (step.reg >> 4) & 0xf
 	step.R2 = step.reg & 0xf
 
-	// brop := (step.opcode == op.OpBC || step.opcode == op.OpBCR)
-	// if cpu.iPC == cpu.PC && brop && (step.reg&0xf0) == 0xf0 {
-	// 	return memCycle, false
-	// }
+	//brop := (step.opcode == op.OpBC || step.opcode == op.OpBCR)
+	//if cpu.iPC == cpu.PC && brop && (step.reg&0xf0) == 0xf0 {
+	//	return memCycle, false
+	//}
 	cpu.perRegMod = 0
 	cpu.perCode = 0
 	cpu.perAddr = cpu.PC
@@ -349,22 +360,13 @@ func (cpu *cpuState) fetch() (int, bool) {
 				return memCycle, true
 			}
 			step.address1 = (word >> 16)
-			inst[2] = byte((word >> 24) & 0xff)
-			inst[3] = byte((word >> 16) & 0xff)
 		} else {
 			step.address1 = word
-			inst[2] = byte(word >> 8)
-			inst[3] = byte(word & 0xff)
 		}
-		// if cpu.iPC != 0x0002026 {
-		// 	fmt.Printf("%02x%02x ", inst[2], inst[3])
-		// }
 		step.address1 &= 0xffff
+		inst[2] = byte(step.address1 >> 8)
+		inst[3] = byte(step.address1 & 0xff)
 		cpu.PC += 2
-		// } else {
-		// 	if cpu.iPC != 0x0002026 {
-		// 		fmt.Printf("     ")
-		//	}
 	}
 
 	// If SS
@@ -378,29 +380,33 @@ func (cpu *cpuState) fetch() (int, bool) {
 				return memCycle, true
 			}
 			step.address2 = (word >> 16)
-			inst[4] = byte(word >> 8)
-			inst[5] = byte(word & 0xff)
 		} else {
 			step.address2 = word
-			inst[4] = byte(word >> 8)
-			inst[5] = byte(word & 0xff)
 		}
-		// if cpu.iPC != 0x0002026 {
-		// 	fmt.Printf("%02x%02x ", inst[4], inst[5])
-		// }
 		step.address2 &= 0xffff
+		inst[4] = byte(step.address2 >> 8)
+		inst[5] = byte(step.address2 & 0xff)
 		cpu.PC += 2
-		// } else {
-		// 	if cpu.iPC != 0x0002026 {
-		// 		fmt.Printf("     ")
-		// 	}
 	}
 
 	// if cpu.iPC != 0x0002026 {
-	symbolic, _ := dis.Disasemble(inst)
-	symbolic += " "
-	// 	fmt.Printf("   %s\n", symbolic)
-	//}
+	if (debugMsk & debugInst) != 0 {
+		str := fmt.Sprintf("%08x %02x %02x ", cpu.iPC, uint32(step.opcode), uint32(step.reg))
+		if cpu.ilc > 1 {
+			str += fmt.Sprintf("%02x%02x ", inst[2], inst[3])
+		} else {
+			str += "     "
+		}
+		if cpu.ilc > 2 {
+			str += fmt.Sprintf("%02x%02x ", inst[4], inst[5])
+		} else {
+			str += "     "
+		}
+		symbolic, _ := dis.Disasemble(inst)
+		str += symbolic
+		debug.Debugf("CPU", debugMsk, debugInst, str)
+	}
+
 	err = cpu.execute(&step)
 	if err != 0 {
 		cpu.suppress(oPPSW, err)
@@ -624,7 +630,7 @@ func (cpu *cpuState) lpsw(src1, src2 uint32) {
 	cpu.stKey = uint8((src1 >> 16) & 0xf0)
 	cpu.flags = uint8((src1 >> 16) & 0x7)
 	cpu.PC = src2 & AMASK
-	//	fmt.Printf("LPSW %08x: %08x %08x\n", cpu.iPC, src1, src2)
+	debug.Debugf("CPU", debugMsk, debugDetail, "LPSW %08x: %08x %08x", cpu.iPC, src1, src2)
 	//	sim_debug(DEBUG_INST, &cpu_dev, "PSW=%08x %08x  ", src1, src2)
 	if cpu.ecMode && ((src1&0xb800c0ff) != 0 || (src2&0xff000000) != 0) {
 		cpu.suppress(oPPSW, ircSpec)
@@ -698,7 +704,7 @@ func (cpu *cpuState) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 		word1 |= uint32(extEnable) << 24
 	}
 
-	//fmt.Printf("Store PSW: %08x %04x %08x %08x\n", vector, irqcode, word1, word2)
+	debug.Debugf("CPU", debugMsk, debugDetail, "Store PSW: %08x %04x %08x %08x", vector, irqcode, word1, word2)
 	memCycle++
 	mem.SetMemory(vector, word1)
 	memCycle++
@@ -1166,7 +1172,7 @@ func (cpu *cpuState) writeHalf(virtAddr, data uint32) uint16 {
 
 	offset := virtAddr & 3
 
-	// Validate address			cy = dec_divstep(l int, s1 int, s2 int, v1 *[32]uint8, v2 *[32]uint8) uint8
+	// Validate address
 	physAddr, pageErr := cpu.transAddr(virtAddr)
 	if pageErr != 0 {
 		return pageErr
@@ -1320,110 +1326,3 @@ func setIPLDev(devNum uint16, _ string, _ []config.Option) error {
 	IPLDev = devNum
 	return nil
 }
-
-//
-// /* Reset */
-
-// t_stat
-// cpu_reset (DEVICE *dptr)
-// {
-//     int     i;
-
-//     /* Make sure devices are mapped correctly */
-//     chan_set_devs();
-//     sim_vm_fprint_stopped = &cpu_fprint_stopped;
-//     /* Create memory array if it does not exist. */%s\n
-//     if (M == NULL) {                        /* first time init? */
-//         sim_brk_types = sim_brk_dflt = SWMASK ('E');
-//         M = (uint32 *) calloc (((uint32) MEMSIZE) >> 2, sizeof (uint32));
-//         if (M == NULL)
-//             return SCPE_MEM;
-//     }
-//     /* Set up channels */
-//     chan_set_devs();
-
-//     sysmsk = irqcode = irqaddr = loading = 0;
-//     st_key = cc = pmsk = ec_mode = interval_irq = flags = 0;
-//     page_en = irq_en = ext_en = per_en = 0;
-//     clk_state = CLOCK_UNSET;
-//     for (i = 0; i < 256; i++)
-//        tlb[i] = 0;
-//     for (i = 0; i < 4096; i++)
-//        key[i] = 0;
-//     for (i = 0; i < 16; i++)
-//        cregs[i] = 0;
-//     clk_cmp[0] = clk_cmp[1] = 0xffffffff;
-//     if (Q370) {
-//         if (clk_state == CLOCK_UNSET) {
-//             /* Set TOD to current time */
-//             time_t seconds = sim_get_time(NULL);
-//             t_uint64  lsec = (t_uint64)seconds;
-//             /* IBM measures time from 1900, Unix starts at 1970 */
-//             /* Add in number of years from 1900 to 1970 + 17 leap days */
-//             lsec += ((70 * 365) + 17) * 86400ULL;
-//             lsec *= 1000000ULL;
-//             lsec <<= 12;
-//             tod_clock[0] = (uint32)(lsec >> 32);
-//             tod_clock[1] = (uint32)(lsec & FMASK);
-//             clk_state = CLOCK_SET;
-//         }
-//         cregs[0]  = 0x000000e0;
-//         cregs[2]  = 0xffffffff;
-//         cregs[14] = 0xc2000000;
-//         cregs[15] = 512;
-//     }
-
-//     if (cpu_unit[0].flags & (FEAT_370|FEAT_TIMER)) {
-//        sim_rtcn_init_unit (&cpu_unit[0], 1000, TMR_RTC);
-//        sim_activate(&cpu_unit[0], 100);
-//     }
-//     idle_stop_tm0 = 0;
-//     return SCPE_OK;
-// }
-
-// /* RSV: Set CPU IDLESTOP=<val>
-//  *      <val>=number of seconds.
-//  *
-//  *      Sets max time in secounds CPU is IDLE but waiting for interrupt
-//  *      from device. if <val> not zero, simulated CPU will wait for this wallclock
-//  *      number of seconds, then stop. This allows to script a BOOT command and the
-//  *      continue automatically when IPL has finished. Set to zero to disable.
-//  */
-
-// t_stat cpu_set_idle_stop (UNIT *uptr, int32 val, CONST char *cptr, void *desc)
-// {
-//     int32               n;
-//     t_stat              r;
-
-//     if (cptr == NULL) {
-//         return SCPE_ARG;
-//     }
-//     n = (int32) get_uint(cptr, 10, 60, &r);
-//     if (r != SCPE_OK) return SCPE_ARG;
-//     idle_stop_msec = n * 1000;
-//     idle_stop_tm0 = 0;
-//     return SCPE_OK;
-// }
-
-// t_bool
-// cpu_fprint_stopped (FILE *st, t_stat v)
-// {
-//     if (ec_mode) {
-//         if (Q370)
-//             fprintf(st, " PSW=%08x %08x\n",
-//                (((uint32)page_en) << 26) | ((per_en) ? 1<<30:0) | ((irq_en) ? 1<<25:0) |
-//                ((ext_en) ? 1<<24:0) | 0x80000 | (((uint32)st_key) << 16) |
-//                (((uint32)flags) << 16) | (((uint32)cc) << 12) | (((uint32)pmsk) << 8), PC);
-//         else
-//             fprintf(st, " PSW=%08x %08x\n",
-//                (((uint32)page_en) << 26) | ((irq_en) ? 1<<25:0) | ((ext_en) ? 1<<24:0) |
-//                (((uint32)st_key) << 16) | (((uint32)flags) << 16) |
-//                (((uint32)ilc) << 14) | (((uint32)cc) << 12) | (((uint32)pmsk) << 8), PC);
-//     } else {
-//         fprintf(st, " PSW=%08x %08x\n",
-//             ((uint32)(ext_en) << 24) | (((uint32)sysmsk & 0xfe00) << 16) |
-//             (((uint32)st_key) << 16) | (((uint32)flags) << 16) | ((uint32)irqcode),
-//             (((uint32)ilc) << 30) | (((uint32)cc) << 28) | (((uint32)pmsk) << 24) | PC);
-//     }
-//     return FALSE;
-// } */

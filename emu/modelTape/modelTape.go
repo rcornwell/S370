@@ -33,29 +33,44 @@ import (
 	dev "github.com/rcornwell/S370/emu/device"
 	event "github.com/rcornwell/S370/emu/event"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
+	debug "github.com/rcornwell/S370/util/debug"
 	"github.com/rcornwell/S370/util/tape"
 	"github.com/rcornwell/S370/util/xlat"
 )
 
+const (
+	// Debug options.
+	debugCmd = 1 << iota
+	debugData
+	debugDetail
+)
+
+var debugOption = map[string]int{
+	"CMD":    debugCmd,
+	"DATA":   debugData,
+	"DETAIL": debugDetail,
+}
+
 type Model2400ctx struct {
-	addr      uint16            // Current device address
-	halt      bool              // Halt current operation
-	busy      bool              // Tape is busy
-	rewind    bool              // Tape is rewinding
-	unload    bool              // Tape will unload after rewind
-	density   int               // Tape density setting
-	odd       bool              // Odd parity
-	trans     bool              // Translator turned on
-	conv      bool              // Convert to byte
-	cc        int               // Current character for data converter
-	hold      uint8             // Hold point for current character.
-	seven     bool              // 7 track tape.
-	skip      bool              // Skip to EOR
-	mark      bool              // Last read detected a mark.
-	frameTime int               // Time for each frame based on density setting
-	sense     [6]uint8          // Sense data
-	senseLen  int               // Number of sense bytes
-	context   *tape.TapeContext // Context for tape drive
+	addr      uint16        // Current device address
+	halt      bool          // Halt current operation
+	busy      bool          // Tape is busy
+	rewind    bool          // Tape is rewinding
+	unload    bool          // Tape will unload after rewind
+	density   int           // Tape density setting
+	odd       bool          // Odd parity
+	trans     bool          // Translator turned on
+	conv      bool          // Convert to byte
+	cc        int           // Current character for data converter
+	hold      uint8         // Hold point for current character.
+	seven     bool          // 7 track tape.
+	skip      bool          // Skip to EOR
+	mark      bool          // Last read detected a mark.
+	frameTime int           // Time for each frame based on density setting
+	sense     [6]uint8      // Sense data
+	senseLen  int           // Number of sense bytes
+	context   *tape.Context // Context for tape drive
+	debugMsk  int           // Debug options mask
 }
 
 // Translate BCD to EBCIDC
@@ -125,7 +140,6 @@ func (device *Model2400ctx) StartIO() uint8 {
 
 // Start the card punch to punch one card.
 func (device *Model2400ctx) StartCmd(cmd uint8) uint8 {
-
 	// If busy return busy status right away
 	if device.busy {
 		return dev.CStatusBusy
@@ -169,6 +183,7 @@ func (device *Model2400ctx) StartCmd(cmd uint8) uint8 {
 			return dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck
 		}
 		device.busy = true
+		device.mark = false
 		event.AddEvent(device, device.callback, 100, int(cmd))
 		return dev.CStatusChnEnd
 
@@ -303,6 +318,16 @@ func (device *Model2400ctx) Shutdown() {
 	_ = device.context.Detach()
 }
 
+// Enable debug options.
+func (device *Model2400ctx) Debug(opt string) error {
+	flag, ok := debugOption[opt]
+	if !ok {
+		return errors.New("2400 debug option invalid: " + opt)
+	}
+	device.debugMsk |= flag
+	return nil
+}
+
 // Callback for reqind commands.
 func (device *Model2400ctx) callbackRewind(cmd int) {
 	if device.context.RewindFrames(10000) {
@@ -320,184 +345,201 @@ func (device *Model2400ctx) callbackRewind(cmd int) {
 	}
 }
 
+// Read a frame of data.
+func (device *Model2400ctx) readFrame(cmd int) {
+	if device.halt {
+		event.AddEvent(device, device.callbackData, 100, cmd)
+		device.skip = true
+		return
+	}
+	data, err := device.context.ReadFrame()
+	if errors.Is(err, tape.TapeEOR) {
+		//		fmt.Println("Tape EOR")
+		event.AddEvent(device, device.callbackFinish, 1000, cmd)
+		return
+	}
+
+	// Skip until end of record.
+	if device.skip {
+		event.AddEvent(device, device.callbackData, 100, cmd)
+		return
+	}
+
+	// Set up call to finish
+	if device.seven {
+		mode := uint8(0o100)
+		if device.odd {
+			mode = 0
+		}
+		if (xlat.ParityTable[data&0o77] ^ (data & 0o100) ^ mode) == 0 {
+			device.sense[0] |= dev.SenseDATCHK
+			device.sense[2] |= senseVRC
+		}
+		data &= 0o77
+		if device.trans {
+			data = bcdToEbcdic[data]
+		}
+
+		// Data converter does not work in read backwards.
+		if device.conv && cmd == int(dev.CmdRead) {
+			hold := data
+			switch device.cc {
+			case 0:
+				device.cc = 1
+			case 1:
+				data = (device.hold << 2) | ((data >> 4) & 0o3)
+				device.cc = 2
+			case 2:
+				data = ((device.hold & 0o17) << 4) | ((data >> 4) & 0o17)
+				device.cc = 3
+			case 3:
+				data |= (device.hold & 0o3) << 6
+				device.cc = 0
+				hold = 0
+			}
+			device.hold = hold
+			// For first character nothing to send to CPU
+			if device.cc == 0 {
+				event.AddEvent(device, device.callbackData, 100, cmd)
+				return
+			}
+		}
+	}
+
+	// Send data to CPU.
+	if ch.ChanWriteByte(device.addr, data) {
+		//			fmt.Println("Tape stop I/O")
+		device.skip = true
+	}
+
+	event.AddEvent(device, device.callbackData, 100, cmd)
+}
+
+// Write a frame.
+func (device *Model2400ctx) writeFrame(cmd int) {
+	// Only can occur if 7 track converter enabled.
+	// Send out last data value.
+	if device.cc == 3 {
+		err := device.context.WriteFrame(device.hold)
+		device.cc = 0
+		if err != nil {
+			slog.Error(err.Error())
+			event.AddEvent(device, device.callbackFinish, 1000, cmd)
+		} else {
+			event.AddEvent(device, device.callbackData, 100, cmd)
+		}
+		return
+	}
+
+	if device.halt {
+		event.AddEvent(device, device.callbackFinish, 100, cmd)
+		return
+	}
+
+	// Grab next data byte from channel.
+	data, end := ch.ChanReadByte(device.addr)
+
+	if end {
+		event.AddEvent(device, device.callbackFinish, 1000, cmd)
+		return
+	}
+	// Handle converter
+	if device.seven {
+		mode := uint8(0o100)
+		if device.odd {
+			mode = 0
+		}
+
+		if device.trans {
+			data |= (data & 0xf) | ((data & 0x30) ^ 0x30)
+		}
+
+		if device.conv {
+			hold := data
+			switch device.cc {
+			case 0:
+				data >>= 2
+				device.cc = 1
+			case 1:
+				data = ((device.hold & 0o3) << 4) | ((data >> 4) & 0o17)
+				device.cc = 2
+			case 2:
+				data = ((device.hold & 0o17) << 2) | ((data >> 6) & 0o3)
+				device.cc = 3
+				hold = data & 0o77
+				hold = xlat.ParityTable[hold&0o77] ^ mode
+			case 3:
+			}
+			device.hold = hold
+		}
+		data = xlat.ParityTable[data&0o77] ^ mode
+	}
+
+	err := device.context.WriteFrame(data)
+	if err != nil {
+		//		fmt.Println(err)
+		event.AddEvent(device, device.callbackFinish, 1000, cmd)
+		return
+	}
+	// Indicate we wrote at least one character.
+	device.sense[0] &= ^senseZero
+	event.AddEvent(device, device.callbackData, 100, cmd)
+}
+
 // Callback to handle data transfers.
 func (device *Model2400ctx) callbackData(cmd int) {
 	switch uint8(cmd) {
 	case dev.CmdRead, dev.CmdRDBWD:
-		if device.halt {
-			event.AddEvent(device, device.callbackData, 100, cmd)
-			device.skip = true
-			return
-		}
-		data, err := device.context.ReadFrame()
-		if errors.Is(err, tape.TapeEOR) {
-			//		fmt.Println("Tape EOR")
-			event.AddEvent(device, device.callbackFinish, 1000, cmd)
-			return
-		}
+		device.readFrame(cmd)
+		return
 
-		// Skip until end of record.
-		if device.skip {
-			event.AddEvent(device, device.callbackData, 100, cmd)
-			return
-		}
-		// Set up call to finish
-		if device.seven {
-			mode := uint8(0o100)
-			if device.odd {
-				mode = 0
-			}
-			if (xlat.ParityTable[data&0o77] ^ (data & 0o100) ^ mode) == 0 {
-				device.sense[0] |= dev.SenseDATCHK
-				device.sense[2] |= senseVRC
-			}
-			data &= 0o77
-			if device.trans {
-				data = bcdToEbcdic[data]
-			}
-
-			// Data converter does not work in read backwards.
-			if device.conv && cmd == int(dev.CmdRead) {
-				hold := data
-				switch device.cc {
-				case 0:
-					device.cc = 1
-				case 1:
-					data = (device.hold << 2) | ((data >> 4) & 0o3)
-					device.cc = 2
-				case 2:
-					data = ((device.hold & 0o17) << 4) | ((data >> 4) & 0o17)
-					device.cc = 3
-				case 3:
-					data |= (device.hold & 0o3) << 6
-					device.cc = 0
-					hold = 0
-				}
-				device.hold = hold
-				// For first character nothing to send to CPU
-				if device.cc == 0 {
-					event.AddEvent(device, device.callbackData, 100, cmd)
-					return
-				}
-			}
-		}
-
-		// Send data to CPU.
-		if ch.ChanWriteByte(device.addr, data) {
-			//			fmt.Println("Tape stop I/O")
-			device.skip = true
-		}
-
-		// Write command
 	case dev.CmdWrite:
-		// Only can occur if 7 track converter enabled.
-		// Send out last data value.
-		if device.cc == 3 {
-			err := device.context.WriteFrame(device.hold)
-			device.cc = 0
+		device.writeFrame(cmd)
+		return
+
+	case cmdFSF, cmdFSR, cmdBSF, cmdBSR:
+		data, err := device.context.ReadFrame()
+		debug.DebugDevf(device.addr, device.debugMsk, debugCmd, "space %02x %02x", cmd, data)
+		if !errors.Is(err, tape.TapeEOR) {
 			if err != nil {
-				slog.Error(err.Error())
+				slog.Debug(err.Error())
 				event.AddEvent(device, device.callbackFinish, 1000, cmd)
 			} else {
 				event.AddEvent(device, device.callbackData, 100, cmd)
 			}
 			return
 		}
-
-		if device.halt {
-			event.AddEvent(device, device.callbackFinish, 100, cmd)
-			return
-		}
-
-		// Grab next data byte from channel.
-		data, end := ch.ChanReadByte(device.addr)
-
-		if end {
+		debug.DebugDevf(device.addr, device.debugMsk, debugCmd, "Space EOR %02x", cmd)
+		// Search file, finish current read and start another.
+		if cmd == int(cmdBSR) || cmd == int(cmdFSR) {
 			event.AddEvent(device, device.callbackFinish, 1000, cmd)
 			return
 		}
-		// Handle converter
-		if device.seven {
-			mode := uint8(0o100)
-			if device.odd {
-				mode = 0
-			}
 
-			if device.trans {
-				data |= (data & 0xf) | ((data & 0x30) ^ 0x30)
-			}
-
-			if device.conv {
-				hold := data
-				switch device.cc {
-				case 0:
-					data >>= 2
-					device.cc = 1
-				case 1:
-					data = ((device.hold & 0o3) << 4) | ((data >> 4) & 0o17)
-					device.cc = 2
-				case 2:
-					data = ((device.hold & 0o17) << 2) | ((data >> 6) & 0o3)
-					device.cc = 3
-					hold = data & 0o77
-					hold = xlat.ParityTable[hold&0o77] ^ mode
-				case 3:
-				}
-				device.hold = hold
-			}
-			data = xlat.ParityTable[data&0o77] ^ mode
-		}
-
-		err := device.context.WriteFrame(data)
-		if err != nil {
-			//		fmt.Println(err)
-			event.AddEvent(device, device.callbackFinish, 1000, cmd)
-		}
-		// Indicate we wrote at least one character.
-		device.sense[0] &= ^senseZero
-	case cmdFSF, cmdFSR, cmdBSF, cmdBSR:
-		_, err := device.context.ReadFrame()
-		if errors.Is(err, tape.TapeEOR) {
-			//		fmt.Println("BSR Mark")
-			device.mark = true
-			// Search file, finish current read and start another.
-			if cmd == int(cmdBSR) || cmd == int(cmdFSR) {
-				event.AddEvent(device, device.callbackFinish, 1000, cmd)
-				return
-			}
-
-			err = device.context.FinishRecord()
-			if err != nil {
-				fmt.Println(err)
-				event.AddEvent(device, device.callbackFinish, 1000, cmd)
-				return
-			}
-
-			device.mark = false
-			if cmd == int(cmdBSF) {
-				if device.context.TapeAtLoadPt() {
-					event.AddEvent(device, device.callbackFinish, 1000, cmd)
-					return
-				}
-				err = device.context.ReadBackStart()
-			} else {
-				err = device.context.ReadForwStart()
-			}
-
-			if errors.Is(err, tape.TapeMARK) {
-				device.mark = true
-				event.AddEvent(device, device.callbackFinish, 1000, cmd)
-				return
-			}
-		}
-
+		err = device.context.FinishRecord()
 		if err != nil {
 			fmt.Println(err)
 			event.AddEvent(device, device.callbackFinish, 1000, cmd)
 			return
 		}
-		event.AddEvent(device, device.callbackData, 500, cmd)
 
+		device.mark = false
+		if cmd == int(cmdBSF) {
+			if device.context.TapeAtLoadPt() {
+				event.AddEvent(device, device.callbackFinish, 1000, cmd)
+				return
+			}
+			err = device.context.ReadBackStart()
+		} else {
+			err = device.context.ReadForwStart()
+		}
+
+		if errors.Is(err, tape.TapeMARK) {
+			device.mark = true
+			event.AddEvent(device, device.callbackFinish, 1000, cmd)
+			return
+		}
+		event.AddEvent(device, device.callbackData, 100, cmd)
 	case cmdWTM: // Write Tape Mark
 		err := device.context.WriteMark()
 		if err != nil {
@@ -507,7 +549,7 @@ func (device *Model2400ctx) callbackData(cmd int) {
 		return
 	}
 
-	event.AddEvent(device, device.callbackData, 100, cmd)
+	// event.AddEvent(device, device.callbackData, 100, cmd)
 }
 
 // Callback to handle finish of data transfer.

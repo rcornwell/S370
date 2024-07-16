@@ -34,7 +34,6 @@ package model2540p
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	config "github.com/rcornwell/S370/config/configparser"
@@ -42,19 +41,32 @@ import (
 	event "github.com/rcornwell/S370/emu/event"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
 	card "github.com/rcornwell/S370/util/card"
+	"github.com/rcornwell/S370/util/debug"
 )
 
+const (
+	// Debug options.
+	debugCmd = 1 << iota
+	debugDetail
+)
+
+var debugOption = map[string]int{
+	"CMD":    debugCmd,
+	"DETAIL": debugDetail,
+}
+
 type Model2540Pctx struct {
-	addr       uint16            // Current device address
-	currentCol int               // Current column
-	busy       bool              // Reader busy
-	eof        bool              // EOF pendingReader
-	err        bool              // Error pending
-	ready      bool              // Have card ready to punch
-	halt       bool              // Signal halt requested
-	sense      uint8             // Current sense byte
-	image      card.Card         // Current card image
-	context    *card.CardContext // Context for card reader.
+	addr       uint16        // Current device address
+	currentCol int           // Current column
+	busy       bool          // Reader busy
+	eof        bool          // EOF pendingReader
+	err        bool          // Error pending
+	ready      bool          // Have card ready to punch
+	halt       bool          // Signal halt requested
+	sense      uint8         // Current sense byte
+	image      card.Card     // Current card image
+	context    *card.Context // Context for card reader.
+	debugMsk   int           // Debug option mask.
 }
 
 // Handle start of CCW chain.
@@ -98,6 +110,7 @@ func (device *Model2540Pctx) StartCmd(cmd uint8) uint8 {
 			event.AddEvent(device, device.callback, 100, int(cmd))
 			status = 0
 		}
+
 	case dev.CmdCTL:
 		device.sense = 0
 		status = dev.CStatusChnEnd | dev.CStatusDevEnd
@@ -112,6 +125,7 @@ func (device *Model2540Pctx) StartCmd(cmd uint8) uint8 {
 		device.sense = dev.SenseCMDREJ
 	}
 
+	debug.DebugDevf(device.addr, device.debugMsk, debugCmd, "Punch cmd: %d", cmd)
 	if device.sense != 0 {
 		status = dev.CStatusChnEnd | dev.CStatusDevEnd | dev.CStatusCheck
 	}
@@ -163,8 +177,19 @@ func (device *Model2540Pctx) Shutdown() {
 	_ = device.context.Detach()
 }
 
+// Enable debug options.
+func (device *Model2540Pctx) Debug(opt string) error {
+	flag, ok := debugOption[opt]
+	if !ok {
+		return errors.New("2540P debug option invalid: " + opt)
+	}
+	device.debugMsk |= flag
+	return nil
+}
+
 // Process card punch operations.
 func (device *Model2540Pctx) callback(cmd int) {
+	debug.DebugDevf(device.addr, device.debugMsk, debugCmd, "Punch cmd: %d", cmd)
 	if cmd == int(dev.CmdSense) {
 		device.busy = false
 		device.halt = false
@@ -175,7 +200,7 @@ func (device *Model2540Pctx) callback(cmd int) {
 
 	// If ready, punch out current card.
 	if device.ready {
-		slog.Debug("Punch card")
+		debug.DebugDevf(device.addr, device.debugMsk, debugDetail, "Punch card")
 		switch device.context.PunchCard(device.image) {
 		case card.CardOK:
 			ch.SetDevAttn(device.addr, dev.CStatusDevEnd)
@@ -202,7 +227,7 @@ func (device *Model2540Pctx) callback(cmd int) {
 		}
 	}
 	if device.ready {
-		slog.Debug("Transfer done")
+		debug.DebugDevf(device.addr, device.debugMsk, debugDetail, "Transfer done")
 		ch.ChanEnd(device.addr, dev.CStatusChnEnd)
 		event.AddEvent(device, device.callback, 1000, cmd)
 		device.ready = true

@@ -41,6 +41,7 @@ import (
 	telnet "github.com/rcornwell/S370/telnet"
 	logger "github.com/rcornwell/S370/util/logger"
 
+	_ "github.com/rcornwell/S370/config/debugconfig"
 	_ "github.com/rcornwell/S370/emu/models"
 )
 
@@ -85,15 +86,6 @@ func main() {
 		Logger.Error(err.Error())
 		os.Exit(0)
 	}
-
-	// Register default port
-	//telnet.RegisterPort("3270", "")
-	// // Create listener session
-	// telServer, err := telnet.NewServer(":3270")
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	os.Exit(1)
-	// }
 
 	masterChannel := make(chan master.Packet)
 

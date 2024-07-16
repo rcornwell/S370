@@ -54,22 +54,36 @@ const (
 	cmdAlarm    = 0x0b // Ring alarm bell
 )
 
+const (
+	// Debug options.
+	debugCmd = 1 << iota
+	debugData
+	debugDetail
+)
+
+var debugOption = map[string]int{
+	"CMD":    debugCmd,
+	"DATA":   debugData,
+	"DETAIL": debugDetail,
+}
+
 type Model1052ctx struct {
-	addr    uint16        // Current device address
-	col     int           // Current column
-	busy    bool          // Reader busy
-	halt    bool          // Signal halt requested
-	sense   uint8         // Current sense byte
-	read    bool          // Currently waiting on read
-	request bool          // Console request
-	input   bool          // Input mode
-	output  bool          // Output mode
-	cr      bool          // Output CR.
-	cancel  bool          // Cancel ^C pressed.
-	inPtr   int           // Input pointer
-	inSize  int           // Size of input pending input
-	inBuff  [512]byte     // Place to save pending input
-	telctx  *model1052tel // Pointer to telnet device.
+	addr     uint16        // Current device address
+	col      int           // Current column
+	busy     bool          // Reader busy
+	halt     bool          // Signal halt requested
+	sense    uint8         // Current sense byte
+	read     bool          // Currently waiting on read
+	request  bool          // Console request
+	input    bool          // Input mode
+	output   bool          // Output mode
+	cr       bool          // Output CR.
+	cancel   bool          // Cancel ^C pressed.
+	inPtr    int           // Input pointer
+	inSize   int           // Size of input pending input
+	inBuff   [512]byte     // Place to save pending input
+	telctx   *model1052tel // Pointer to telnet device.
+	debugMsk int           // Debug option mask.
 }
 
 type model1052tel struct {
@@ -248,6 +262,11 @@ func (device *Model1052ctx) Show(_ []dev.CmdOption) error {
 
 // Shutdown device.
 func (device *Model1052ctx) Shutdown() {
+}
+
+// Enable debug options.
+func (device *Model1052ctx) Debug(_ string) error {
+	return nil
 }
 
 // Handle channel operations.

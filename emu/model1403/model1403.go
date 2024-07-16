@@ -46,20 +46,34 @@ import (
 	"github.com/rcornwell/S370/util/xlat"
 )
 
+const (
+	// Debug options.
+	debugCmd = 1 << iota
+	debugData
+	debugDetail
+)
+
+var debugOption = map[string]int{
+	"CMD":    debugCmd,
+	"DATA":   debugData,
+	"DETAIL": debugDetail,
+}
+
 type Model1403ctx struct {
-	addr    uint16      // Current device address
-	busy    bool        // Reader busy
-	halt    bool        // Signal halt requested
-	sense   uint8       // Current sense byte
-	file    *os.File    // Printer file.
-	fcb     [100]uint16 // FCB tape.
-	lpp     int         // Lines per page
-	lineNum int         // Current line number.
-	detachk bool        // Don't return data-check
-	ch12    bool        // Channel 12 sense.
-	buffer  [140]uint8  // buffer.
-	bufPtr  int         // Pointer to where in buffer we are.
-	full    bool        // Buffer full.
+	addr     uint16      // Current device address
+	busy     bool        // Reader busy
+	halt     bool        // Signal halt requested
+	sense    uint8       // Current sense byte
+	file     *os.File    // Printer file.
+	fcb      [100]uint16 // FCB tape.
+	lpp      int         // Lines per page
+	lineNum  int         // Current line number.
+	detachk  bool        // Don't return data-check
+	ch12     bool        // Channel 12 sense.
+	buffer   [140]uint8  // buffer.
+	bufPtr   int         // Pointer to where in buffer we are.
+	full     bool        // Buffer full.
+	debugMsk int         // Debug option mask.
 }
 
 var legacy = []uint16{
@@ -203,6 +217,16 @@ func (device *Model1403ctx) Show(_ []dev.CmdOption) error {
 // Shutdown device.
 func (device *Model1403ctx) Shutdown() {
 	_ = device.Detach()
+}
+
+// Enable debug options.
+func (device *Model1403ctx) Debug(opt string) error {
+	flag, ok := debugOption[opt]
+	if !ok {
+		return errors.New("1403 debug option invalid: " + opt)
+	}
+	device.debugMsk |= flag
+	return nil
 }
 
 // Print a line of text.
