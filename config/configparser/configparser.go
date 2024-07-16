@@ -91,6 +91,7 @@ const (
 	TypeOption             // Accepts a option parameter.
 	TypeOptions            // Accepts a list of options.
 	TypeSwitch             // Option only used to set a flag.
+	TypeFile               // Option is file name, including quotes.
 )
 
 // Model creation list.
@@ -135,6 +136,14 @@ func RegisterOption(mod string, fn func(uint16, string, []Option) error) {
 	mod = strings.ToUpper(mod)
 	slog.Debug("Registering simple option: " + mod)
 	model := modelDef{create: fn, ty: TypeOption}
+	models[mod] = model
+}
+
+// Register should be called from init functions.
+func RegisterFile(mod string, fn func(uint16, string, []Option) error) {
+	mod = strings.ToUpper(mod)
+	slog.Debug("Registering file option: " + mod)
+	model := modelDef{create: fn, ty: TypeFile}
 	models[mod] = model
 }
 
@@ -197,6 +206,19 @@ func createSwitch(mod string) error {
 		return errors.New("Not a switch type: " + mod)
 	}
 	return model.create(0, "", nil)
+}
+
+// Create file option.
+func createFile(mod string, fileName string) error {
+	mod = strings.ToUpper(mod)
+	model, ok := models[mod]
+	if !ok {
+		return errors.New("Unknown file: " + mod)
+	}
+	if model.ty != TypeFile {
+		return errors.New("Not a file type: " + mod)
+	}
+	return model.create(D.NoDev, fileName, nil)
 }
 
 // Load in a configuration file.
@@ -301,6 +323,22 @@ func (line *optionLine) parseLine() error {
 		if err != nil {
 			return fmt.Errorf("switch %s: %w, line: %d %s", model.model, err, lineNumber, line.line)
 		}
+
+	case TypeFile:
+		line.skipSpace()
+		line.pos-- // Back up one position.
+		if line.isEOL() {
+			return fmt.Errorf("file %s: requires a file name, line %d", model.model, lineNumber)
+		}
+		v, ok := line.parseQuoteString()
+		if !ok {
+			return fmt.Errorf("invalid quoted string line: %d [%d]", lineNumber, line.pos)
+		}
+		err := createFile(model.model, v)
+		if err != nil {
+			return fmt.Errorf("file %s: %w, line: %d %s", model.model, err, lineNumber, line.line)
+		}
+
 	case 0:
 		return fmt.Errorf("no type: %s registered, line: %d", model.model, lineNumber)
 	}
@@ -334,16 +372,12 @@ func (line *optionLine) isEOL() bool {
 }
 
 // Return next letter or digit in line. 0 if EOL or space.
-func (line *optionLine) getNext(inQuote bool) byte {
+func (line *optionLine) getNext() byte {
 	line.pos++
 	if line.isEOL() {
 		return 0
 	}
-	by := line.line[line.pos]
-	if unicode.IsLetter(rune(by)) || unicode.IsNumber(rune(by)) || inQuote {
-		return by
-	}
-	return 0
+	return line.line[line.pos]
 }
 
 // Peek at next character.
@@ -449,14 +483,14 @@ func (line *optionLine) parseQuoteString() (string, bool) {
 	// If quote, set we are in quoted string
 	if line.getPeek() == '"' {
 		inQuote = true
-		_ = line.getNext(true)
+		_ = line.getNext()
 	}
 
 	for {
-		by := line.getNext(inQuote)
+		by := line.getNext()
 		// If processing a quoted string "" gets replaced by signal quote
 		if by == '"' && inQuote {
-			by = line.getNext(inQuote)
+			by = line.getNext()
 			if by != '"' {
 				// Hit end of string.
 				return value, true
@@ -492,14 +526,14 @@ func (line *optionLine) getName() (string, error) {
 		}
 		return "", nil
 	}
-	value := ""
 
+	value := ""
 	// Already verified that first character is letter,
 	// so grab until not letter or number.
 	for {
 		value += string([]byte{by})
-		by = line.getNext(false)
-		if by == 0 {
+		by = line.getNext()
+		if line.isEOL() || unicode.IsSpace(rune(by)) || by == '=' || by == ',' {
 			break
 		}
 	}
