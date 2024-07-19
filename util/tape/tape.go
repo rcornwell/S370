@@ -125,6 +125,7 @@ func Debug(opt string) error {
 	return nil
 }
 
+// Set format to argument.
 func (tape *Context) SetFormat(fmt string) error {
 	newMode, ok := formats[strings.ToUpper(fmt)]
 	if !ok {
@@ -133,6 +134,25 @@ func (tape *Context) SetFormat(fmt string) error {
 	}
 	tape.format = newMode
 	return nil
+}
+
+// Return current format.
+func (tape *Context) GetFormat() string {
+	for n, f := range formats {
+		if f == tape.format {
+			return n
+		}
+	}
+	return "unknown"
+}
+
+// Get list of possible format types.
+func GetFormatList() []string {
+	fmtList := []string{}
+	for k := range formats {
+		fmtList = append(fmtList, k)
+	}
+	return fmtList
 }
 
 // Check if tape is at load point.
@@ -178,6 +198,14 @@ func (tape *Context) Tape9Track() bool {
 // Return if attached to a file.
 func (tape *Context) Attached() bool {
 	return tape.file != nil
+}
+
+// Return file name attached.
+func (tape *Context) FileName() string {
+	if tape.file != nil {
+		return tape.file.Name()
+	}
+	return ""
 }
 
 // Attach file to tape context.

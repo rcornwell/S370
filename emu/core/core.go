@@ -35,23 +35,23 @@ import (
 	syschannel "github.com/rcornwell/S370/emu/sys_channel"
 )
 
-type core struct {
+type Core struct {
 	wg      sync.WaitGroup
 	done    chan struct{} // Signal to shutdown simulator.
 	running bool          // Indicate when simulator should run or not.
-	master  chan master.Packet
+	Master  chan master.Packet
 }
 
 // Create instance of CPU.
-func NewCPU(master chan master.Packet) *core {
-	return &core{
-		master: master,
+func NewCPU(master chan master.Packet) *Core {
+	return &Core{
+		Master: master,
 		done:   make(chan struct{}),
 	}
 }
 
 // Start CPU running.
-func (core *core) Start() {
+func (core *Core) Start() {
 	core.wg.Add(1)
 	defer core.wg.Done()
 	cpu.InitializeCPU()
@@ -70,7 +70,7 @@ func (core *core) Start() {
 			cpu.Shutdown()
 			slog.Info("Shutdown CPU core")
 			return
-		case packet := <-core.master:
+		case packet := <-core.Master:
 			core.processPacket(packet)
 		default:
 		}
@@ -78,7 +78,7 @@ func (core *core) Start() {
 }
 
 // Stop a running server.
-func (core *core) Stop() {
+func (core *Core) Stop() {
 	close(core.done)
 	done := make(chan struct{})
 	go func() {
@@ -106,7 +106,7 @@ func IPLDevice() uint16 {
 }
 
 // Process a packet sent to system simulation.
-func (core *core) processPacket(packet master.Packet) {
+func (core *Core) processPacket(packet master.Packet) {
 	switch packet.Msg {
 	case master.TelConnect:
 		syschannel.SendConnect(packet.DevNum, packet.Conn)
@@ -128,4 +128,16 @@ func (core *core) processPacket(packet master.Packet) {
 	case master.Stop:
 		core.running = false
 	}
+}
+
+func (core *Core) SendStart() {
+	core.Master <- master.Packet{Msg: master.Start}
+}
+
+func (core *Core) SendStop() {
+	core.Master <- master.Packet{Msg: master.Stop}
+}
+
+func (core *Core) SendIPL(devNum uint16) {
+	core.Master <- master.Packet{DevNum: devNum, Msg: master.IPLdevice}
 }

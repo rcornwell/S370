@@ -26,14 +26,11 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
 	"log/slog"
 	"os"
-	"os/signal"
-	"syscall"
 
 	getopt "github.com/pborman/getopt/v2"
+	reader "github.com/rcornwell/S370/command/reader"
 	config "github.com/rcornwell/S370/config/configparser"
 	core "github.com/rcornwell/S370/emu/core"
 	master "github.com/rcornwell/S370/emu/master"
@@ -50,7 +47,7 @@ var Logger *slog.Logger
 func main() {
 	optConfig := getopt.StringLong("config", 'c', "S370.cfg", "Configuration file")
 	optLogFile := getopt.StringLong("log", 'l', "", "Log file")
-	//	optDeck := getopt.StringLong("deck", 'd', "", "Deck to load")
+	optDebug := getopt.BoolLong("debug", 'd', "Log debug to console")
 	optHelp := getopt.BoolLong("help", 'h', "Help")
 	getopt.Parse()
 
@@ -65,7 +62,7 @@ func main() {
 	}
 	programLevel := new(slog.LevelVar)
 	programLevel.Set(slog.LevelDebug)
-	Logger = slog.New(logger.NewHandler(file, &slog.HandlerOptions{Level: programLevel, AddSource: false}))
+	Logger := slog.New(logger.NewHandler(file, &slog.HandlerOptions{Level: programLevel, AddSource: false}, optDebug))
 	slog.SetDefault(Logger)
 
 	Logger.Info("S370 Started")
@@ -106,30 +103,17 @@ func main() {
 	go cpu.Start()
 
 	// Wait for a SIGINT or SIGTERM signal to gracefully shut down the server
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	//	sigChan := make(chan os.Signal, 1)
+	//	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	msg := make(chan string, 1)
 	go func() {
-		reader := bufio.NewReader(os.Stdin)
-		// Receive commands from stdin
-		for {
-			input, _ := reader.ReadString('\n')
-			msg <- input
-		}
+		reader.ConsoleReader(cpu)
+		msg <- ""
 	}()
 
-loop:
-	for {
-		select {
-		case <-sigChan:
-			fmt.Println("Got quit signal")
-			break loop
-		case <-msg:
-			fmt.Printf("IPL device: %03x\n", core.IPLDevice())
-			masterChannel <- master.Packet{DevNum: core.IPLDevice(), Msg: master.IPLdevice}
-		}
-	}
+	// Wait on shutdown option
+	<-msg
 
 	Logger.Info("Shutting down CPU")
 	cpu.Stop()

@@ -136,56 +136,15 @@ func (d *TestDev) InitDev() uint8 {
 	return 0
 }
 
-// Attach file to device.
-func (d *TestDev) Attach(_ []Dv.CmdOption) error {
-	return nil
-}
-
-// Detach device.
-func (d *TestDev) Detach() error {
-	return nil
-}
-
-// Set command.
-func (d *TestDev) Set(_ []Dv.CmdOption) error {
-	return nil
-}
-
-// Show command.
-func (d *TestDev) Show(_ []Dv.CmdOption) error {
-	return nil
-}
-
-// Shutdown device.
-func (d *TestDev) Shutdown() {
-}
-
-// Enable debug options.
+// Enable debug option.
 func (d *TestDev) Debug(_ string) error {
 	return nil
 }
 
-// // register a device on initialize
-// func init() {
-// 	reg.RegisterModel("testdev", create)
-// }
+// Shutdown device, close any open files.
+func (d *TestDev) Shutdown() {
+}
 
-// // Create a device.
-//
-//	func create(devNum uint16) bool {
-//		dev := TestDev{Addr: devNum, Mask: 0xff}
-//		if Ch.AddDevice(&dev, devNum) {
-//			fmt.Printf("Unable to create testdev at %03x\n", devNum)
-//			return false
-//		}
-//		_ = dev.InitDev()
-//		for i := range 0x10 {
-//			dev.Data[i] = uint8(0xf0 + i)
-//		}
-//		dev.Max = 0x10
-//		return true
-//	}
-//
 // Handle channel operations.
 func (d *TestDev) callback(cmd int) {
 	var v uint8

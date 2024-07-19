@@ -42,7 +42,7 @@ func setup() *Td.TestDev {
 	Ch.InitializeChannels()
 	Ch.AddChannel(0, D.TypeMux, 192)
 	d := &Td.TestDev{Addr: 0xf, Mask: 0xff}
-	Ch.AddDevice(d, d.Addr)
+	Ch.AddDevice(d, nil, d.Addr)
 	_ = d.InitDev()
 	for i := range 0x10 {
 		d.Data[i] = uint8(0xf0 + i)

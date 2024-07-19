@@ -31,6 +31,7 @@ import (
 	"strconv"
 	"strings"
 
+	command "github.com/rcornwell/S370/command/command"
 	config "github.com/rcornwell/S370/config/configparser"
 	dev "github.com/rcornwell/S370/emu/device"
 	mem "github.com/rcornwell/S370/emu/memory"
@@ -117,15 +118,16 @@ type chanCtl struct {
 
 // Holds channel information.
 type chanDev struct {
-	number     int             // Channel number
-	devStatus  [256]uint8      // Status from each device
-	devTab     [256]dev.Device // Pointer to device interfaces
-	devTel     [256]tel.Telnet // Telnet device.
-	chanType   int             // Type of channel
-	numSubChan int             // Number of subchannels
-	irqPending bool            // Channel has pending IRQ
-	subChans   []chanCtl       // Subchannel control
-	debugMsk   int             // Debug mask for channel
+	number     int                  // Channel number
+	devStatus  [256]uint8           // Status from each device
+	devTab     [256]dev.Device      // Pointer to device interfaces
+	devCmd     [256]command.Command // Pointer to command options for device.
+	devTel     [256]tel.Telnet      // Telnet device.
+	chanType   int                  // Type of channel
+	numSubChan int                  // Number of subchannels
+	irqPending bool                 // Channel has pending IRQ
+	subChans   []chanCtl            // Subchannel control
+	debugMsk   int                  // Debug mask for channel
 }
 
 var (
@@ -1011,7 +1013,7 @@ func IPLDevice(devNum uint16) error {
 // }
 
 // Add a device at given address.
-func AddDevice(dev dev.Device, devNum uint16) error {
+func AddDevice(dev dev.Device, cmd command.Command, devNum uint16) error {
 	ch := (devNum >> 8) & 0xf
 	dNum := devNum & 0xff
 	cUnit := chanUnit[ch]
@@ -1025,6 +1027,7 @@ func AddDevice(dev dev.Device, devNum uint16) error {
 		return fmt.Errorf("device %03x already exists", devNum)
 	}
 	cUnit.devTab[dNum] = dev
+	cUnit.devCmd[dNum] = cmd
 	return nil
 }
 
@@ -1043,6 +1046,23 @@ func GetDevice(devNum uint16) (dev.Device, error) {
 		return nil, fmt.Errorf("device %03x doesn't exist", devNum)
 	}
 	return cUnit.devTab[dNum], nil
+}
+
+// Get a device pointer.
+func GetCommand(devNum uint16) (command.Command, error) {
+	ch := (devNum >> 8) & 0xf
+	dNum := devNum & 0xff
+	cUnit := chanUnit[ch]
+	// Check if channel exists
+	if cUnit == nil {
+		return nil, fmt.Errorf("channel %d does not exist", ch)
+	}
+
+	// Check if device exists.
+	if cUnit.devTab[dNum] == nil {
+		return nil, fmt.Errorf("device %03x doesn't exist", devNum)
+	}
+	return cUnit.devCmd[dNum], nil
 }
 
 // Delete a device at a given address.

@@ -29,6 +29,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/rcornwell/S370/command/command"
 	config "github.com/rcornwell/S370/config/configparser"
 	dev "github.com/rcornwell/S370/emu/device"
 	event "github.com/rcornwell/S370/emu/event"
@@ -293,26 +294,6 @@ func (device *Model2400ctx) InitDev() uint8 {
 	return 0
 }
 
-// Attach file to device.
-func (device *Model2400ctx) Attach(_ []dev.CmdOption) error {
-	return nil
-}
-
-// Detach device.
-func (device *Model2400ctx) Detach() error {
-	return device.context.Detach()
-}
-
-// Set command.
-func (device *Model2400ctx) Set(_ []dev.CmdOption) error {
-	return nil
-}
-
-// Show command.
-func (device *Model2400ctx) Show(_ []dev.CmdOption) error {
-	return nil
-}
-
 // Shutdown device.
 func (device *Model2400ctx) Shutdown() {
 	_ = device.context.Detach()
@@ -326,6 +307,212 @@ func (device *Model2400ctx) Debug(opt string) error {
 	}
 	device.debugMsk |= flag
 	return nil
+}
+
+// Options for attach command.
+func (device *Model2400ctx) Options(_ string) []command.Options {
+	formats := tape.GetFormatList()
+	return []command.Options{
+		{
+			Name:        "file",
+			OptionType:  command.OptionFile,
+			OptionValid: command.ValidAttach | command.ValidShow,
+		},
+		{
+			Name:        "fmt",
+			OptionType:  command.OptionList,
+			OptionValid: command.ValidAttach | command.ValidSet | command.ValidShow,
+			OptionList:  formats,
+		},
+		{
+			Name:        "format",
+			OptionType:  command.OptionList,
+			OptionValid: command.ValidAttach | command.ValidSet,
+			OptionList:  formats,
+		},
+		{
+			Name:        "ro",
+			OptionType:  command.OptionSwitch,
+			OptionValid: command.ValidAttach,
+		},
+		{
+			Name:        "rw",
+			OptionType:  command.OptionSwitch,
+			OptionValid: command.ValidAttach,
+		},
+		{
+			Name:        "ring",
+			OptionType:  command.OptionSwitch,
+			OptionValid: command.ValidAttach | command.ValidSet | command.ValidShow,
+		},
+		{
+			Name:        "noring",
+			OptionType:  command.OptionSwitch,
+			OptionValid: command.ValidAttach | command.ValidShow,
+		},
+		{
+			Name:        "7track",
+			OptionType:  command.OptionSwitch,
+			OptionValid: command.ValidSet,
+		},
+		{
+			Name:        "9track",
+			OptionType:  command.OptionSwitch,
+			OptionValid: command.ValidSet,
+		},
+		{
+			Name:        "type",
+			OptionType:  command.OptionSwitch,
+			OptionValid: command.ValidShow,
+		},
+	}
+}
+
+// Attach file to device.
+func (device *Model2400ctx) Attach(opts []*command.CmdOption) error {
+	err := device.Detach()
+	if err != nil {
+		return err
+	}
+
+	for _, opt := range opts {
+		switch opt.Name {
+		case "file":
+			if opt.EqualOpt == "" {
+				return errors.New("file requires file name")
+			}
+			if device.context.Attached() {
+				return errors.New("only one file name option allowd")
+			}
+
+			err = device.context.Attach(opt.EqualOpt)
+			if err != nil {
+				break
+			}
+
+		case "fmt", "format":
+			if opt.EqualOpt == "" {
+				return errors.New("format requires option type")
+			}
+			err = device.context.SetFormat(opt.EqualOpt)
+			if err != nil {
+				break
+			}
+
+		case "ro", "noring":
+			device.context.SetNoRing()
+
+		case "rw", "ring":
+			device.context.SetRing()
+
+		default:
+			return errors.New("invalid option: " + opt.Name)
+		}
+	}
+	return err
+}
+
+// Detach device.
+func (device *Model2400ctx) Detach() error {
+	return device.context.Detach()
+}
+
+// Set command.
+func (device *Model2400ctx) Set(unset bool, opts []*command.CmdOption) error {
+	for _, opt := range opts {
+		switch opt.Name {
+		case "fmt", "format":
+			if opt.EqualOpt == "" {
+				return errors.New("format requires option type")
+			}
+			err := device.context.SetFormat(opt.EqualOpt)
+			if err != nil {
+				return err
+			}
+
+		case "noring":
+			if unset {
+				return errors.New("unset not valid for ring")
+			}
+			device.context.SetNoRing()
+
+		case "ring":
+			if unset {
+				device.context.SetNoRing()
+			} else {
+				device.context.SetRing()
+			}
+
+		case "7track":
+			if unset {
+				device.context.Set9Track()
+			} else {
+				device.context.Set7Track()
+			}
+
+		case "9track":
+			if unset {
+				device.context.Set7Track()
+			} else {
+				device.context.Set9Track()
+			}
+
+		default:
+			return errors.New("invalid option: " + opt.Name)
+		}
+	}
+	return nil
+}
+
+// Show command.
+func (device *Model2400ctx) Show(opts []*command.CmdOption) (string, error) {
+	flags := 0
+
+	str := fmt.Sprintf("%03x:", device.addr)
+	for _, opt := range opts {
+		switch opt.Name {
+		case "file":
+			flags |= 1
+		case "fmt", "format":
+			flags |= 2
+		case "ring":
+			flags |= 4
+		case "type":
+			flags |= 8
+		default:
+			return "", errors.New("invalid option: " + opt.Name)
+		}
+	}
+
+	if flags == 0 {
+		flags = 0xf
+	}
+	if (flags & 2) != 0 {
+		str += " FMT=" + device.context.GetFormat()
+	}
+	if (flags & 4) != 0 {
+		if device.context.TapeRing() {
+			str += " RING"
+		} else {
+			str += " NORING"
+		}
+	}
+	if (flags & 8) != 0 {
+		if device.context.Tape9Track() {
+			str += " 9 Track"
+		} else {
+			str += " 7 Track"
+		}
+	}
+	if (flags & 1) != 0 {
+		if device.context.Attached() {
+			str += " " + device.context.FileName()
+		} else {
+			str += " not attached"
+		}
+	}
+
+	return str, nil
 }
 
 // Callback for reqind commands.
@@ -785,7 +972,7 @@ func init() {
 // Create a card punch device.
 func create(devNum uint16, _ string, options []config.Option) error {
 	device := Model2400ctx{addr: devNum}
-	err := ch.AddDevice(&device, devNum)
+	err := ch.AddDevice(&device, &device, devNum)
 	if err != nil {
 		return fmt.Errorf("unable to create 2400 at %03x: %w", devNum, err)
 	}

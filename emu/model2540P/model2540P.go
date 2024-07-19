@@ -36,6 +36,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/rcornwell/S370/command/command"
 	config "github.com/rcornwell/S370/config/configparser"
 	dev "github.com/rcornwell/S370/emu/device"
 	event "github.com/rcornwell/S370/emu/event"
@@ -152,26 +153,6 @@ func (device *Model2540Pctx) InitDev() uint8 {
 	return 0
 }
 
-// Attach file to device.
-func (device *Model2540Pctx) Attach(_ []dev.CmdOption) error {
-	return nil
-}
-
-// Detach device.
-func (device *Model2540Pctx) Detach() error {
-	return device.context.Detach()
-}
-
-// Set command.
-func (device *Model2540Pctx) Set(_ []dev.CmdOption) error {
-	return nil
-}
-
-// Show command.
-func (device *Model2540Pctx) Show(_ []dev.CmdOption) error {
-	return nil
-}
-
 // Shutdown device.
 func (device *Model2540Pctx) Shutdown() {
 	_ = device.context.Detach()
@@ -185,6 +166,132 @@ func (device *Model2540Pctx) Debug(opt string) error {
 	}
 	device.debugMsk |= flag
 	return nil
+}
+
+// Options for commands command.
+func (device *Model2540Pctx) Options(_ string) []command.Options {
+	fmtList := card.GetFormatList()
+	return []command.Options{
+		{
+			Name:        "file",
+			OptionType:  command.OptionFile,
+			OptionValid: command.ValidAttach | command.ValidShow,
+		},
+		{
+			Name:        "fmt",
+			OptionType:  command.OptionList,
+			OptionValid: command.ValidAttach | command.ValidSet,
+			OptionList:  fmtList,
+		},
+		{
+			Name:        "format",
+			OptionType:  command.OptionList,
+			OptionValid: command.ValidAttach | command.ValidSet | command.ValidShow,
+			OptionList:  fmtList,
+		},
+	}
+}
+
+// Attach file to device.
+func (device *Model2540Pctx) Attach(opts []*command.CmdOption) error {
+	fileName := ""
+	fmt := device.context.GetFormat()
+
+	for _, opt := range opts {
+		switch opt.Name {
+		case "file":
+			if opt.EqualOpt == "" {
+				return errors.New("file requires file name")
+			}
+			if fileName != "" {
+				return errors.New("only one file name supported")
+			}
+			fileName = opt.EqualOpt
+
+		case "fmt", "format":
+			if opt.EqualOpt == "" {
+				return errors.New("format requires option type")
+			}
+			fmt = opt.EqualOpt
+
+		default:
+			return errors.New("invalid option: " + opt.Name)
+		}
+	}
+
+	if fileName == "" {
+		return errors.New("attach requires a file name option")
+	}
+
+	if !device.context.SetFormat(fmt) {
+		return errors.New("invalid format: " + fmt)
+	}
+	err := device.context.Attach(fileName, true, false)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Detach device.
+func (device *Model2540Pctx) Detach() error {
+	return device.context.Detach()
+}
+
+// Set command.
+func (device *Model2540Pctx) Set(unset bool, opts []*command.CmdOption) error {
+	if unset {
+		return errors.New("unset not supported")
+	}
+
+	for _, opt := range opts {
+		switch opt.Name {
+		case "fmt", "format":
+			if opt.EqualOpt == "" {
+				return errors.New("format requires option type")
+			}
+			if !device.context.SetFormat(opt.EqualOpt) {
+				return errors.New("invalid format: " + opt.EqualOpt)
+			}
+
+		default:
+			return errors.New("invalid option: " + opt.Name)
+		}
+	}
+	return nil
+}
+
+// Show command.
+func (device *Model2540Pctx) Show(opts []*command.CmdOption) (string, error) {
+	flags := 0
+
+	str := fmt.Sprintf("%03x:", device.addr)
+	for _, opt := range opts {
+		switch opt.Name {
+		case "file":
+			flags |= 1
+		case "fmt", "format":
+			flags |= 2
+		default:
+			return "", errors.New("invalid option: " + opt.Name)
+		}
+	}
+
+	if flags == 0 {
+		flags = 3
+	}
+	if (flags & 2) != 0 {
+		str += " fmt=" + device.context.GetFormat()
+	}
+	if (flags & 1) != 0 {
+		if device.context.Attached() {
+			str += " " + device.context.FileName()
+		} else {
+			str += " not attached"
+		}
+	}
+
+	return str, nil
 }
 
 // Process card punch operations.
@@ -244,7 +351,7 @@ func init() {
 // Create a card punch device.
 func create(devNum uint16, _ string, options []config.Option) error {
 	dev := Model2540Pctx{addr: devNum}
-	err := ch.AddDevice(&dev, devNum)
+	err := ch.AddDevice(&dev, &dev, devNum)
 	if err != nil {
 		return fmt.Errorf("Unable to create 2540R at %03x", devNum)
 	}

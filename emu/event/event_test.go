@@ -27,8 +27,6 @@ package event
 
 import (
 	"testing"
-
-	dev "github.com/rcornwell/S370/emu/device"
 )
 
 var stepCount uint64
@@ -84,26 +82,6 @@ func (d device) HaltIO() uint8 {
 
 func (d device) InitDev() uint8 {
 	return 0
-}
-
-// Attach file to device.
-func (d device) Attach(_ []dev.CmdOption) error {
-	return nil
-}
-
-// Detach device.
-func (d device) Detach() error {
-	return nil
-}
-
-// Set command.
-func (d device) Set(_ []dev.CmdOption) error {
-	return nil
-}
-
-// Show command.
-func (d device) Show(_ []dev.CmdOption) error {
-	return nil
 }
 
 // Shutdown device.

@@ -37,12 +37,14 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/rcornwell/S370/command/command"
 	config "github.com/rcornwell/S370/config/configparser"
 	core "github.com/rcornwell/S370/emu/core"
 	dev "github.com/rcornwell/S370/emu/device"
 	ev "github.com/rcornwell/S370/emu/event"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
 	"github.com/rcornwell/S370/telnet"
+	"github.com/rcornwell/S370/util/debug"
 	xlat "github.com/rcornwell/S370/util/xlat"
 )
 
@@ -56,34 +58,36 @@ const (
 
 const (
 	// Debug options.
-	debugCmd = 1 << iota
-	debugData
-	debugDetail
+	debugCmd    = 1 << iota // Log any commands.
+	debugLine               // Log output by lines.
+	debugDetail             // Low level details.
 )
 
 var debugOption = map[string]int{
 	"CMD":    debugCmd,
-	"DATA":   debugData,
+	"LINE":   debugLine,
 	"DETAIL": debugDetail,
 }
 
 type Model1052ctx struct {
-	addr     uint16        // Current device address
-	col      int           // Current column
-	busy     bool          // Reader busy
-	halt     bool          // Signal halt requested
-	sense    uint8         // Current sense byte
-	read     bool          // Currently waiting on read
-	request  bool          // Console request
-	input    bool          // Input mode
-	output   bool          // Output mode
+	addr     uint16        // Current device address.
+	col      int           // Current column.
+	busy     bool          // Reader busy.
+	halt     bool          // Signal halt requested.
+	sense    uint8         // Current sense byte.
+	read     bool          // Currently waiting on read.
+	request  bool          // Console request.
+	input    bool          // Input mode.
+	output   bool          // Output mode.
 	cr       bool          // Output CR.
 	cancel   bool          // Cancel ^C pressed.
-	inPtr    int           // Input pointer
-	inSize   int           // Size of input pending input
-	inBuff   [512]byte     // Place to save pending input
+	inPtr    int           // Input pointer.
+	inSize   int           // Size of input pending input.
+	inBuff   [512]byte     // Place to save pending input.
+	port     string        // Port number attached to.
 	telctx   *model1052tel // Pointer to telnet device.
 	debugMsk int           // Debug option mask.
+	outLine  string        // Line being output for debug purposes.
 }
 
 type model1052tel struct {
@@ -106,9 +110,7 @@ func (device *Model1052ctx) StartCmd(cmd uint8) uint8 {
 	if device.busy {
 		return dev.CStatusBusy
 	}
-	// if cmd != 0 {
-	// 	fmt.Printf("Terminal cmd %02x\n", cmd)
-	// }
+
 	tel := device.telctx
 	// Decode command
 	switch cmd {
@@ -153,6 +155,7 @@ func (device *Model1052ctx) StartCmd(cmd uint8) uint8 {
 		device.busy = true
 		device.read = true
 		ev.AddEvent(device, device.callback, 10, int(cmd))
+		debug.DebugDevf(device.addr, device.debugMsk, debugCmd, "Cmd: %02x", cmd)
 
 	case cmdWrite, cmdWriteACR:
 		device.halt = false
@@ -183,13 +186,16 @@ func (device *Model1052ctx) StartCmd(cmd uint8) uint8 {
 
 		// Start device
 		device.busy = true
+		device.outLine = ""
 		ev.AddEvent(device, device.callback, 10, int(cmd))
+		debug.DebugDevf(device.addr, device.debugMsk, debugCmd, "Cmd: %02x", cmd)
 
 	case dev.CmdSense:
 		// Queue up sense command
 		device.halt = false
 		device.busy = true
 		ev.AddEvent(device, device.callback, 10, int(cmd))
+		debug.DebugDevf(device.addr, device.debugMsk, debugCmd, "Cmd: %02x", cmd)
 
 	case cmdAlarm:
 		device.halt = false
@@ -211,9 +217,11 @@ func (device *Model1052ctx) StartCmd(cmd uint8) uint8 {
 		device.sense = 0
 		device.busy = true
 		ev.AddEvent(device, device.callback, 1000, int(cmd))
+		debug.DebugDevf(device.addr, device.debugMsk, debugCmd, "Cmd: %02x", cmd)
 
 	case dev.CmdCTL:
 		r = dev.CStatusChnEnd | dev.CStatusDevEnd
+		debug.DebugDevf(device.addr, device.debugMsk, debugCmd, "Cmd: %02x", cmd)
 	default:
 		device.sense = dev.SenseCMDREJ
 	}
@@ -240,33 +248,67 @@ func (device *Model1052ctx) InitDev() uint8 {
 	return 0
 }
 
-// Attach file to device.
-func (device *Model1052ctx) Attach(_ []dev.CmdOption) error {
-	return nil
-}
-
-// Detach device.
-func (device *Model1052ctx) Detach() error {
-	return nil
-}
-
-// Set command.
-func (device *Model1052ctx) Set(_ []dev.CmdOption) error {
-	return nil
-}
-
-// Show command.
-func (device *Model1052ctx) Show(_ []dev.CmdOption) error {
-	return nil
-}
-
 // Shutdown device.
 func (device *Model1052ctx) Shutdown() {
 }
 
 // Enable debug options.
-func (device *Model1052ctx) Debug(_ string) error {
+func (device *Model1052ctx) Debug(opt string) error {
+	flag, ok := debugOption[opt]
+	if !ok {
+		return errors.New("1052 debug option invalid: " + opt)
+	}
+	device.debugMsk |= flag
 	return nil
+}
+
+// List of valid options.
+func (device *Model1052ctx) Options(_ string) []command.Options {
+	return []command.Options{}
+}
+
+// Attach file to device.
+func (device *Model1052ctx) Attach(_ []*command.CmdOption) error {
+	return errors.New("attach command not supported")
+}
+
+// Detach device.
+func (device *Model1052ctx) Detach() error {
+	return errors.New("detach command not supported")
+}
+
+// Set command.
+func (device *Model1052ctx) Set(_ bool, _ []*command.CmdOption) error {
+	return errors.New("set command not supported")
+}
+
+// Show command.
+func (device *Model1052ctx) Show(_ []*command.CmdOption) (string, error) {
+	str := fmt.Sprintf("%03x: port=%s", device.addr, device.port)
+	if device.telctx.connected {
+		str += " connected"
+	}
+	return str, nil
+}
+
+// Finish write command.
+func (device *Model1052ctx) finishWrite() {
+	line := ""
+	for i := range device.inSize {
+		line += string(xlat.EBCDICToASCII[device.inBuff[i]])
+	}
+	debug.DebugDevf(device.addr, device.debugMsk, debugLine, "Send: %s", line)
+	device.input = false
+	device.inPtr = 0
+	device.inSize = 0
+	if device.cancel {
+		device.cancel = false
+		ch.ChanEnd(device.addr, dev.CStatusChnEnd|dev.CStatusDevEnd|dev.CStatusExpt)
+	} else {
+		ch.ChanEnd(device.addr, dev.CStatusChnEnd|dev.CStatusDevEnd)
+	}
+	device.read = false
+	device.busy = false
 }
 
 // Handle channel operations.
@@ -302,24 +344,26 @@ func (device *Model1052ctx) callback(cmd int) {
 				device.output = false
 			}
 			device.busy = false
+			debug.DebugDevf(device.addr, device.debugMsk, debugLine, "Output: %s", device.outLine)
 			ch.ChanEnd(device.addr, dev.CStatusChnEnd|dev.CStatusDevEnd)
-			//		ev.AddEvent(d, d.callback, 4000, cmdTimeOut)
 			return
 		}
 		if by == 0x15 {
-			// Semd '\r\n'
 			out := []byte("\r\n")
 			_, err = tel.conn.Write(out)
 			if err != nil {
 				fmt.Println("Telnet error: ", err)
 			}
 			device.cr = true
+			debug.DebugDevf(device.addr, device.debugMsk, debugLine, "Output: %s", device.outLine)
+			device.outLine = ""
 		} else {
 			out := xlat.EBCDICToASCII[by]
 			if out != 0 {
 				if !strconv.IsPrint(rune(out)) {
 					out = '_'
 				}
+				device.outLine += string(out)
 				// send out
 				_, err = tel.conn.Write([]byte{out})
 				if err != nil {
@@ -331,43 +375,22 @@ func (device *Model1052ctx) callback(cmd int) {
 
 	case cmdRead:
 		if !device.input {
-			//			ev.AddEvent(d, d.callback, 1000, cmd)
 			break
 		}
+
 		//	fmt.Printf("Terminal send line\n")
 		device.request = false
 		// Check for empty line, or end of data
 		if device.inSize == 0 || device.inPtr == device.inSize {
-			device.input = false
-			device.inPtr = 0
-			device.inSize = 0
-			if device.cancel {
-				device.cancel = false
-				ch.ChanEnd(device.addr, dev.CStatusChnEnd|dev.CStatusDevEnd|dev.CStatusExpt)
-			} else {
-				ch.ChanEnd(device.addr, dev.CStatusChnEnd|dev.CStatusDevEnd)
-			}
-			device.read = false
-			device.busy = false
+			device.finishWrite()
 			return
 		}
 		// Grab next character to send to CPU
 		by := device.inBuff[device.inPtr]
 		device.inPtr++
-
 		end := ch.ChanWriteByte(device.addr, by)
 		if end {
-			device.input = false
-			device.inPtr = 0
-			device.inSize = 0
-			if device.cancel {
-				device.cancel = false
-				ch.ChanEnd(device.addr, dev.CStatusChnEnd|dev.CStatusDevEnd|dev.CStatusExpt)
-			} else {
-				ch.ChanEnd(device.addr, dev.CStatusChnEnd|dev.CStatusDevEnd)
-			}
-			device.read = false
-			device.busy = false
+			device.finishWrite()
 			return
 		}
 	}
@@ -395,7 +418,7 @@ func (telConn *model1052tel) ReceiveChar(data []byte) {
 		if !device.input {
 			switch by {
 			case '\r', '\n':
-				//			fmt.Printf("End of record\n")
+				debug.DebugDevf(device.addr, device.debugMsk, debugDetail, "End of record\n")
 				device.input = true // Have input
 				device.cr = true    // Received a carrage return.
 				device.output = false
@@ -409,7 +432,7 @@ func (telConn *model1052tel) ReceiveChar(data []byte) {
 				fallthrough
 
 			case 0o033: // Esc, request key
-				//		fmt.Printf("Terminal request\n")
+				debug.DebugDevf(device.addr, device.debugMsk, debugDetail, "Terminal request\n")
 				if !device.read {
 					device.request = true
 				}
@@ -417,7 +440,6 @@ func (telConn *model1052tel) ReceiveChar(data []byte) {
 			case 0o177, '\b':
 				if device.inPtr != 0 {
 					device.inPtr--
-					// send '\b \b'
 					out := []byte("\b \b")
 					_, err = telConn.conn.Write(out)
 					if err != nil {
@@ -441,7 +463,6 @@ func (telConn *model1052tel) ReceiveChar(data []byte) {
 			case 0o025: // ^U clear input line
 				out := []byte("\b \b")
 				for device.inPtr > 0 {
-					// Send '\b \b'
 					device.inPtr--
 					_, err = telConn.conn.Write(out)
 					if err != nil {
@@ -451,19 +472,19 @@ func (telConn *model1052tel) ReceiveChar(data []byte) {
 
 			default:
 				if device.inPtr < len(device.inBuff) {
-					ch := xlat.ASCIIToEBCDIC[by]
-					if ch == 0xff {
+					inChar := xlat.ASCIIToEBCDIC[by]
+					if inChar == 0xff {
 						_, err = telConn.conn.Write([]byte{'\007'})
 						if err != nil {
 							fmt.Println("Telnet error: ", err)
 						}
 					} else {
 						// Convert back to ascii
-						out := xlat.EBCDICToASCII[ch]
+						replyChar := xlat.EBCDICToASCII[inChar]
 						// send out
-						device.inBuff[device.inPtr] = ch
+						device.inBuff[device.inPtr] = inChar
 						device.inPtr++
-						_, err = telConn.conn.Write([]byte{out})
+						_, err = telConn.conn.Write([]byte{replyChar})
 						if err != nil {
 							fmt.Println("Telnet error: ", err)
 						}
@@ -482,7 +503,6 @@ func (telConn *model1052tel) ReceiveChar(data []byte) {
 					core.PostExtIrq()
 				} else if !device.read {
 					device.request = true
-					// Send '\07'
 					_, err = telConn.conn.Write([]byte{'\007'})
 					if err != nil {
 						fmt.Println("Telnet error: ", err)
@@ -506,7 +526,7 @@ func init() {
 // Create a device.
 func create(devNum uint16, _ string, options []config.Option) error {
 	dev := Model1052ctx{addr: devNum}
-	err := ch.AddDevice(&dev, devNum)
+	err := ch.AddDevice(&dev, &dev, devNum)
 	if err != nil {
 		return fmt.Errorf("unable to create 1052 at %03x", devNum)
 	}
@@ -537,5 +557,6 @@ func create(devNum uint16, _ string, options []config.Option) error {
 	}
 
 	ch.SetTelnet(&console, devNum)
+	console.ctx.port = port
 	return telnet.RegisterTerminal(&console, devNum, 0, port, group)
 }

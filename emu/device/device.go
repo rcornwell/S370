@@ -22,24 +22,14 @@ ibm370 IBM 370 Channel Interface functions
 */
 package device
 
-// List of options to pass to set or show function
-type CmdOption struct {
-	Name     string // Name of option.
-	EqualOpt string // Value of string after =.
-}
-
 // Interface for devices to handle commands.
 type Device interface {
 	StartIO() uint8           // Start of command chain.
 	StartCmd(cmd uint8) uint8 // Start command.
 	HaltIO() uint8            // Halt I/O instruction issued.
 	InitDev() uint8           // Initialize device.
-	Attach([]CmdOption) error // Attach device to file.
-	Detach() error            // Detach a device.
-	Set([]CmdOption) error    // Do set command.
-	Show([]CmdOption) error   // Do show command.
 	Shutdown()                // Shutdown device, close any open files.
-	Debug(string) error       // Enable debug option.
+	Debug(debug string) error // Enable debug option.
 }
 
 // Channel types.

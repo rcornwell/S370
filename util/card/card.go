@@ -71,14 +71,15 @@ type Card struct {
 }
 
 type Context struct {
-	file        *os.File // file handle
-	mode        int      // Current input/output mode
-	hopperCards int      // Number of cards in hopper
-	hopperPos   int      // Position in hopper
-	eofPending  bool     // Next return should be EOF
-	table       int      // Translation table to use
-	attached    bool     // Attached to a file
-	deck        []Card   // Card images
+	file        *os.File // Fle handle.
+	fileName    string   // Name of last file attached.
+	mode        int      // Current input/output mode.
+	hopperCards int      // Number of cards in hopper.
+	hopperPos   int      // Position in hopper.
+	eofPending  bool     // Next return should be EOF.
+	table       int      // Translation table to use.
+	attached    bool     // Attached to a file.
+	deck        []Card   // Card images.
 }
 
 type cardBuffer struct {
@@ -160,6 +161,7 @@ var formats = map[string]int{
 	"CBN":    ModeCBN,
 }
 
+// Set the format to values.
 func (ctx *Context) SetFormat(fmt string) bool {
 	newMode, ok := formats[strings.ToUpper(fmt)]
 	if !ok {
@@ -168,6 +170,25 @@ func (ctx *Context) SetFormat(fmt string) bool {
 	}
 	ctx.mode = newMode
 	return true
+}
+
+// Get current format value.
+func (ctx *Context) GetFormat() string {
+	for fmt, mode := range formats {
+		if mode == ctx.mode {
+			return fmt
+		}
+	}
+	return ""
+}
+
+// Get list of possible format types.
+func GetFormatList() []string {
+	fmtList := []string{}
+	for k := range formats {
+		fmtList = append(fmtList, k)
+	}
+	return fmtList
 }
 
 // Return if attached to a file.
@@ -180,7 +201,7 @@ func (ctx *Context) Attach(fileName string, punch bool, eof bool) error {
 	var err error
 
 	ctx.file = nil
-
+	ctx.fileName = ""
 	if punch {
 		var file *os.File
 		file, err = os.Create(fileName)
@@ -197,6 +218,7 @@ func (ctx *Context) Attach(fileName string, punch bool, eof bool) error {
 		}
 		ctx.attached = true
 	}
+	ctx.fileName = fileName
 	return err
 }
 
@@ -229,10 +251,10 @@ func (ctx *Context) CardEOF() bool {
 }
 
 func (ctx *Context) FileName() string {
-	if ctx.file == nil {
+	if !ctx.attached {
 		return ""
 	}
-	return ctx.file.Name()
+	return ctx.fileName
 }
 
 // Set end of file flag on last card in deck.

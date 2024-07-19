@@ -35,9 +35,10 @@ import (
 )
 
 type LogHandler struct {
-	out io.Writer
-	h   slog.Handler
-	mu  *sync.Mutex
+	out   io.Writer
+	h     slog.Handler
+	mu    *sync.Mutex
+	debug bool
 }
 
 func (h *LogHandler) Enabled(ctx context.Context, level slog.Level) bool {
@@ -75,13 +76,17 @@ func (h *LogHandler) Handle(ctx context.Context, r slog.Record) error {
 		_, err = h.out.Write(b)
 	}
 
-	if r.Level > slog.LevelDebug {
+	if h.debug || r.Level > slog.LevelDebug {
 		_, err = os.Stderr.Write(b)
 	}
 	return err
 }
 
-func NewHandler(file io.Writer, opts *slog.HandlerOptions) *LogHandler {
+func (h *LogHandler) SetDebug(debug *bool) {
+	h.debug = *debug
+}
+
+func NewHandler(file io.Writer, opts *slog.HandlerOptions, debug *bool) *LogHandler {
 	if opts == nil {
 		opts = &slog.HandlerOptions{}
 	}
@@ -92,6 +97,7 @@ func NewHandler(file io.Writer, opts *slog.HandlerOptions) *LogHandler {
 			AddSource:   opts.AddSource,
 			ReplaceAttr: nil,
 		}),
-		mu: &sync.Mutex{},
+		mu:    &sync.Mutex{},
+		debug: *debug,
 	}
 }

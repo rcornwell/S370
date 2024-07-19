@@ -39,6 +39,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/rcornwell/S370/command/command"
 	config "github.com/rcornwell/S370/config/configparser"
 	dev "github.com/rcornwell/S370/emu/device"
 	event "github.com/rcornwell/S370/emu/event"
@@ -60,15 +61,16 @@ var debugOption = map[string]int{
 }
 
 type Model1403ctx struct {
-	addr     uint16      // Current device address
-	busy     bool        // Reader busy
-	halt     bool        // Signal halt requested
-	sense    uint8       // Current sense byte
+	addr     uint16      // Current device address.
+	busy     bool        // Reader busy.
+	halt     bool        // Signal halt requested.
+	sense    uint8       // Current sense byte.
 	file     *os.File    // Printer file.
 	fcb      [100]uint16 // FCB tape.
+	fcbName  string      // Name of current FCB.
 	lpp      int         // Lines per page
 	lineNum  int         // Current line number.
-	detachk  bool        // Don't return data-check
+	detachk  bool        // Don't return data-check.
 	ch12     bool        // Channel 12 sense.
 	buffer   [140]uint8  // buffer.
 	bufPtr   int         // Pointer to where in buffer we are.
@@ -190,30 +192,6 @@ func (device *Model1403ctx) InitDev() uint8 {
 	return 0
 }
 
-// Attach file to device.
-func (device *Model1403ctx) Attach(_ []dev.CmdOption) error {
-	return nil
-}
-
-// Detach device.
-func (device *Model1403ctx) Detach() error {
-	if device.file != nil {
-		device.file.Close()
-		device.file = nil
-	}
-	return nil
-}
-
-// Set command.
-func (device *Model1403ctx) Set(_ []dev.CmdOption) error {
-	return nil
-}
-
-// Show command.
-func (device *Model1403ctx) Show(_ []dev.CmdOption) error {
-	return nil
-}
-
 // Shutdown device.
 func (device *Model1403ctx) Shutdown() {
 	_ = device.Detach()
@@ -227,6 +205,180 @@ func (device *Model1403ctx) Debug(opt string) error {
 	}
 	device.debugMsk |= flag
 	return nil
+}
+
+// List of valid options.
+func (device *Model1403ctx) Options(_ string) []command.Options {
+	fcbList := []string{}
+	for k := range fcbTables {
+		fcbList = append(fcbList, strings.ToLower(k))
+	}
+	return []command.Options{
+		{
+			Name:        "file",
+			OptionType:  command.OptionFile,
+			OptionValid: command.ValidAttach | command.ValidShow,
+		},
+		{
+			Name:        "lpp",
+			OptionType:  command.OptionNumber,
+			OptionValid: command.ValidAttach | command.ValidSet,
+		},
+		{
+			Name:        "linesperpage",
+			OptionType:  command.OptionNumber,
+			OptionValid: command.ValidAttach | command.ValidSet | command.ValidShow,
+		},
+		{
+			Name:        "fcb",
+			OptionType:  command.OptionList,
+			OptionValid: command.ValidAttach | command.ValidSet | command.ValidShow,
+			OptionList:  fcbList,
+		},
+	}
+}
+
+// Attach file to device.
+func (device *Model1403ctx) Attach(opts []*command.CmdOption) error {
+	_ = device.Detach()
+	for _, opt := range opts {
+		switch opt.Name {
+		case "file":
+			if opt.EqualOpt == "" {
+				return errors.New("file requires file name")
+			}
+			if device.file != nil {
+				return errors.New("only one file name option allowd")
+			}
+			var err error
+			device.file, err = os.Create(opt.EqualOpt)
+			if err != nil {
+				return err
+			}
+
+		case "lpp", "linesperpage":
+			if opt.EqualOpt == "" {
+				return errors.New("lines per page requires number")
+			}
+			if opt.Value == 0 || opt.Value > 100 {
+				return errors.New("number of lines per page to large")
+			}
+			device.lpp = opt.Value
+
+		case "fcb":
+			if opt.EqualOpt == "" {
+				return errors.New("fcb requires name")
+			}
+
+			table, ok := fcbTables[opt.EqualOpt]
+			if !ok {
+				return errors.New("invalid fcb name")
+			}
+
+			for i, v := range table {
+				device.fcb[i] = v
+				device.lpp++
+				if (v & 0x1000) != 0 {
+					break
+				}
+			}
+		default:
+			return errors.New("invalid option: " + opt.Name)
+		}
+	}
+	return nil
+}
+
+// Detach device.
+func (device *Model1403ctx) Detach() error {
+	if device.file != nil {
+		device.file.Close()
+		device.file = nil
+	}
+	return nil
+}
+
+// Set command.
+func (device *Model1403ctx) Set(unset bool, opts []*command.CmdOption) error {
+	if unset {
+		return errors.New("unset option not supported")
+	}
+
+	for _, opt := range opts {
+		switch opt.Name {
+		case "lpp", "linesperpage":
+			if opt.EqualOpt == "" {
+				return errors.New("lines per page requires number")
+			}
+			if opt.Value == 0 || opt.Value > 100 {
+				return errors.New("number of lines per page to large")
+			}
+			device.lpp = opt.Value
+
+		case "fcb":
+			if opt.EqualOpt == "" {
+				return errors.New("fcb requires name")
+			}
+
+			table, ok := fcbTables[opt.EqualOpt]
+			if !ok {
+				return errors.New("invalid fcb name")
+			}
+
+			for i, v := range table {
+				device.fcb[i] = v
+				device.lpp++
+				if (v & 0x1000) != 0 {
+					break
+				}
+			}
+			device.fcbName = opt.EqualOpt
+
+		default:
+			return errors.New("invalid option: " + opt.Name)
+		}
+	}
+	return nil
+}
+
+// Show command.
+func (device *Model1403ctx) Show(opts []*command.CmdOption) (string, error) {
+	flags := 0
+
+	str := fmt.Sprintf("%03x:", device.addr)
+	for _, opt := range opts {
+		switch opt.Name {
+		case "file":
+			flags |= 1
+
+		case "lpp", "linesperpage":
+			flags |= 2
+
+		case "fcb":
+			flags |= 4
+		default:
+			return "", errors.New("invalid option: " + opt.Name)
+		}
+	}
+
+	if flags == 0 {
+		flags = 7
+	}
+	if (flags & 2) != 0 {
+		str += fmt.Sprintf(" lpp=%d", device.lpp)
+	}
+	if (flags & 4) != 0 {
+		str += " fcb=" + strings.ToLower(device.fcbName)
+	}
+	if (flags & 1) != 0 {
+		if device.file != nil {
+			str += " " + device.file.Name()
+		} else {
+			str += " not attached"
+		}
+	}
+
+	return str, nil
 }
 
 // Print a line of text.
@@ -417,7 +569,7 @@ func init() {
 // Create a card punch device.
 func create(devNum uint16, _ string, options []config.Option) error {
 	device := Model1403ctx{addr: devNum}
-	err := ch.AddDevice(&device, devNum)
+	err := ch.AddDevice(&device, &device, devNum)
 	if err != nil {
 		return fmt.Errorf("unable to create 1403 at %03x", devNum)
 	}
@@ -485,5 +637,7 @@ func create(devNum uint16, _ string, options []config.Option) error {
 			break
 		}
 	}
+
+	device.fcbName = fcb
 	return nil
 }

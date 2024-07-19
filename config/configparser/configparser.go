@@ -96,12 +96,20 @@ const (
 
 // Model creation list.
 type modelDef struct {
-	// create func(uint16, byte, byte, string, []*Option) bool
 	create func(uint16, string, []Option) error
 	ty     int
 }
 
 var models = map[string]modelDef{}
+
+var ModelList []string
+
+type SetOption struct {
+	Name   string // Name of device.
+	Option string // Option value.
+}
+
+var SetList []SetOption
 
 var lineNumber int
 
@@ -115,7 +123,6 @@ func getModel(mod string) int {
 }
 
 // Register should be called from init functions.
-// func RegisterModel(mod string, ty int, fn func(uint16, byte, byte, string, []*Option) bool) {.
 func RegisterModel(mod string, ty int, fn func(uint16, string, []Option) error) {
 	mod = strings.ToUpper(mod)
 	slog.Debug("Registering device: " + mod)
@@ -129,6 +136,10 @@ func RegisterSwitch(mod string, fn func(uint16, string, []Option) error) {
 	slog.Debug("Registering switch: " + mod)
 	model := modelDef{create: fn, ty: TypeSwitch}
 	models[mod] = model
+}
+
+func RegisterSet(name string, option string) {
+	SetList = append(SetList, SetOption{Name: name, Option: option})
 }
 
 // Register should be called from init functions.
@@ -152,6 +163,7 @@ func RegisterFile(mod string, fn func(uint16, string, []Option) error) {
 func createModel(mod string, first *FirstOption, options []Option) error {
 	mod = strings.ToUpper(mod)
 	model, ok := models[mod]
+
 	if !ok {
 		return errors.New("Unknown model: " + mod)
 	}
@@ -159,7 +171,16 @@ func createModel(mod string, first *FirstOption, options []Option) error {
 	if model.ty != TypeModel {
 		return errors.New("Not a device type: " + mod)
 	}
-	return model.create(first.devNum, "", options)
+
+	if first.devNum == D.NoDev {
+		return errors.New("Model: " + mod + " requires device number")
+	}
+	slog.Debug("Creating device " + mod + " number " + first.value)
+	err := model.create(first.devNum, "", options)
+	if err == nil {
+		ModelList = append(ModelList, first.value)
+	}
+	return err
 }
 
 // Create a option with one parameter.
@@ -260,6 +281,7 @@ func LoadConfigFile(name string) error {
 		}
 		line.line = ""
 	}
+	slog.Debug(strings.Join(ModelList, ", "))
 	return nil
 }
 
@@ -414,30 +436,6 @@ func (line *optionLine) parseModel() *modelName {
 	}
 
 	model.model = strings.ToUpper(model.model)
-	// // Check if either - or / option following
-	// for {
-	// 	by := line.line[line.pos]
-	// 	// Check for dash option
-	// 	if by == '-' {
-	// 		if model.dash != 0 {
-	// 			fmt.Printf("Model contains more then one - option: line %s\n", line.line)
-	// 			return nil
-	// 		}
-	// 		model.dash = line.getNext()
-	// 		continue
-	// 	}
-
-	// 	// Check for minue option
-	// 	if by == '/' {
-	// 		if model.slash != 0 {
-	// 			fmt.Printf("Model contains more then one / option: line %s\n", line.line)
-	// 			return nil
-	// 		}
-	// 		model.slash = line.getNext()
-	// 		continue
-	// 	}
-	// 	break
-	// }
 	return &model
 }
 
