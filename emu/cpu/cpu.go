@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 	"unicode"
 
@@ -164,6 +165,7 @@ func InitializeCPU() {
 }
 
 func IPLDevice(devNum uint16) error {
+	InitializeCPU()
 	sysCPU.flags = wait
 	sysCPU.sysMask = 0xffff
 	return ch.IPLDevice(devNum)
@@ -391,20 +393,26 @@ func (cpu *cpuState) fetch() (int, bool) {
 
 	// if cpu.iPC != 0x0002026 {
 	if (debugMsk & debugInst) != 0 {
-		str := fmt.Sprintf("%08x %02x %02x ", cpu.iPC, uint32(step.opcode), uint32(step.reg))
+		var str strings.Builder
+		str.Grow(80)
+		// hex.FormatWord(&str, cpu.iPC)
+		// hex.FormatBytes(&str, inst[0:1])
+		fmt.Fprintf(&str, "%08x %02x %02x ", cpu.iPC, uint32(step.opcode), uint32(step.reg))
 		if cpu.ilc > 1 {
-			str += fmt.Sprintf("%02x%02x ", inst[2], inst[3])
+			//	hex.FormatBytes(&str, inst[2:3])
+			fmt.Fprintf(&str, "%02x%02x ", inst[2], inst[3])
 		} else {
-			str += "     "
+			str.WriteString("     ")
 		}
 		if cpu.ilc > 2 {
-			str += fmt.Sprintf("%02x%02x ", inst[4], inst[5])
+			//	hex.FormatBytes(&str, inst[4:5])
+			fmt.Fprintf(&str, "%02x%02x ", inst[4], inst[5])
 		} else {
-			str += "     "
+			str.WriteString("     ")
 		}
 		symbolic, _ := dis.Disasemble(inst)
-		str += symbolic
-		debug.Debugf("CPU", debugMsk, debugInst, str)
+		str.WriteString(symbolic)
+		debug.Debugf("CPU", debugMsk, debugInst, str.String())
 	}
 
 	err = cpu.execute(&step)
@@ -1273,10 +1281,12 @@ func (cpu *cpuState) storeDouble(reg uint8, value uint64) {
 
 // register a device on initialize.
 func init() {
-	config.RegisterSwitch("VMASIST", setVMA)
+	config.RegisterSwitch("VMASSIST", setVMA)
 	config.RegisterOption("MEMSIZE", setMemSize)
 	// Temporary for testing.
-	config.RegisterModel("IPL", config.TypeModel, setIPLDev)
+	config.RegisterModel("IPL", config.TypeOption, setIPLDev)
+	// Register setting options on CPU.
+	config.RegisterSet("cpu", "vmassist")
 }
 
 // Enable VM Assist feature.
@@ -1323,6 +1333,9 @@ var IPLDev uint16
 
 // Set size of memory.
 func setIPLDev(devNum uint16, _ string, _ []config.Option) error {
+	if devNum == Dv.NoDev {
+		return errors.New("IPL requires devie number")
+	}
 	IPLDev = devNum
 	return nil
 }
