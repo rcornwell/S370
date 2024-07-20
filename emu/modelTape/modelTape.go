@@ -515,9 +515,28 @@ func (device *Model2400ctx) Show(opts []*command.CmdOption) (string, error) {
 	return str, nil
 }
 
+// Rewind tape to start.
+func (device *Model2400ctx) Rewind() error {
+	return device.context.Rewind()
+}
+
+// Reset a device.
+func (device *Model2400ctx) Reset() error {
+	if device.InitDev() != 0 {
+		return errors.New("device failed to reset")
+	}
+	return nil
+}
+
+// Return device address.
+func (device *Model2400ctx) GetAddr() uint16 {
+	return device.addr
+}
+
 // Callback for reqind commands.
 func (device *Model2400ctx) callbackRewind(cmd int) {
 	if device.context.RewindFrames(10000) {
+		device.rewind = false
 		if device.unload {
 			err := device.context.Detach()
 			if err != nil {
@@ -525,7 +544,6 @@ func (device *Model2400ctx) callbackRewind(cmd int) {
 			}
 			device.unload = false
 		}
-		device.rewind = false
 		event.AddEvent(device, device.callbackFinish, 1000, cmd)
 	} else {
 		event.AddEvent(device, device.callbackRewind, 1000, cmd)
@@ -744,7 +762,7 @@ func (device *Model2400ctx) callbackFinish(cmd int) {
 	device.busy = false
 	device.halt = false
 	device.skip = false
-	//	fmt.Printf("Tape finish: %02x\n", cmd)
+	debug.DebugDevf(device.addr, device.debugMsk, debugCmd, "finish %02x", cmd)
 	switch uint8(cmd) {
 	case dev.CmdRead, dev.CmdRDBWD, dev.CmdWrite:
 		err := device.context.FinishRecord()
@@ -770,7 +788,7 @@ func (device *Model2400ctx) callbackFinish(cmd int) {
 		device.mark = false
 		ch.SetDevAttn(device.addr, dev.CStatusDevEnd)
 
-	case cmdWTM:
+	case cmdWTM, cmdREW, cmdRUN:
 		ch.SetDevAttn(device.addr, dev.CStatusDevEnd)
 
 	case cmdFSR, cmdBSR:

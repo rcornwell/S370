@@ -63,12 +63,13 @@ const (
 )
 
 var (
-	TapeEOT       = errors.New("EOT")    // End of tape error.
-	TapeMARK      = errors.New("MARK")   // Tape mark found.
-	TapeBOT       = errors.New("BOT")    // Beginning of tape.
-	TapeEOR       = errors.New("EOR")    // End of record.
-	errTapeFORMAT = errors.New("FORMAT") // Tape format error.
-	errTapeTYPE   = errors.New("TYPE")   // Tape type not supported.
+	TapeEOT        = errors.New("EOT")    // End of tape error.
+	TapeMARK       = errors.New("MARK")   // Tape mark found.
+	TapeBOT        = errors.New("BOT")    // Beginning of tape.
+	TapeEOR        = errors.New("EOR")    // End of record.
+	errTapeFORMAT  = errors.New("FORMAT") // Tape format error.
+	errTapeTYPE    = errors.New("TYPE")   // Tape type not supported.
+	errNotAttached = errors.New("not attached")
 )
 
 // Structure to hold tape information.
@@ -250,7 +251,7 @@ func (tape *Context) Detach() error {
 func (tape *Context) WriteStart() error {
 	// Error if not attached.
 	if tape.file == nil {
-		return errors.New("tape not attached")
+		return errNotAttached
 	}
 
 	// Check if tape writable.
@@ -311,7 +312,7 @@ func (tape *Context) WriteStart() error {
 func (tape *Context) WriteMark() error {
 	// Error if not attached.
 	if tape.file == nil {
-		return errors.New("tape not attached")
+		return errNotAttached
 	}
 
 	// Check if tape writable.
@@ -356,7 +357,7 @@ func (tape *Context) WriteMark() error {
 func (tape *Context) ReadForwStart() error {
 	// Error if not attached.
 	if tape.file == nil {
-		return errors.New("tape not attached")
+		return errNotAttached
 	}
 
 	// Clear BOT and EOT indicators.
@@ -444,7 +445,7 @@ func (tape *Context) ReadForwStart() error {
 func (tape *Context) ReadBackStart() error {
 	// Error if not attached.
 	if tape.file == nil {
-		return errors.New("tape not attached")
+		return errNotAttached
 	}
 
 	// Clear BOT and EOT indicators.
@@ -538,7 +539,7 @@ func (tape *Context) ReadBackStart() error {
 func (tape *Context) ReadFrame() (byte, error) {
 	// Error if not attached.
 	if tape.file == nil {
-		return 0, errors.New("tape not attached")
+		return 0, errNotAttached
 	}
 
 	if tape.mark {
@@ -623,7 +624,7 @@ func (tape *Context) ReadFrame() (byte, error) {
 func (tape *Context) WriteFrame(data byte) error {
 	// Error if not attached.
 	if tape.file == nil {
-		return errors.New("tape not attached")
+		return errNotAttached
 	}
 
 	// For P7B format for begin set IRG flag.
@@ -643,7 +644,7 @@ func (tape *Context) WriteFrame(data byte) error {
 func (tape *Context) FinishRecord() error {
 	// Error if not attached.
 	if tape.file == nil {
-		return errors.New("tape not attached")
+		return errNotAttached
 	}
 
 	// If there was tape mark, nothing more to do.
@@ -679,11 +680,38 @@ func (tape *Context) FinishRecord() error {
 	return err
 }
 
+// Rewind a tape.
+func (tape *Context) Rewind() error {
+	if tape.file == nil {
+		return errNotAttached
+	}
+	// If buffer dirty, flush it to file.
+	if tape.dirty {
+		_, _ = tape.file.Seek(tape.position, io.SeekStart)
+		n, err := tape.file.Write(tape.buffer[:tape.bufLen])
+		if err != nil {
+			return err
+		}
+		if n != tape.bufLen {
+			return errors.New("Write error on: " + tape.file.Name())
+		}
+		tape.dirty = false
+	}
+	tape.bufPos = 0
+	tape.bufLen = 0
+	tape.frame = 0
+	tape.position = 0
+	tape.mark = false
+	tape.eot = false
+	tape.bot = true
+	return nil
+}
+
 // Start rewind.
 func (tape *Context) StartRewind() error {
 	// Error if not attached.
 	if tape.file == nil {
-		return errors.New("tape not attached")
+		return errNotAttached
 	}
 
 	// If buffer dirty, flush it to file.

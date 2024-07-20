@@ -35,22 +35,24 @@ import (
 	"github.com/rcornwell/S370/emu/core"
 )
 
-func ConsoleReader(core *core.Core) {
-	line := liner.NewLiner()
-	defer line.Close()
+var Line *liner.State
 
-	line.SetCtrlCAborts(true)
-	line.SetCompleter(func(line string) []string {
+func ConsoleReader(core *core.Core) {
+	Line = liner.NewLiner()
+	defer Line.Close()
+
+	Line.SetCtrlCAborts(true)
+	Line.SetCompleter(func(line string) []string {
 		return parser.CompleteCmd(line)
 	})
 
 	for {
-		command, err := line.Prompt("S370> ")
+		command, err := Line.Prompt("S370> ")
 		if err == nil {
-			line.AppendHistory(command)
-			quit, err := parser.ProcessCommand(command, core)
-			if err != nil {
-				fmt.Println("Error: " + err.Error())
+			Line.AppendHistory(command)
+			quit, cmderr := parser.ProcessCommand(command, core)
+			if cmderr != nil {
+				fmt.Println("Error: " + cmderr.Error())
 			}
 			if quit {
 				return
@@ -60,8 +62,7 @@ func ConsoleReader(core *core.Core) {
 
 		if errors.Is(err, liner.ErrPromptAborted) {
 			return
-		} else {
-			slog.Error("error reading line: " + err.Error())
 		}
+		slog.Error("error reading line: " + err.Error())
 	}
 }

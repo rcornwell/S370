@@ -102,10 +102,6 @@ func main() {
 	// Start main emulator.
 	go cpu.Start()
 
-	// Wait for a SIGINT or SIGTERM signal to gracefully shut down the server
-	//	sigChan := make(chan os.Signal, 1)
-	//	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
 	msg := make(chan string, 1)
 	go func() {
 		reader.ConsoleReader(cpu)
@@ -115,9 +111,7 @@ func main() {
 	// Wait on shutdown option
 	<-msg
 
-	Logger.Info("Shutting down CPU")
 	cpu.Stop()
-	Logger.Info("Shutting down server...")
 	telnet.Stop()
 	Logger.Info("Servers stopped.")
 }

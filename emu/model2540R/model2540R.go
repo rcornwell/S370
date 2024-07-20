@@ -366,6 +366,24 @@ func (device *Model2540Rctx) Show(opts []*command.CmdOption) (string, error) {
 	return str, nil
 }
 
+func (device *Model2540Rctx) Rewind() error {
+	return command.NotSupported
+}
+
+// Reset a device.
+func (device *Model2540Rctx) Reset() error {
+	device.context.EmptyDeck()
+	if device.InitDev() != 0 {
+		return errors.New("device failed to reset")
+	}
+	return nil
+}
+
+// Return device address.
+func (device *Model2540Rctx) GetAddr() uint16 {
+	return device.addr
+}
+
 // Handle channel operations.
 func (device *Model2540Rctx) callback(cmd int) {
 	var status uint8

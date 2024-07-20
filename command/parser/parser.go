@@ -27,23 +27,19 @@ package parser
 
 import (
 	"errors"
-	"fmt"
-	"log/slog"
-	"strconv"
 	"strings"
 	"unicode"
 
 	command "github.com/rcornwell/S370/command/command"
-	config "github.com/rcornwell/S370/config/configparser"
 	core "github.com/rcornwell/S370/emu/core"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
 )
 
 type cmd struct {
-	name     string // Command name.
-	min      int    // Minimum match size.
-	process  func(*cmdLine, *core.Core) (bool, error)
-	complete func(*cmdLine) []string
+	Name     string // Command name.
+	Min      int    // Minimum match size.
+	Process  func(*cmdLine, *core.Core) (bool, error)
+	Complete func(*cmdLine) []string
 }
 
 type cmdLine struct {
@@ -51,23 +47,10 @@ type cmdLine struct {
 	pos  int    // Position in line.
 }
 
-var cmdList = []cmd{
-	{name: "attach", min: 2, process: attach, complete: attachComplete},
-	{name: "detach", min: 2, process: detach},
-	{name: "set", min: 3, process: set, complete: setComplete},
-	{name: "unset", min: 4, process: unset, complete: setComplete},
-	{name: "quit", min: 4, process: quit},
-	{name: "stop", min: 3, process: stop},
-	{name: "continue", min: 1, process: cont},
-	{name: "start", min: 3, process: start},
-	{name: "show", min: 2, process: show},
-	{name: "ipl", min: 1, process: ipl},
-}
-
 // Execute the command line given.
 func ProcessCommand(commandLine string, core *core.Core) (bool, error) {
 	line := cmdLine{line: commandLine}
-	command := line.getWord(false)
+	command, _ := line.getWord(false)
 
 	match := matchList(command)
 	if len(match) == 0 {
@@ -78,79 +61,18 @@ func ProcessCommand(commandLine string, core *core.Core) (bool, error) {
 		return false, errors.New("unique command not found: " + command)
 	}
 
-	return match[0].process(&line, core)
-}
-
-// Called to complete a command line, during line editing.
-func CompleteCmd(commandLine string) []string {
-	line := cmdLine{line: commandLine}
-	name := line.getWord(false)
-
-	// We have a command, let it try and complete it.
-	if !line.isEOL() && line.line[line.pos] == ' ' {
-		// Skip leading spaces.
-		line.skipSpace()
-		// See if there is a completer for this command.
-		match := matchList(name)
-		if len(match) == 0 || len(match) > 1 {
-			return nil
-		}
-
-		if match[0].complete != nil {
-			return match[0].complete(&line)
-		}
-		return nil
-	}
-
-	matchList := matchList(name)
-	matches := make([]string, len(matchList))
-	for i, m := range matchList {
-		matches[i] = m.name
-	}
-
-	return matches
+	return match[0].Process(&line, core)
 }
 
 // Check if command matches at least to minimum length.
 func matchCommand(match cmd, command string) bool {
 	l := 0
 	for l = range len(command) {
-		if match.name[l] != command[l] {
+		if match.Name[l] != command[l] {
 			return false
 		}
 	}
-	return (l + 1) >= match.min
-}
-
-// Match for device address.
-func matchDevice(appendStart bool, line cmdLine) []string {
-	leading := ""
-	device := ""
-	pos := line.pos
-	if appendStart {
-		leading = line.line[:pos]
-	}
-
-	// Collect device.
-	for pos < len(line.line) && line.line[pos] != ' ' && line.line[pos] != '#' {
-		device += string(line.line[pos])
-		pos++
-	}
-
-	devices := []string{}
-outer:
-	for _, str := range config.ModelList {
-		for j, by := range device {
-			if j > len(str) {
-				continue outer
-			}
-			if str[j] != byte(by) {
-				continue outer
-			}
-		}
-		devices = append(devices, leading+str+" ")
-	}
-	return devices
+	return (l + 1) >= match.Min
 }
 
 // Check if command matches one of the commands.
@@ -218,8 +140,18 @@ func (line *cmdLine) getNext() byte {
 	return line.line[line.pos]
 }
 
+// Return current digit and advance to next.
+func (line *cmdLine) getCurrent() byte {
+	if line.isEOL() {
+		return 0
+	}
+	by := line.line[line.pos]
+	line.pos++
+	return by
+}
+
 // Peek at next character.
-func (line *cmdLine) getPeek() byte {
+func (line *cmdLine) peekNext() byte {
 	if (line.pos + 1) >= len(line.line) {
 		return 0
 	}
@@ -232,107 +164,134 @@ func (line *cmdLine) parseQuoteString() (string, bool) {
 	value := ""
 
 	// If quote, set we are in quoted string
-	if line.getPeek() == '"' {
-		inQuote = true
-		_ = line.getNext()
+	by := line.getCurrent()
+	if by == 0 {
+		return "", false
 	}
 
-	for {
-		by := line.getNext()
+	if by == '"' {
+		inQuote = true
+		by = line.getCurrent()
+	}
+
+	for by != 0 {
 		// If processing a quoted string "" gets replaced by signal quote
 		if by == '"' && inQuote {
-			by = line.getNext()
+			by = line.getCurrent()
+			// Single quote terminates string.
 			if by != '"' {
 				// Hit end of string.
 				return value, true
 			}
 		}
 
-		space := unicode.IsSpace(rune(by))
-		// Space terminates a no quoted string.
-		if !inQuote && (space || by == 0) {
-			return value, true
+		if inQuote {
+			value += string(by)
+		} else {
+			// Space terminates a no quoted string.
+			if by != 0 && unicode.IsSpace(rune(by)) {
+				return value, true
+			}
 		}
 
 		value += string(by)
 		// If we hit end of line, stop processing.
-		if line.isEOL() {
-			return value, !inQuote
-		}
+		by = line.getCurrent()
 	}
+	return value, !inQuote
 }
 
-// Parse device number.
-func (line *cmdLine) getDevNum() string {
+// Parse parse a number.
+func (line *cmdLine) getNumber() (int, error) {
 	line.skipSpace()
 
 	// Check if end of line.
 	if line.isEOL() {
-		return ""
+		return 0, errors.New("not a number")
 	}
 
+	value := 0
 	// Characters must be alphabetic
-	value := ""
-	by := line.line[line.pos]
-	for {
-		if !unicode.IsLetter(rune(by)) && !unicode.IsDigit(rune(by)) {
-			return ""
+	by := line.getCurrent()
+	for by != 0 {
+		if !unicode.IsDigit(rune(by)) {
+			return 0, errors.New("not a number")
 		}
-		value += string([]byte{by})
-		by = line.getNext()
-		if line.isEOL() || unicode.IsSpace(rune(by)) {
+		value = (value * 10) + int(by-'0')
+		by = line.getCurrent()
+		if by != 0 && unicode.IsSpace(rune(by)) {
 			break
 		}
 	}
 
-	return strings.ToLower(value)
+	return value, nil
+}
+
+const hex = "0123456789abcdef"
+
+// Parse hex number.
+func (line *cmdLine) getHex() (int, error) {
+	line.skipSpace()
+
+	pos := line.pos
+	value := 0
+	// Characters must be alphabetic
+	by := line.getCurrent()
+	for by != 0 {
+		digit := strings.Index(hex, strings.ToLower(string(by)))
+		if digit == -1 {
+			line.pos = pos
+			return 0, errors.New("not a number")
+		}
+		value = (value << 4) + digit
+		by = line.getCurrent()
+		if by != 0 && unicode.IsSpace(rune(by)) {
+			break
+		}
+	}
+
+	return value, nil
 }
 
 // Parse option name.
-func (line *cmdLine) getWord(equal bool) string {
+// Return string and whether last charcter was = or not
+func (line *cmdLine) getWord(equal bool) (string, byte) {
 	line.skipSpace()
 
-	// Check if end of line.
-	if line.isEOL() {
-		return ""
-	}
-
-	pos := line.pos
 	// Characters must be alphabetic
 	value := ""
-	by := line.line[line.pos]
-	for {
+	pos := line.pos
+	by := line.getCurrent()
+	for by != 0 {
 		if !unicode.IsLetter(rune(by)) {
 			line.pos = pos
-			return ""
+			return "", by
 		}
 		value += string([]byte{by})
-		by = line.getNext()
-		if line.isEOL() || unicode.IsSpace(rune(by)) {
+		by = line.getCurrent()
+		if by != 0 && unicode.IsSpace(rune(by)) {
 			break
 		}
-		if by == '=' {
-			if equal {
-				break
-			}
-			line.pos = pos
-			return ""
+		if by == '=' && equal {
+			return strings.ToLower(value), by
 		}
 	}
 
-	return strings.ToLower(value)
+	return strings.ToLower(value), by
 }
 
 // Get an option.
 func (line *cmdLine) getOption(opts []command.Options, cmdType int) (*command.CmdOption, error) {
-	name := line.getWord(true)
 	// Get a word, stoping at equal or space.
+	name, last := line.getWord(true)
+
+	// Get command interface
 	opt := command.CmdOption{Name: name}
 
-	if name == "" {
+	if name == "" && last != '"' {
 		if cmdType == command.ValidAttach {
 			// For attach commands, if there is a valid name, consider it a file name.
-			if !line.isEOL() && !unicode.IsSpace(rune(line.line[line.pos])) {
+			if last == 0 || unicode.IsSpace(rune(last)) {
 				line.pos--
 				file, ok := line.parseQuoteString()
 				if !ok {
@@ -350,7 +309,7 @@ func (line *cmdLine) getOption(opts []command.Options, cmdType int) (*command.Cm
 	case -1:
 		return nil, errors.New("unknown option: " + name)
 	case command.OptionSwitch:
-		if line.isEOL() || line.line[line.pos] != ' ' {
+		if last != 0 && line.line[line.pos] != ' ' {
 			break
 		}
 		return nil, errors.New("switch option can't have arguments: " + name)
@@ -361,22 +320,32 @@ func (line *cmdLine) getOption(opts []command.Options, cmdType int) (*command.Cm
 		}
 		opt.EqualOpt = file
 	case command.OptionNumber:
-		if line.isEOL() || line.line[line.pos] != '=' {
+		if last != '=' {
 			return nil, errors.New("number options must be followed by number: " + name)
 		}
-		numStr := line.getWord(false)
-		num, err := strconv.ParseUint(numStr, 10, 32)
+		num, err := line.getNumber()
 		if err != nil {
 			return nil, errors.New("number options must be followed by number: " + name)
 		}
 		opt.Value = int(num)
-	case command.OptionList:
-		if line.isEOL() || line.line[line.pos] != '=' {
-			return nil, errors.New("number options must be followed by number: " + name)
+
+	case command.OptionHex:
+		if last != '=' {
+			return nil, errors.New("hex options must be followed by hexdecimal numbe: " + name)
 		}
-		// Skip equal sign.
-		_ = line.getNext()
-		listStr := line.getWord(false)
+		num, err := line.getHex()
+		if err != nil {
+			return nil, errors.New("hex options must be followed by hexdecimal number: " + name)
+		}
+		opt.Value = int(num)
+	case command.OptionList:
+		if last != '=' {
+			return nil, errors.New("number options must be followed by name: " + name)
+		}
+		listStr, end := line.getWord(false)
+		if end != 0 || !unicode.IsSpace(rune(last)) {
+			return nil, errors.New("number options must be followed by name: " + name)
+		}
 		opt.EqualOpt = listStr
 		for _, mod := range match.OptionList {
 			if strings.ToLower(mod) == listStr {
@@ -394,10 +363,22 @@ func (line *cmdLine) getOption(opts []command.Options, cmdType int) (*command.Cm
 func (line *cmdLine) getShowOptions(device command.Command) ([]*command.CmdOption, error) {
 	optlist := []*command.CmdOption{}
 	opts := device.Options("")
+	_, err := line.getHex()
+	if err != nil {
+		return nil, err
+	}
+	if line.isEOL() {
+		return nil, nil
+	}
+
 	for {
-		name := line.getDevNum()
-		if line.isEOL() {
+		name, last := line.getWord(false)
+
+		if name == "" {
 			break
+		}
+		if last != 0 && !unicode.IsSpace(rune(last)) {
+			return nil, errors.New("set command does not take modifies")
 		}
 		// Get a word, stoping at equal or space.
 		match := matchOption(name, opts, command.ValidShow)
@@ -428,383 +409,18 @@ func (line *cmdLine) getOptions(device command.Command, cmdType int) ([]*command
 	return optlist, nil
 }
 
-// Scan a option list element.
-func (line *cmdLine) scanList() string {
-	// Characters must be alphabetic
-	value := ""
-	for {
-		if line.isEOL() {
-			return strings.ToLower(value)
-		}
-		by := line.line[line.pos]
-		if unicode.IsSpace(rune(by)) {
-			return value
-		}
-		line.pos++
-		if !unicode.IsLetter(rune(by)) {
-			return ""
-		}
-		value += string([]byte{by})
-	}
-}
-
-// Scan a string for an option.
-func scanOpt(name string, opts []command.Options, cmdType int) []command.Options {
-	matches := []command.Options{}
-	for _, opt := range opts {
-		if (opt.OptionValid & cmdType) == 0 {
-			continue
-		}
-		if opt.Name == name {
-			matches = []command.Options{{Name: opt.Name, OptionType: opt.OptionType, OptionList: opt.OptionList}}
-			return matches
-		}
-
-		if name == "" || strings.HasPrefix(opt.Name, name) {
-			option := command.Options{Name: opt.Name, OptionType: opt.OptionType, OptionList: opt.OptionList}
-			matches = append(matches, option)
-		}
-	}
-
-	return matches
-}
-
-// Get an option.
-func (line *cmdLine) scanOption(opt command.Options) ([]string, bool) {
-	skip := false
-	str := ""
-	switch opt.OptionType {
-	case command.OptionSwitch:
-	case command.OptionFile:
-		str, skip = line.parseQuoteString()
-	case command.OptionNumber:
-		str = line.getWord(false)
-		skip = str != ""
-	case command.OptionList:
-		modName := line.scanList()
-		mods := []string{}
-		for _, mod := range opt.OptionList {
-			mod = strings.ToLower(mod)
-			if modName == mod {
-				return []string{mod + " "}, true
-			}
-			if modName == "" || strings.HasPrefix(mod, modName) {
-				mods = append(mods, mod+" ")
-			}
-		}
-		return mods, false
-	}
-	return []string{str}, skip
-}
-
-// Scan to find last option.
-func (line *cmdLine) scanOptions(device command.Command, cmdType int) []string {
-	opts := device.Options("")
-	matches := []string{}
-	for {
-		line.skipSpace()
-		leading := ""
-		if line.pos == (len(line.line) - 1) {
-			leading = line.line
-		} else {
-			leading = line.line[:line.pos]
-		}
-		name := line.getWord(true)
-
-		matchOpts := scanOpt(name, opts, cmdType)
-		line.skipSpace()
-		if len(matchOpts) > 1 {
-			leading = line.line[:line.pos-len(name)]
-			for _, opt := range matchOpts {
-				matches = append(matches, leading+opt.Name)
-			}
-			return matches
-		}
-		eq := " "
-		if matchOpts[0].OptionType != command.OptionSwitch {
-			eq = "="
-		}
-
-		if matchOpts[0].Name != name {
-			return []string{leading + matchOpts[0].Name + eq}
-		}
-
-		if matchOpts[0].OptionType != command.OptionSwitch {
-			if line.pos == len(line.line) {
-				line.line += eq
-			}
-			if line.line[line.pos] == eq[0] {
-				line.pos++
-			}
-		}
-		leading = line.line[:line.pos]
-		// Scan rest of options until one not complete.
-		optMatch, skip := line.scanOption(matchOpts[0])
-		if !skip {
-			for _, opt := range optMatch {
-				matches = append(matches, leading+opt)
-			}
-			return matches
-		}
-	}
-}
-
-// Scan device style commands.
-func (line *cmdLine) scanDevice(cmdType int) []string {
-	devices := matchDevice(true, *line)
-	if len(devices) != 1 {
-		return devices
-	}
-
-	devName := line.getDevNum()
-	list := []string{}
-	devNum, ok := strconv.ParseUint(devName, 16, 12)
+// Return pointer to command interface to device.
+func (line *cmdLine) getDevice() (command.Command, error) {
+	// Get device number make sure it is valid.
+	devNum, ok := line.getHex()
 	if ok != nil {
-		slog.Debug("Unable to convert " + devName + " " + ok.Error())
-		return []string{}
+		return nil, errors.New("device must be number ")
+	}
+
+	if devNum > 0xfff {
+		return nil, errors.New("device number too large")
 	}
 
 	// Get pointer to device.
-	device, err := ch.GetCommand(uint16(devNum))
-	if err != nil {
-		slog.Debug("Unable to find device: " + devName + " error: " + err.Error())
-		return list
-	}
-
-	return line.scanOptions(device, cmdType)
-}
-
-// // Skip over command name.
-// func skipCmd(line string) string {
-// 	var pos int
-// 	// Skip leading spaces.
-// 	for pos < len(line) {
-// 		if line[pos] != ' ' {
-// 			break
-// 		}
-// 		pos++
-// 	}
-
-// 	// Skip command.
-// 	for pos < len(line) {
-// 		if line[pos] == ' ' {
-// 			break
-// 		}
-// 		pos++
-// 	}
-
-// 	// Skip trailing space.
-// 	for pos < len(line) {
-// 		if line[pos] != ' ' {
-// 			break
-// 		}
-// 		pos++
-// 	}
-// 	return line[pos:]
-// }
-
-// Handle attach commands.
-func attach(line *cmdLine, _ *core.Core) (bool, error) {
-	slog.Info("Command Attach")
-
-	// Get device number make sure it is valid.
-	devName := line.getDevNum()
-	devNum, ok := strconv.ParseUint(devName, 16, 12)
-	if ok != nil {
-		return false, errors.New("attach device must be number: " + devName)
-	}
-
-	// Get pointer to device.
-	device, err := ch.GetCommand(uint16(devNum))
-	if err != nil {
-		return false, err
-	}
-
-	optlist, err := line.getOptions(device, command.ValidAttach)
-	if err != nil {
-		return false, err
-	}
-	if len(optlist) == 0 {
-		return false, errors.New("no options give to attach command")
-	}
-	return false, device.Attach(optlist)
-}
-
-// Attach command completion.
-func attachComplete(line *cmdLine) []string {
-	return line.scanDevice(command.ValidAttach)
-}
-
-// Handle detach command.
-func detach(line *cmdLine, _ *core.Core) (bool, error) {
-	slog.Info("Command Detach")
-
-	// Get device number make sure it is valid.
-	devName := line.getDevNum()
-	devNum, ok := strconv.ParseUint(devName, 16, 12)
-	if ok != nil {
-		return false, errors.New("Attach device must be number: " + devName)
-	}
-
-	// Get pointer to device.
-	device, err := ch.GetCommand(uint16(devNum))
-	if err != nil {
-		return false, err
-	}
-	return false, device.Detach()
-}
-
-// Handle set commands.
-func set(line *cmdLine, _ *core.Core) (bool, error) {
-	slog.Info("Command Set")
-
-	// Get device number make sure it is valid.
-	devName := line.getDevNum()
-	devNum, ok := strconv.ParseUint(devName, 16, 12)
-	if ok != nil {
-		return false, errors.New("set device must be number: " + devName)
-	}
-
-	// Get pointer to device.
-	device, err := ch.GetCommand(uint16(devNum))
-	if err != nil {
-		return false, err
-	}
-
-	optlist, err := line.getOptions(device, command.ValidSet)
-	if err != nil {
-		return false, err
-	}
-	if len(optlist) == 0 {
-		return false, errors.New("no options give to set command")
-	}
-	return false, device.Set(false, optlist)
-}
-
-// Set/Unset command completion.
-func setComplete(line *cmdLine) []string {
-	return line.scanDevice(command.ValidSet)
-}
-
-// Handle unset commands.
-func unset(line *cmdLine, _ *core.Core) (bool, error) {
-	slog.Info("Command Unset")
-
-	// Get device number make sure it is valid.
-	devName := line.getDevNum()
-	devNum, ok := strconv.ParseUint(devName, 16, 12)
-	if ok != nil {
-		return false, errors.New("unset device must be number: " + devName)
-	}
-
-	// Get pointer to device.
-	device, err := ch.GetCommand(uint16(devNum))
-	if err != nil {
-		return false, err
-	}
-
-	optlist, err := line.getOptions(device, command.ValidSet)
-	if err != nil {
-		return false, err
-	}
-	if len(optlist) == 0 {
-		return false, errors.New("no options give to unset command")
-	}
-	return false, device.Set(true, optlist)
-}
-
-// Handle commands that quit simulation.
-func quit(_ *cmdLine, _ *core.Core) (bool, error) {
-	slog.Info("Command Quit")
-	return true, nil
-}
-
-// Stop the CPU.
-func stop(_ *cmdLine, core *core.Core) (bool, error) {
-	slog.Info("Command Stop")
-	core.SendStop()
-	return false, nil
-}
-
-// Continue CPU from where it left off.
-func cont(_ *cmdLine, core *core.Core) (bool, error) {
-	slog.Info("Command Continue")
-	core.SendStart()
-	return false, nil
-}
-
-// Start the CPU.
-func start(_ *cmdLine, core *core.Core) (bool, error) {
-	slog.Info("Command Start")
-	core.SendStart()
-	return false, nil
-}
-
-// Process the show command.
-func show(line *cmdLine, _ *core.Core) (bool, error) {
-	slog.Info("Command Show")
-	// Get device number make sure it is valid.
-	devName := line.getDevNum()
-	if devName == "" && line.isEOL() {
-		optList := []*command.CmdOption{}
-		for _, devName = range config.ModelList {
-			devNum, ok := strconv.ParseUint(devName, 16, 12)
-			if ok != nil {
-				continue
-			}
-
-			device, err := ch.GetCommand(uint16(devNum))
-			if err != nil {
-				continue
-			}
-
-			out, err := device.Show(optList)
-			if err != nil {
-				continue
-			}
-			fmt.Println(out)
-		}
-		return false, nil
-	}
-
-	devNum, ok := strconv.ParseUint(devName, 16, 12)
-	if ok != nil {
-		return false, errors.New("set device must be number: " + devName)
-	}
-
-	// Get pointer to device.
-	device, err := ch.GetCommand(uint16(devNum))
-	if err != nil {
-		return false, err
-	}
-
-	optlist, err := line.getShowOptions(device)
-	if err != nil {
-		return false, err
-	}
-
-	out, err := device.Show(optlist)
-	if err != nil {
-		return false, err
-	}
-
-	fmt.Println(out)
-	return false, nil
-}
-
-// IPL the simulator.
-func ipl(line *cmdLine, core *core.Core) (bool, error) {
-	slog.Info("Command IPL")
-	// Get device number make sure it is valid.
-	devName := line.getDevNum()
-	devNum, ok := strconv.ParseUint(devName, 16, 12)
-	if ok != nil {
-		return false, errors.New("ipl device must be number: " + devName)
-	}
-	_, err := ch.GetDevice(uint16(devNum))
-	if err != nil {
-		return false, err
-	}
-	core.SendIPL(uint16(devNum))
-	return false, nil
+	return ch.GetCommand(uint16(devNum))
 }

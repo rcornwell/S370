@@ -53,7 +53,7 @@ func (h *LogHandler) WithGroup(name string) slog.Handler {
 	return &LogHandler{h: h.h.WithGroup(name), mu: h.mu}
 }
 
-func (h *LogHandler) Handle(ctx context.Context, r slog.Record) error {
+func (h *LogHandler) Handle(_ context.Context, r slog.Record) error {
 	level := r.Level.String() + ":"
 	formattedTime := r.Time.Format("2006/01/02 15:04:05")
 

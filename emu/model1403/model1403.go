@@ -381,6 +381,24 @@ func (device *Model1403ctx) Show(opts []*command.CmdOption) (string, error) {
 	return str, nil
 }
 
+// Rewind tape to start.
+func (device *Model1403ctx) Rewind() error {
+	return command.NotSupported
+}
+
+// Reset a device.
+func (device *Model1403ctx) Reset() error {
+	if device.InitDev() != 0 {
+		return errors.New("device failed to reset")
+	}
+	return nil
+}
+
+// Return device address.
+func (device *Model1403ctx) GetAddr() uint16 {
+	return device.addr
+}
+
 // Print a line of text.
 func (device *Model1403ctx) printLine(cmd int) {
 	// If buffer full print line.

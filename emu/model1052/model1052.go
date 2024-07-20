@@ -269,17 +269,17 @@ func (device *Model1052ctx) Options(_ string) []command.Options {
 
 // Attach file to device.
 func (device *Model1052ctx) Attach(_ []*command.CmdOption) error {
-	return errors.New("attach command not supported")
+	return command.NotSupported
 }
 
 // Detach device.
 func (device *Model1052ctx) Detach() error {
-	return errors.New("detach command not supported")
+	return command.NotSupported
 }
 
 // Set command.
 func (device *Model1052ctx) Set(_ bool, _ []*command.CmdOption) error {
-	return errors.New("set command not supported")
+	return command.NotSupported
 }
 
 // Show command.
@@ -289,6 +289,24 @@ func (device *Model1052ctx) Show(_ []*command.CmdOption) (string, error) {
 		str += " connected"
 	}
 	return str, nil
+}
+
+// Rewind tape to start.
+func (device *Model1052ctx) Rewind() error {
+	return command.NotSupported
+}
+
+// Reset a device.
+func (device *Model1052ctx) Reset() error {
+	if device.InitDev() != 0 {
+		return errors.New("device failed to reset")
+	}
+	return nil
+}
+
+// Return device address.
+func (device *Model1052ctx) GetAddr() uint16 {
+	return device.addr
 }
 
 // Finish write command.

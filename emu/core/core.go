@@ -30,6 +30,7 @@ import (
 	"time"
 
 	cpu "github.com/rcornwell/S370/emu/cpu"
+	device "github.com/rcornwell/S370/emu/device"
 	"github.com/rcornwell/S370/emu/event"
 	"github.com/rcornwell/S370/emu/master"
 	syschannel "github.com/rcornwell/S370/emu/sys_channel"
@@ -68,7 +69,6 @@ func (core *Core) Start() {
 		case <-core.done:
 			// Shutdone all devices.
 			cpu.Shutdown()
-			slog.Info("Shutdown CPU core")
 			return
 		case packet := <-core.Master:
 			core.processPacket(packet)
@@ -79,6 +79,7 @@ func (core *Core) Start() {
 
 // Stop a running server.
 func (core *Core) Stop() {
+	slog.Info("Shutting down CPU")
 	close(core.done)
 	done := make(chan struct{})
 	go func() {
@@ -100,9 +101,24 @@ func PostExtIrq() {
 	cpu.PostExtIrq()
 }
 
-// Get IPL line option.
-func IPLDevice() uint16 {
-	return cpu.IPLDev
+// Start CPU.
+func (core *Core) SendStart() {
+	core.Master <- master.Packet{Msg: master.Start}
+}
+
+// Stop CPU.
+func (core *Core) SendStop() {
+	core.Master <- master.Packet{Msg: master.Stop}
+}
+
+// IPL CPU.
+func (core *Core) SendIPL(devNum uint16) {
+	core.Master <- master.Packet{DevNum: devNum, Msg: master.IPLdevice}
+}
+
+// Tell channel to post Device End for device.
+func (core *Core) SendDeviceEnd(devNum uint16) {
+	core.Master <- master.Packet{DevNum: devNum, Msg: master.DeviceEnd}
 }
 
 // Process a packet sent to system simulation.
@@ -123,21 +139,11 @@ func (core *Core) processPacket(packet master.Packet) {
 		} else {
 			core.running = true
 		}
+	case master.DeviceEnd:
+		syschannel.SetDevAttn(packet.DevNum, device.CStatusDevEnd)
 	case master.Start:
 		core.running = true
 	case master.Stop:
 		core.running = false
 	}
-}
-
-func (core *Core) SendStart() {
-	core.Master <- master.Packet{Msg: master.Start}
-}
-
-func (core *Core) SendStop() {
-	core.Master <- master.Packet{Msg: master.Stop}
-}
-
-func (core *Core) SendIPL(devNum uint16) {
-	core.Master <- master.Packet{DevNum: devNum, Msg: master.IPLdevice}
 }

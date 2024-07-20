@@ -294,6 +294,25 @@ func (device *Model2540Pctx) Show(opts []*command.CmdOption) (string, error) {
 	return str, nil
 }
 
+// Rewind tape to start.
+func (device *Model2540Pctx) Rewind() error {
+	return command.NotSupported
+}
+
+// Reset a device.
+func (device *Model2540Pctx) Reset() error {
+	device.context.EmptyDeck()
+	if device.InitDev() != 0 {
+		return errors.New("device failed to reset")
+	}
+	return nil
+}
+
+// Return device address.
+func (device *Model2540Pctx) GetAddr() uint16 {
+	return device.addr
+}
+
 // Process card punch operations.
 func (device *Model2540Pctx) callback(cmd int) {
 	debug.DebugDevf(device.addr, device.debugMsk, debugCmd, "Punch cmd: %d", cmd)

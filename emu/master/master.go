@@ -38,6 +38,7 @@ const (
 	Stop
 	Start
 	Shutdown
+	DeviceEnd
 )
 
 // Packet to send to master.
