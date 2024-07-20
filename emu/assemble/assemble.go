@@ -49,7 +49,18 @@ const (
 type opcode struct {
 	opCode  int // Opcode string.
 	opType  int // Opcode type.
-	opFlags int // Opcode flags
+	opFlags int // Opcode flags.
+}
+
+// Length of opcode types.
+var lenMap = map[int]int{
+	tyRR:  2,
+	tyRX:  4,
+	tyRS:  4,
+	tySI:  4,
+	tySS:  6,
+	tyS:   4,
+	ty370: 4,
 }
 
 var opMap = map[string]opcode{
@@ -211,7 +222,6 @@ var opMap = map[string]opcode{
 	"STOSM": {op.OpSTOSM, tySI, 0},
 	"SIGP":  {op.OpSIGP, tyRS, 0},
 	"MC":    {op.OpMC, tySI, 0},
-	"":      {op.Op370, ty370, 0},
 	"STCTL": {op.OpSTCTL, tyRS, 0},
 	"LCTL":  {op.OpLCTL, tyRS, 0},
 	"CS":    {op.OpCS, tyRS, 0},
@@ -240,7 +250,6 @@ var opMap = map[string]opcode{
 }
 
 func Assemble(line string) ([]byte, error) {
-	line = skipSpace(line) // Remove leading spaces.
 	var err string
 	var opName string
 	var next byte
@@ -251,11 +260,28 @@ func Assemble(line string) ([]byte, error) {
 		return []byte{}, errors.New("undefined opcode " + opName)
 	}
 	op := byte(opc.opCode)
-	inst := []byte{op, 0x0}
+	inst := make([]byte, lenMap[opc.opType])
+	inst[0] = op
 	switch opc.opType {
 	case tyRR: // RR syntax "Op r1,r2" "Op r1" "Op imd"
 		if opc.opFlags == imdOp {
-			r1, line = getNumber(line, 256)
+			line = skipSpace(line)
+			if line == "" {
+				return []byte{}, errors.New("invalid format for " + opName)
+			}
+			r1, line = getHex(line, 256)
+			if r1 < 0 {
+				return []byte{}, errors.New("Invalid immediate value for " + opName)
+			}
+			inst[1] = byte(r1)
+			break
+		}
+		if opc.opFlags == oneOp {
+			line = skipSpace(line)
+			if line == "" {
+				return []byte{}, errors.New("invalid format for " + opName)
+			}
+			r1, line = getHex(line, 16)
 			if r1 < 0 {
 				return []byte{}, errors.New("Invalid immediate value for " + opName)
 			}
@@ -263,9 +289,6 @@ func Assemble(line string) ([]byte, error) {
 			break
 		}
 		r1, line = getNumber(line, 16)
-		if r1 < 0 {
-			return []byte{}, errors.New("register values out of range " + opName)
-		}
 		next, line = getNext(line)
 		if next != ',' {
 			return []byte{}, errors.New("invalid format for " + opName)
@@ -277,11 +300,21 @@ func Assemble(line string) ([]byte, error) {
 		inst[1] = (byte(r1) << 4) | byte(r2)
 
 	case tyRX: // RX syntax is "Op r1,d2(x2,b2)" "Op r1,d2(b2)" "Op r1,d2"
+		r1, line = getNumber(line, 16)
+		next, line = getNext(line)
+		if next != ',' {
+			return []byte{}, errors.New("invalid format for " + opName)
+		}
+		if r1 < 0 {
+			return []byte{}, errors.New("register values out of range " + opName)
+		}
 		b2, d2, x2, line, err = getAddr(line, true, 0)
 		if err != "" {
 			return []byte{}, errors.New(err + opName)
 		}
-		inst = []byte{op, (byte(r1) << 4) | byte(x2), byte(b2<<4) | byte(d2>>8), byte(d2 & 0xff)}
+		inst[1] = (byte(r1) << 4) | byte(x2)
+		inst[2] = byte(b2<<4) | byte(d2>>8)
+		inst[3] = byte(d2 & 0xff)
 
 	case tyRS: // RS format is "Op r1,r3,d2(b2)" "Op r1,d2(b2)" b2 is optional, d2 is in hex.
 		r3 := 0
@@ -305,7 +338,9 @@ func Assemble(line string) ([]byte, error) {
 			return []byte{}, errors.New(err + opName)
 		}
 
-		inst = []byte{op, (byte(r1) << 4) | byte(r3), byte(b2<<4) | byte(d2>>8), byte(d2 & 0xff)}
+		inst[1] = (byte(r1) << 4) | byte(r3)
+		inst[2] = byte(b2<<4) | byte(d2>>8)
+		inst[3] = byte(d2 & 0xff)
 
 	case tySI: // SI format is "op d(b),imm" "op d,imm"
 		i2 := 0
@@ -323,7 +358,9 @@ func Assemble(line string) ([]byte, error) {
 		if i2 < 0 {
 			return []byte{}, errors.New("immediate is out of range for " + opName)
 		}
-		inst = []byte{op, byte(i2), byte(b2<<4) | byte(d2>>8), byte(d2 & 0xff)}
+		inst[1] = byte(i2)
+		inst[2] = byte(b2<<4) | byte(d2>>8)
+		inst[3] = byte(d2 & 0xff)
 
 	case tyS: // S format is "op d(b)" or "op d" or "op"
 		if opc.opFlags != zeroOp {
@@ -332,7 +369,9 @@ func Assemble(line string) ([]byte, error) {
 				return []byte{}, errors.New(err + opName)
 			}
 		}
-		inst = []byte{op, 0, byte(b2<<4) | byte(d2>>8), byte(d2 & 0xff)}
+		inst[1] = 0
+		inst[2] = byte(b2<<4) | byte(d2>>8)
+		inst[3] = byte(d2 & 0xff)
 
 	case tySS: // SS format is "op d1(l1,b1),d2(l2,b2)" or "op d1(l,b1),d2(b2)"
 		var b1, d1, l1, l2 int
@@ -346,6 +385,11 @@ func Assemble(line string) ([]byte, error) {
 			return []byte{}, errors.New(err + opName)
 		}
 
+		next, line = getNext(line)
+		if next != ',' {
+			return []byte{}, errors.New("invalid format for " + opName)
+		}
+
 		if opc.opFlags == twoOp {
 			b2, d2, l2, line, err = getAddr(line, false, 16)
 		} else {
@@ -355,7 +399,11 @@ func Assemble(line string) ([]byte, error) {
 			return []byte{}, errors.New(err + opName)
 		}
 
-		inst = []byte{op, byte(l1 | l2), byte(b1<<4) | byte(d1>>8), byte(d1 & 0xff), byte(b2<<4) | byte(d2>>8), byte(d2 & 0xff)}
+		inst[1] = byte(l1 | l2)
+		inst[2] = byte(b1<<4) | byte(d1>>8)
+		inst[3] = byte(d1 & 0xff)
+		inst[4] = byte(b2<<4) | byte(d2>>8)
+		inst[5] = byte(d2 & 0xff)
 	case ty370: // Specific 0xB2 370 instruction
 		if opc.opFlags != zeroOp {
 			b2, d2, _, line, err = getAddr(line, false, 0)
@@ -363,7 +411,10 @@ func Assemble(line string) ([]byte, error) {
 				return []byte{}, errors.New(err + opName)
 			}
 		}
-		inst = []byte{0xb2, op, byte(b2<<4) | byte(d2>>8), byte(d2 & 0xff)}
+		inst[0] = 0xb2
+		inst[1] = op
+		inst[2] = byte(b2<<4) | byte(d2>>8)
+		inst[3] = byte(d2 & 0xff)
 	}
 	line = skipSpace(line)
 	if line != "" {
@@ -384,9 +435,10 @@ func skipSpace(str string) string {
 
 // Get next name.
 func getName(str string) (string, string) {
+	str = skipSpace(str)
 	for i := range str {
 		if unicode.IsSpace(rune(str[i])) {
-			return str[:i-1], str[i:]
+			return str[:i], str[i+1:]
 		}
 	}
 	return str, ""
@@ -396,13 +448,15 @@ func getName(str string) (string, string) {
 // Return -1 if too big not a number.
 func getNumber(str string, max int) (int, string) {
 	num := 0
-	i := 0
-	for i := range str {
-		if unicode.IsSpace(rune(str[i])) {
-			continue
-		}
-		if unicode.IsDigit(rune(str[i])) {
-			num = (num * 10) + (num - '0')
+	l := 0
+	str = skipSpace(str)
+	if str == "" {
+		return -1, ""
+	}
+	for _, by := range str {
+		if unicode.IsDigit(by) {
+			num = (num * 10) + int(by-'0')
+			l++
 		} else {
 			break
 		}
@@ -410,11 +464,14 @@ func getNumber(str string, max int) (int, string) {
 	if num >= max {
 		num = -1
 	}
-	return num, str[i:]
+	return num, str[l:]
 }
 
 // Get next non blank character.
 func getNext(str string) (byte, string) {
+	if str == "" {
+		return 0, ""
+	}
 	for i := range str {
 		if !unicode.IsSpace(rune(str[i])) {
 			return str[i], str[i+1:]
@@ -426,22 +483,26 @@ func getNext(str string) (byte, string) {
 // Get Hex number.
 // Return -1 if too big not a number.
 func getHex(str string, max int) (int, string) {
+	str = skipSpace(str)
+	if str == "" {
+		return -1, ""
+	}
 	num := 0
-	i := 0
-	for i = range str {
-		if unicode.IsSpace(rune(str[i])) {
+	l := 0
+	for _, by := range str {
+		if unicode.IsDigit(by) {
+			num = (num * 16) + int(by-'0')
+			l++
 			continue
 		}
-		if unicode.IsDigit(rune(str[i])) {
-			num = (num * 16) + (num - '0')
+		if by >= 'a' && by <= 'f' {
+			num = (num * 16) + (int(by-'a') + 10)
+			l++
 			continue
 		}
-		if str[i] >= 'a' && str[i] <= 'f' {
-			num = (num * 16) + ((num - 'a') + 10)
-			continue
-		}
-		if str[i] >= 'A' && str[i] <= 'F' {
-			num = (num * 16) + ((num - 'A') + 10)
+		if by >= 'A' && by <= 'F' {
+			num = (num * 16) + (int(by-'A') + 10)
+			l++
 			continue
 		}
 		break
@@ -449,7 +510,7 @@ func getHex(str string, max int) (int, string) {
 	if num >= max {
 		num = -1
 	}
-	return num, str[i:]
+	return num, str[l:]
 }
 
 // Get an Address.
@@ -473,30 +534,42 @@ func getAddr(line string, index bool, immed int) (int, int, int, string, string)
 		return 0, 0, 0, line, "displacment out of range "
 	}
 	next, line = getNext(line)
-	if next == '(' { // Not indexing or base
+	// If next is (, start of index, or length
+	if next == '(' {
 		if immed != 0 {
 			x, line = getNumber(line, immed)
 		} else {
 			x, line = getNumber(line, 16)
 		}
+
+		// Check if next is , or ).
 		next, line = getNext(line)
+		// Only allowed if index allowed or immediate value.
 		if (index || immed > 0) && next == ',' {
 			b, line = getNumber(line, 16)
 			next, line = getNext(line)
-		} else if index {
+		}
+
+		// If only one index, move it to base.
+		if immed == 0 && b == 0 {
 			b = x
 			x = 0
 		}
+
+		// Index must end in ).
 		if next != ')' {
 			return 0, 0, 0, line, "invalid format for "
 		}
+	} else if next != 0 {
+		// Did not match, put it back.
+		line = string(next) + line
 	}
 	if b < 0 {
 		return 0, 0, 0, line, "base register out of range for "
 	}
 	if x < 0 {
 		if immed > 0 {
-			return 0, 0, 0, line, "immediate value out of range"
+			return 0, 0, 0, line, "length value out of range "
 		}
 		return 0, 0, 0, line, "index register out of range for "
 	}
