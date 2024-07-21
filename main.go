@@ -28,6 +28,7 @@ package main
 import (
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	getopt "github.com/pborman/getopt/v2"
 	reader "github.com/rcornwell/S370/command/reader"
@@ -45,7 +46,9 @@ import (
 var Logger *slog.Logger
 
 func main() {
-	optConfig := getopt.StringLong("config", 'c', "S370.cfg", "Configuration file")
+
+	defaultConfig := filepath.Base(os.Args[0]) + ".cfg"
+	optConfig := getopt.StringLong("config", 'c', defaultConfig, "Configuration file")
 	optLogFile := getopt.StringLong("log", 'l', "", "Log file")
 	optDebug := getopt.BoolLong("debug", 'd', "Log debug to console")
 	optHelp := getopt.BoolLong("help", 'h', "Help")
@@ -73,7 +76,7 @@ func main() {
 
 	_, err := os.Stat(*optConfig)
 	if os.IsNotExist(err) {
-		Logger.Error("Configuration file ", *optConfig, " can't be found")
+		Logger.Error("Configuration file " + *optConfig + " can't be found")
 		os.Exit(0)
 	}
 
