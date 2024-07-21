@@ -48,6 +48,8 @@ const (
 	ValidAttach = 1 << iota
 	ValidSet
 	ValidShow
+	ValidRewind
+	ValidIPL
 )
 
 var (

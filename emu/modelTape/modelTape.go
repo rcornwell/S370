@@ -365,6 +365,9 @@ func (device *Model2400ctx) Options(_ string) []command.Options {
 			OptionType:  command.OptionSwitch,
 			OptionValid: command.ValidShow,
 		},
+		{
+			OptionValid: command.ValidRewind | command.ValidIPL,
+		},
 	}
 }
 

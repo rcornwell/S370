@@ -25,11 +25,14 @@
 package parser
 
 import (
+	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 
 	command "github.com/rcornwell/S370/command/command"
 	config "github.com/rcornwell/S370/config/configparser"
+	ch "github.com/rcornwell/S370/emu/sys_channel"
 )
 
 // Called to complete a command line, during line editing.
@@ -38,7 +41,7 @@ func CompleteCmd(commandLine string) []string {
 	name, last := line.getWord(false)
 
 	// We have a command, let it try and complete it.
-	if last == 0 || unicode.IsSpace(rune(last)) {
+	if unicode.IsSpace(rune(last)) {
 		// See if there is a completer for this command.
 		match := matchList(name)
 		if len(match) == 0 || len(match) > 1 {
@@ -51,17 +54,19 @@ func CompleteCmd(commandLine string) []string {
 		return nil
 	}
 
-	matchList := matchList(name)
-	matches := make([]string, len(matchList))
-	for i, m := range matchList {
-		matches[i] = m.Name
+	// Try and match one command.
+	var matches []string
+	for _, m := range cmdList {
+		if strings.HasPrefix(m.Name, name) {
+			matches = append(matches, m.Name)
+		}
 	}
-
+	slices.Sort(matches)
 	return matches
 }
 
 // Match for device address.
-func matchDevice(appendStart bool, line cmdLine) []string {
+func matchDevice(appendStart bool, line cmdLine, cmdType int, all bool) []string {
 	leading := ""
 	device := ""
 	pos := line.pos
@@ -90,7 +95,31 @@ outer:
 				continue outer
 			}
 		}
-		devices = append(devices, leading+str+" ")
+
+		if all {
+			devices = append(devices, leading+str+" ")
+			continue
+		}
+
+		devNum, _ := strconv.ParseUint(str, 16, 12)
+
+		cmd, ok := ch.GetCommand(uint16(devNum))
+		if ok != nil {
+			continue
+		}
+
+		opts := cmd.Options("")
+		valid := false
+		for _, opt := range opts {
+			if (opt.OptionValid & cmdType) != 0 {
+				valid = true
+				break
+			}
+		}
+
+		if valid {
+			devices = append(devices, leading+str+" ")
+		}
 	}
 	return devices
 }
@@ -322,9 +351,41 @@ func (line *cmdLine) scanOptions(device command.Command, cmdType int) []string {
 	}
 }
 
+// Scan to find last option name.
+func (line *cmdLine) scanOpts(device command.Command, cmdType int) []string {
+	opts := device.Options("")
+	matches := []string{}
+	for {
+		line.skipSpace()
+		leading := ""
+		if line.pos == (len(line.line) - 1) {
+			leading = line.line
+		} else {
+			leading = line.line[:line.pos]
+		}
+		name := line.scanWord(true)
+
+		matchOpts := scanOpt(name, opts, cmdType)
+		line.skipSpace()
+		if len(matchOpts) > 1 {
+			leading = line.line[:line.pos-len(name)]
+			for _, opt := range matchOpts {
+				matches = append(matches, leading+opt.Name)
+			}
+			return matches
+		}
+
+		leading = line.line[:line.pos]
+		for _, opt := range matchOpts {
+			matches = append(matches, leading+opt.Name)
+		}
+		return matches
+	}
+}
+
 // Scan device style commands.
 func (line *cmdLine) scanDevice(cmdType int) []string {
-	devices := matchDevice(true, *line)
+	devices := matchDevice(true, *line, cmdType, false)
 	if len(devices) != 1 {
 		return devices
 	}
@@ -340,5 +401,5 @@ func (line *cmdLine) scanDevice(cmdType int) []string {
 
 // Complete commands that only need device number.
 func DeviceComplete(line *cmdLine) []string {
-	return matchDevice(true, *line)
+	return matchDevice(true, *line, 0, true)
 }

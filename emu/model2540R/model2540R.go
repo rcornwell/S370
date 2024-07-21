@@ -247,6 +247,9 @@ func (device *Model2540Rctx) Options(_ string) []command.Options {
 			OptionValid: command.ValidAttach | command.ValidSet | command.ValidShow,
 			OptionList:  fmtList,
 		},
+		{
+			OptionValid: command.ValidIPL,
+		},
 	}
 }
 

@@ -39,16 +39,22 @@ import (
 
 var cmdList = []cmd{
 	{Name: "attach", Min: 2, Process: attach, Complete: attachComplete},
-	{Name: "detach", Min: 2, Process: detach},
+	{Name: "detach", Min: 2, Process: detach, Complete: func(line *cmdLine) []string {
+		return matchDevice(true, *line, command.ValidAttach, false)
+	}},
 	{Name: "set", Min: 3, Process: set, Complete: setComplete},
 	{Name: "unset", Min: 4, Process: unset, Complete: setComplete},
 	{Name: "quit", Min: 4, Process: quit},
 	{Name: "stop", Min: 3, Process: stop},
 	{Name: "continue", Min: 1, Process: cont},
 	{Name: "start", Min: 3, Process: start},
-	{Name: "show", Min: 2, Process: show},
-	{Name: "ipl", Min: 1, Process: ipl, Complete: DeviceComplete},
-	{Name: "rewind", Min: 3, Process: rewind, Complete: DeviceComplete},
+	{Name: "show", Min: 2, Process: show, Complete: showComplete},
+	{Name: "ipl", Min: 1, Process: ipl, Complete: func(line *cmdLine) []string {
+		return matchDevice(true, *line, command.ValidIPL, false)
+	}},
+	{Name: "rewind", Min: 3, Process: rewind, Complete: func(line *cmdLine) []string {
+		return matchDevice(true, *line, command.ValidRewind, false)
+	}},
 	{Name: "reset", Min: 5, Process: reset, Complete: DeviceComplete},
 }
 
@@ -217,6 +223,22 @@ func show(line *cmdLine, _ *core.Core) (bool, error) {
 
 	fmt.Println(out)
 	return false, nil
+}
+
+// Set/Unset command completion.
+func showComplete(line *cmdLine) []string {
+	devices := matchDevice(true, *line, command.ValidShow, false)
+	if len(devices) != 1 {
+		return devices
+	}
+
+	device, err := line.getDevice()
+
+	if err != nil {
+		return devices
+	}
+
+	return line.scanOpts(device, command.ValidShow)
 }
 
 // IPL the simulator.
