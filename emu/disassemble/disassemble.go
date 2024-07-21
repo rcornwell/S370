@@ -23,9 +23,10 @@
 package disassembler
 
 import (
-	"fmt"
+	"strings"
 
 	op "github.com/rcornwell/S370/emu/opcodemap"
+	"github.com/rcornwell/S370/util/hex"
 )
 
 const (
@@ -240,12 +241,34 @@ var op370 = map[int]opcode{
 	0x13: {"RRB", tyS, 0},
 }
 
-func Disasemble(data []byte) (string, int) {
+func PrintInst(data []byte) (string, int) {
+	var str strings.Builder
+	str.Grow(80)
+	length := hexDump(&str, data)
+	l := str.Len()
+	b := "                        "
+	str.WriteString(b[0 : 22-l])
+
+	_ = doInst(&str, data, true)
+	return str.String(), length
+}
+
+func Disassemble(data []byte) (string, int) {
+	var str strings.Builder
+	str.Grow(80)
+	length := doInst(&str, data, false)
+	return str.String(), length
+}
+
+func doInst(str *strings.Builder, data []byte, nodump bool) int {
 	// Find opcode
 	opc := int(data[0])
 	op, ok := opMap[opc]
 	if !ok {
-		return undefined(data)
+		if nodump {
+			return 0
+		}
+		return hexDump(str, data)
 	}
 	if op.opType == ty370 {
 		opsub := int(data[1])
@@ -253,107 +276,121 @@ func Disasemble(data []byte) (string, int) {
 	}
 	// Make opcode align
 	inst := op.opName + "       "
-	inst = inst[:6]
+	str.WriteString(inst[:6])
 	length := 2
 	switch op.opType {
 	case tyRR:
 		switch op.opFlags {
 		case imdOp:
-			inst += fmt.Sprintf("%02x", data[1])
+			hex.FormatByte(str, data[1])
+
 		case oneOp:
-			inst += fmt.Sprintf("%x", (data[1]>>4)&0xf)
+			hex.FormatDigit(str, (data[1]>>4)&0xf)
+
 		default:
-			inst += fmt.Sprintf("%d,%d", (data[1]>>4)&0xf, data[1]&0xf)
+			hex.FormatDecimal(str, (data[1]>>4)&0xf)
+			str.WriteByte(',')
+			hex.FormatDecimal(str, data[1]&0xf)
 		}
 	case tyRX:
 		length += 2
-		inst += fmt.Sprintf("%d,", (data[1]>>4)&0xf)
-		x2 := data[1] & 0xf
-		inst += address(x2, data[2], data[3])
+		hex.FormatDecimal(str, (data[1]>>4)&0xf)
+		str.WriteByte(',')
+		address(str, data[1]&0xf, data[2:4])
+
 	case tyRS:
 		length += 2
-		inst += fmt.Sprintf("%d", (data[1]>>4)&0xf)
+		hex.FormatDecimal(str, (data[1]>>4)&0xf)
+		str.WriteByte(',')
 		if op.opFlags != oneOp {
-			inst += fmt.Sprintf(",%d", data[1]&0xf)
+			hex.FormatDecimal(str, data[1]&0xf)
+			str.WriteByte(',')
 		}
-		inst += address(0, data[2], data[3])
+		address(str, 0, data[2:4])
+
 	case tySI:
 		length += 2
-		inst += address(0, data[2], data[3])
-		inst += fmt.Sprintf(",%02x", data[1])
+		address(str, 0, data[2:4])
+		str.WriteByte(',')
+		hex.FormatByte(str, data[1])
+
 	case tyS:
 		length += 2
 		if op.opFlags != zeroOp {
-			inst += address(0, data[2], data[3])
+			address(str, 0, data[2:4])
 		}
 	case tySS:
 		length += 4
-		offset := (uint16(data[2]&0x0f) << 8) | uint16(data[3])
+		hex.FormatDisp(str, data[2:4])
 		b2 := (data[2] >> 4) & 0xf
-
-		inst += fmt.Sprintf("%03x(", offset)
+		str.WriteByte('(')
 		if op.opFlags == twoOp {
-			inst += string(((data[1] >> 4) & 0xf) + '0')
+			hex.FormatDecimal(str, (data[1]>>4)&0xf)
 		} else {
-			inst += fmt.Sprintf("%d", data[1])
+			hex.FormatDecimal(str, data[1])
 		}
 
 		if b2 != 0 {
-			inst += fmt.Sprintf(",%d", b2)
+			str.WriteByte(',')
+			hex.FormatDecimal(str, b2)
 		}
-		offset = (uint16(data[4]&0x0f) << 8) | uint16(data[5])
-		b1 := (data[4] >> 4) & 0xf
-		inst += fmt.Sprintf("),%03x", offset)
-
+		str.WriteByte(')')
+		str.WriteByte(',')
+		hex.FormatDisp(str, data[4:6])
+		b2 = (data[4] >> 4) & 0xf
 		if op.opFlags == twoOp {
-			inst += "(" + string(((data[1]>>4)&0xf)+'0')
-			if b1 != 0 {
-				inst += fmt.Sprintf(",%d", b1)
-			}
-			inst += ")"
-		} else {
-			if b1 != 0 {
-				inst += fmt.Sprintf("(%d)", b1)
-			}
-		}
-	}
-	return inst, length
-}
-
-func address(x2, data1, data2 byte) string {
-	offset := (uint16(data1&0x0f) << 8) | uint16(data2)
-	addr := fmt.Sprintf("%03x", offset)
-	b2 := (data1 >> 4) & 0xf
-	if x2 != 0 || b2 != 0 {
-		addr += "("
-		if x2 != 0 {
-			addr += fmt.Sprintf("%d", x2)
+			str.WriteByte('(')
+			hex.FormatDecimal(str, data[1]&0xf)
 			if b2 != 0 {
-				addr += ","
+				str.WriteByte(',')
+				hex.FormatDecimal(str, b2)
 			}
+			str.WriteByte(')')
+		} else if b2 != 0 {
+			str.WriteByte('(')
+			hex.FormatDecimal(str, b2)
+			str.WriteByte(')')
 		}
-		if b2 != 0 {
-			addr += fmt.Sprintf("%d", b2)
-		}
-		addr += ")"
 	}
-	return addr
+	return length
 }
 
-func undefined(data []byte) (string, int) {
-	switch data[0] & 0xc0 {
-	case 0: // RR
-		return fmt.Sprintf("%02x %02x", data[0], data[1]), 2
-	case 0x40: // RX
-		return fmt.Sprintf("%02x %x %x%02x(%x, %x)", data[0], (data[1] >> 4),
-			data[2]&0xf, data[3], data[1]&0xf, (data[2]>>4)&0xf), 4
-	case 0x80: // RS
-		return fmt.Sprintf("%02x %x, %x, %x%02x(%x)", data[0], (data[1] >> 4),
-			data[1]&0xf, data[2]&0xf, data[3], (data[2]>>4)&0xf), 4
-	case 0xC0: // SS
-		return fmt.Sprintf("%02x %x%02x(%x, %02x), %x%02x(%x)", data[0],
-			data[2]&0xf, data[3], (data[2]>>4)&0xf, data[1],
-			data[4]&0xf, data[5], (data[4]>>4)&0xf), 6
+func address(str *strings.Builder, x2 byte, data []byte) {
+	hex.FormatDisp(str, data)
+	b2 := (data[0] >> 4) & 0xf
+	if x2 != 0 || b2 != 0 {
+		str.WriteByte('(')
+		if x2 != 0 {
+			hex.FormatDecimal(str, x2)
+			str.WriteByte(',')
+		}
+		hex.FormatDecimal(str, b2)
+		str.WriteByte(')')
 	}
-	return "", 0
+}
+
+func hexDump(str *strings.Builder, data []byte) int {
+	switch data[0] & 0xc0 {
+	default:
+		fallthrough
+	case 0: // RR
+		hex.FormatBytes(str, true, data[0:2])
+		return 2
+
+	case 0x40, 0x80: // RX
+		hex.FormatByte(str, data[0])
+		str.WriteByte(' ')
+		hex.FormatDigit(str, (data[1]>>4)&0xf)
+		str.WriteByte(' ')
+		hex.FormatAddr(str, data[2:4])
+		return 4
+
+	case 0xC0: // SS
+		hex.FormatBytes(str, true, data[0:2])
+		str.WriteByte(' ')
+		hex.FormatAddr(str, data[2:4])
+		str.WriteByte(' ')
+		hex.FormatAddr(str, data[4:6])
+		return 6
+	}
 }

@@ -28,13 +28,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 	"unicode"
 
 	config "github.com/rcornwell/S370/config/configparser"
 	Dv "github.com/rcornwell/S370/emu/device"
-	dis "github.com/rcornwell/S370/emu/disassemble"
+	disassembler "github.com/rcornwell/S370/emu/disassemble"
 	mem "github.com/rcornwell/S370/emu/memory"
 	op "github.com/rcornwell/S370/emu/opcodemap"
 	ch "github.com/rcornwell/S370/emu/sys_channel"
@@ -393,26 +392,8 @@ func (cpu *cpuState) fetch() (int, bool) {
 
 	// if cpu.iPC != 0x0002026 {
 	if (debugMsk & debugInst) != 0 {
-		var str strings.Builder
-		str.Grow(80)
-		// hex.FormatWord(&str, cpu.iPC)
-		// hex.FormatBytes(&str, inst[0:1])
-		fmt.Fprintf(&str, "%08x %02x %02x ", cpu.iPC, uint32(step.opcode), uint32(step.reg))
-		if cpu.ilc > 1 {
-			//	hex.FormatBytes(&str, inst[2:3])
-			fmt.Fprintf(&str, "%02x%02x ", inst[2], inst[3])
-		} else {
-			str.WriteString("     ")
-		}
-		if cpu.ilc > 2 {
-			//	hex.FormatBytes(&str, inst[4:5])
-			fmt.Fprintf(&str, "%02x%02x ", inst[4], inst[5])
-		} else {
-			str.WriteString("     ")
-		}
-		symbolic, _ := dis.Disasemble(inst)
-		str.WriteString(symbolic)
-		debug.Debugf("CPU", debugMsk, debugInst, str.String())
+		str, _ := disassembler.PrintInst(inst)
+		debug.Debugf("CPU", debugMsk, debugInst, str)
 	}
 
 	err = cpu.execute(&step)
