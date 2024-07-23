@@ -38,10 +38,10 @@ import (
 // Called to complete a command line, during line editing.
 func CompleteCmd(commandLine string) []string {
 	line := cmdLine{line: commandLine}
-	name, last := line.getWord(false)
+	name := line.getWord(false)
 
 	// We have a command, let it try and complete it.
-	if unicode.IsSpace(rune(last)) {
+	if !line.isEOL() && !unicode.IsSpace(rune(line.getCurrent())) {
 		// See if there is a completer for this command.
 		match := matchList(name)
 		if len(match) == 0 || len(match) > 1 {
@@ -66,13 +66,10 @@ func CompleteCmd(commandLine string) []string {
 }
 
 // Match for device address.
-func matchDevice(appendStart bool, line cmdLine, cmdType int, all bool) []string {
-	leading := ""
+func (line *cmdLine) matchDevice(cmdType int, all bool) []string {
 	device := ""
 	pos := line.pos
-	if appendStart {
-		leading = line.line[:pos]
-	}
+	leading := line.line[:pos]
 
 	// Collect device.
 	for pos < len(line.line) {
@@ -124,23 +121,51 @@ outer:
 	return devices
 }
 
-// Scan a word.
+// Scan a number.
 func (line *cmdLine) scanNumber() (string, bool) {
 	line.skipSpace()
 
 	// Check if end of line.
 	if line.isEOL() {
-		return "", true
+		return "", false
 	}
 
 	pos := line.pos
-	// Characters must be alphabetic
+	// Characters must be numeric
 	value := ""
 	by := line.line[line.pos]
 	for {
 		if !unicode.IsDigit(rune(by)) {
 			line.pos = pos
+			return "", false
+		}
+		value += string([]byte{by})
+		by = line.getNext()
+		if line.isEOL() || unicode.IsSpace(rune(by)) {
 			break
+		}
+	}
+
+	return value, true
+}
+
+// Scan a hexnumber.
+func (line *cmdLine) scanHex() (string, bool) {
+	line.skipSpace()
+
+	// Check if end of line.
+	if line.isEOL() {
+		return "", false
+	}
+
+	pos := line.pos
+	// Characters must be numeric
+	value := ""
+	by := line.line[line.pos]
+	for {
+		if strings.Contains(hex, strings.ToLower(string(by))) {
+			line.pos = pos
+			return "", false
 		}
 		value += string([]byte{by})
 		by = line.getNext()
@@ -276,12 +301,11 @@ func (line *cmdLine) scanOption(opt command.Options) ([]string, bool) {
 		str, skip = line.scanQuoteString()
 
 	case command.OptionNumber:
-		str = line.scanWord(false)
-		skip = str != ""
+		str, skip = line.scanNumber()
 
 	case command.OptionHex:
-		str = line.scanWord(false)
-		skip = str != ""
+		str, skip = line.scanHex()
+
 	case command.OptionList:
 		modName := line.scanList()
 		mods := []string{}
@@ -355,43 +379,40 @@ func (line *cmdLine) scanOptions(device command.Command, cmdType int) []string {
 func (line *cmdLine) scanOpts(device command.Command, cmdType int) []string {
 	opts := device.Options("")
 	matches := []string{}
-	for {
-		line.skipSpace()
-		leading := ""
-		if line.pos == (len(line.line) - 1) {
-			leading = line.line
-		} else {
-			leading = line.line[:line.pos]
-		}
-		name := line.scanWord(true)
+	//	for {
+	line.skipSpace()
+	// leading := line.line
+	// if line.pos < (len(line.line) - 1) {
+	// 	leading = line.line[:line.pos]
+	// }
+	name := line.scanWord(true)
 
-		matchOpts := scanOpt(name, opts, cmdType)
-		line.skipSpace()
-		if len(matchOpts) > 1 {
-			leading = line.line[:line.pos-len(name)]
-			for _, opt := range matchOpts {
-				matches = append(matches, leading+opt.Name)
-			}
-			return matches
-		}
-
-		leading = line.line[:line.pos]
+	matchOpts := scanOpt(name, opts, cmdType)
+	line.skipSpace()
+	if len(matchOpts) > 1 {
+		leading := line.line[:line.pos-len(name)]
 		for _, opt := range matchOpts {
 			matches = append(matches, leading+opt.Name)
 		}
 		return matches
 	}
+
+	leading := line.line[:line.pos]
+	for _, opt := range matchOpts {
+		matches = append(matches, leading+opt.Name)
+	}
+	return matches
+	// }
 }
 
 // Scan device style commands.
 func (line *cmdLine) scanDevice(cmdType int) []string {
-	devices := matchDevice(true, *line, cmdType, false)
+	devices := line.matchDevice(cmdType, false)
 	if len(devices) != 1 {
 		return devices
 	}
 
 	device, err := line.getDevice()
-
 	if err != nil {
 		return devices
 	}
@@ -401,5 +422,5 @@ func (line *cmdLine) scanDevice(cmdType int) []string {
 
 // Complete commands that only need device number.
 func DeviceComplete(line *cmdLine) []string {
-	return matchDevice(true, *line, 0, true)
+	return line.matchDevice(0, true)
 }

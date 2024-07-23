@@ -202,6 +202,7 @@ const (
 	debugData
 	debugDetail
 	debugIO
+	debugIRQ
 )
 
 var debugOption = map[string]int{
@@ -210,6 +211,7 @@ var debugOption = map[string]int{
 	"DATA":   debugData,
 	"DETAIL": debugDetail,
 	"IO":     debugIO,
+	"IRQ":    debugIRQ,
 }
 
 var debugMsk int

@@ -191,9 +191,93 @@ func Debug(opt string) error {
 	return nil
 }
 
-// Return CPU PC.
-func PC() uint32 {
+// Return CPU GetPC.
+func GetPC() uint32 {
 	return sysCPU.PC
+}
+
+// Set CPU PC.
+func SetPC(newPC uint32) {
+	sysCPU.PC = newPC
+}
+
+// Return PSW as string.
+func GetPSW() string {
+	word1, word2 := sysCPU.getPSW()
+
+	return fmt.Sprintf("PSW %08x %08x", word1, word2)
+}
+
+// Return a register value.
+func GetReg(regType int, number uint8) (uint32, bool) {
+	switch regType {
+	case Dv.Register:
+		if number > 15 {
+			return 0, false
+		}
+		return sysCPU.regs[number], true
+
+	case Dv.CtlRegister:
+		if number > 15 {
+			return 0, false
+		}
+		return sysCPU.cregs[number], true
+	case Dv.PSWRegister:
+		word1, word2 := sysCPU.getPSW()
+		switch number {
+		case 0:
+			return word1, true
+
+		case 1:
+			return word2, true
+		}
+	}
+	return 0, false
+}
+
+// Return a floating point register.
+func GetFPReg(num int, long bool) (uint64, bool) {
+	if num > 6 {
+		return 0, false
+	}
+	value := sysCPU.fpregs[num&0x6]
+	if !long {
+		value &= HMASKL
+	}
+	return value, true
+}
+
+// Return a register value.
+func SetReg(regType int, number uint8, value uint32) bool {
+	if number > 15 {
+		return false
+	}
+	switch regType {
+	default:
+		return false
+
+	case Dv.Register:
+		sysCPU.regs[number] = value
+
+	case Dv.FPRegister:
+		if number > 6 {
+			return false
+		}
+		if (number & 1) != 0 {
+			sysCPU.fpregs[number&0x6] &= HMASKL
+			sysCPU.fpregs[number&0x6] |= uint64(value)
+		} else {
+			sysCPU.fpregs[number&0x6] &= LMASKL
+			sysCPU.fpregs[number&0x6] |= uint64(value) << 32
+		}
+
+	case Dv.CtlRegister:
+		sysCPU.loadControl(number, value)
+
+	case Dv.PSWRegister: // PSW Register can't be set.
+		return false
+	}
+	return true
 }
 
 // Execute one instruction or take an interrupt.
@@ -228,7 +312,7 @@ func CycleCPU() (int, bool) {
 			if !sysCPU.ecMode || (sysCPU.cregs[0]&0x20) != 0 ||
 				(sysCPU.cregs[6]&0x40) != 0 {
 				sysCPU.extIrq = false
-				//fmt.Println("CPU: Ext IRQ")
+				debug.Debugf("CPU", debugMsk, debugIRQ, "Ext IRQ")
 				sysCPU.suppress(oEPSW, 0x40)
 				return memCycle, true
 			}
@@ -253,7 +337,7 @@ func CycleCPU() (int, bool) {
 
 	// Check if we have wait we can't exit
 	if ch.Loading == Dv.NoDev && !sysCPU.irqEnb && (sysCPU.flags&wait != 0) {
-		msg := fmt.Sprintf("Uninterupable wait state %08x %s", sysCPU.PC, sysCPU.getPSW())
+		msg := fmt.Sprintf("Uninterupable wait state %08x %s", sysCPU.PC, GetPSW())
 		slog.Warn(msg)
 		return 1, false
 	}
@@ -270,34 +354,7 @@ func CycleCPU() (int, bool) {
 	return sysCPU.fetch()
 }
 
-// Return PSW as string.
-func (cpu *cpuState) getPSW() string {
-	var word1, word2 uint32
-	word1 = (uint32(cpu.stKey) << 16) | (uint32(cpu.flags) << 16)
-	word2 = cpu.PC
-	if cpu.extEnb {
-		word1 |= 1 << 24
-	}
-	if cpu.ecMode {
-		word1 |= 0x80000
-		word1 |= (uint32(cpu.cc) << 12) | (uint32(cpu.progMask) << 8)
-		if cpu.pageEnb {
-			word1 |= 1 << 26
-		}
-		if cpu.perEnb {
-			word1 |= 1 << 30
-		}
-		if cpu.intIrq {
-			word1 |= 1 << 25
-		}
-	} else {
-		word1 |= (uint32(cpu.sysMask&0xfe00) << 16)
-		word2 |= (uint32(cpu.ilc) << 30) | (uint32(cpu.cc) << 28) | (uint32(cpu.progMask) << 24)
-	}
-
-	return fmt.Sprintf("PSW %08x %08x", word1, word2)
-}
-
+// Fetch and execute an instruction.
 func (cpu *cpuState) fetch() (int, bool) {
 	if (cpu.PC & 1) != 0 {
 		cpu.suppress(oPPSW, ircSpec)
@@ -392,7 +449,7 @@ func (cpu *cpuState) fetch() (int, bool) {
 
 	// if cpu.iPC != 0x0002026 {
 	if (debugMsk & debugInst) != 0 {
-		str, _ := disassembler.PrintInst(inst)
+		str := disassembler.PrintLine(cpu.iPC, inst)
 		debug.Debugf("CPU", debugMsk, debugInst, str)
 	}
 
@@ -626,6 +683,32 @@ func (cpu *cpuState) lpsw(src1, src2 uint32) {
 	}
 }
 
+// Get PSW as pair of words.
+func (cpu *cpuState) getPSW() (uint32, uint32) {
+	word1 := (uint32(sysCPU.stKey) << 16) | (uint32(sysCPU.flags) << 16)
+	word2 := sysCPU.PC
+	if sysCPU.extEnb {
+		word1 |= 1 << 24
+	}
+	if sysCPU.ecMode {
+		word1 |= 0x80000
+		word1 |= (uint32(sysCPU.cc) << 12) | (uint32(sysCPU.progMask) << 8)
+		if sysCPU.pageEnb {
+			word1 |= 1 << 26
+		}
+		if sysCPU.perEnb {
+			word1 |= 1 << 30
+		}
+		if sysCPU.intIrq {
+			word1 |= 1 << 25
+		}
+	} else {
+		word1 |= (uint32(sysCPU.sysMask&0xfe00) << 16)
+		word2 |= (uint32(sysCPU.ilc) << 30) | (uint32(sysCPU.cc) << 28) | (uint32(sysCPU.progMask) << 24)
+	}
+	return word1, word2
+}
+
 // Store the PSW at given address with irq value.
 func (cpu *cpuState) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 	var word1, word2 uint32
@@ -698,8 +781,6 @@ func (cpu *cpuState) storePSW(vector uint32, irqcode uint16) (irqaddr uint32) {
 	mem.SetMemory(vector, word1)
 	memCycle++
 	mem.SetMemory(vector+4, word2)
-	//	sim_debug(DEBUG_INST, &cpu_dev, "store %02x %d %x %03x PSW=%08x %08x\n", addr, ilc,
-	//		cc, ircode, word, word2)
 	return irqaddr
 }
 
@@ -938,7 +1019,6 @@ func (cpu *cpuState) readFull(virtAddr uint32) (uint32, uint16) {
  * ignore lower bits to and always reads an aligned work.
  */
 func (cpu *cpuState) readFullAligned(virtAddr uint32) (uint32, uint16) {
-
 	// Ignore lower byte address and just read value.
 
 	// Validate address

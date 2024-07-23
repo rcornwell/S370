@@ -241,6 +241,19 @@ var op370 = map[int]opcode{
 	0x13: {"RRB", tyS, 0},
 }
 
+func PrintLine(pc uint32, data []byte) string {
+	var str strings.Builder
+	str.Grow(80)
+
+	hex.FormatWord(&str, []uint32{pc})
+	_ = hexDump(&str, data)
+	l := str.Len()
+	b := "                                 "
+	str.WriteString(b[0 : 31-l])
+	_ = doInst(&str, data, true)
+	return str.String()
+}
+
 func PrintInst(data []byte) (string, int) {
 	var str strings.Builder
 	str.Grow(80)

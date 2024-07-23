@@ -50,7 +50,10 @@ type cmdLine struct {
 // Execute the command line given.
 func ProcessCommand(commandLine string, core *core.Core) (bool, error) {
 	line := cmdLine{line: commandLine}
-	command, _ := line.getWord(false)
+	command := line.getWord(false)
+	if command == "" {
+		return false, nil
+	}
 
 	match := matchList(command)
 	if len(match) == 0 {
@@ -150,13 +153,13 @@ func (line *cmdLine) getCurrent() byte {
 	return by
 }
 
-// Peek at next character.
-func (line *cmdLine) peekNext() byte {
-	if (line.pos + 1) >= len(line.line) {
-		return 0
-	}
-	return line.line[line.pos+1]
-}
+// // Peek at next character.
+// func (line *cmdLine) peekNext() byte {
+// 	if (line.pos + 1) >= len(line.line) {
+// 		return 0
+// 	}
+// 	return line.line[line.pos+1]
+// }
 
 // Parse string that is "string" or just string.
 func (line *cmdLine) parseQuoteString() (string, bool) {
@@ -187,11 +190,9 @@ func (line *cmdLine) parseQuoteString() (string, bool) {
 
 		if inQuote {
 			value += string(by)
-		} else {
-			// Space terminates a no quoted string.
-			if by != 0 && unicode.IsSpace(rune(by)) {
-				return value, true
-			}
+		} else // Space terminates a no quoted string.
+		if by != 0 && unicode.IsSpace(rune(by)) {
+			return value, true
 		}
 
 		value += string(by)
@@ -202,7 +203,7 @@ func (line *cmdLine) parseQuoteString() (string, bool) {
 }
 
 // Parse parse a number.
-func (line *cmdLine) getNumber() (int, error) {
+func (line *cmdLine) getNumber() (uint32, error) {
 	line.skipSpace()
 
 	// Check if end of line.
@@ -210,14 +211,14 @@ func (line *cmdLine) getNumber() (int, error) {
 		return 0, errors.New("not a number")
 	}
 
-	value := 0
+	value := uint32(0)
 	// Characters must be alphabetic
 	by := line.getCurrent()
 	for by != 0 {
 		if !unicode.IsDigit(rune(by)) {
 			return 0, errors.New("not a number")
 		}
-		value = (value * 10) + int(by-'0')
+		value = (value * 10) + uint32(by-'0')
 		by = line.getCurrent()
 		if by != 0 && unicode.IsSpace(rune(by)) {
 			break
@@ -230,11 +231,11 @@ func (line *cmdLine) getNumber() (int, error) {
 const hex = "0123456789abcdef"
 
 // Parse hex number.
-func (line *cmdLine) getHex() (int, error) {
+func (line *cmdLine) getHex() (uint32, error) {
 	line.skipSpace()
 
 	pos := line.pos
-	value := 0
+	value := uint32(0)
 	// Characters must be alphabetic
 	by := line.getCurrent()
 	for by != 0 {
@@ -243,7 +244,7 @@ func (line *cmdLine) getHex() (int, error) {
 			line.pos = pos
 			return 0, errors.New("not a number")
 		}
-		value = (value << 4) + digit
+		value = (value << 4) + uint32(digit)
 		by = line.getCurrent()
 		if by != 0 && unicode.IsSpace(rune(by)) {
 			break
@@ -254,8 +255,8 @@ func (line *cmdLine) getHex() (int, error) {
 }
 
 // Parse option name.
-// Return string and whether last charcter was = or not
-func (line *cmdLine) getWord(equal bool) (string, byte) {
+// Return string and whether last charcter was = or not.
+func (line *cmdLine) getWord(equal bool) string {
 	line.skipSpace()
 
 	// Characters must be alphabetic
@@ -265,7 +266,7 @@ func (line *cmdLine) getWord(equal bool) (string, byte) {
 	for by != 0 {
 		if !unicode.IsLetter(rune(by)) {
 			line.pos = pos
-			return "", by
+			return ""
 		}
 		value += string([]byte{by})
 		by = line.getCurrent()
@@ -273,33 +274,30 @@ func (line *cmdLine) getWord(equal bool) (string, byte) {
 			break
 		}
 		if by == '=' && equal {
-			return strings.ToLower(value), by
+			return strings.ToLower(value)
 		}
 	}
 
-	return strings.ToLower(value), by
+	return strings.ToLower(value)
 }
 
 // Get an option.
 func (line *cmdLine) getOption(opts []command.Options, cmdType int) (*command.CmdOption, error) {
 	// Get a word, stoping at equal or space.
-	name, last := line.getWord(true)
+	name := line.getWord(true)
 
 	// Get command interface
 	opt := command.CmdOption{Name: name}
 
-	if name == "" && last != '"' {
+	if name == "" && !line.isEOL() {
 		if cmdType == command.ValidAttach {
 			// For attach commands, if there is a valid name, consider it a file name.
-			if last == 0 || unicode.IsSpace(rune(last)) {
-				line.pos--
-				file, ok := line.parseQuoteString()
-				if !ok {
-					return nil, errors.New("invalid option")
-				}
-				opt.Name = "file"
-				opt.EqualOpt = file
+			file, ok := line.parseQuoteString()
+			if !ok {
+				return nil, errors.New("invalid option")
 			}
+			opt.Name = "file"
+			opt.EqualOpt = file
 		}
 		return &opt, nil
 	}
@@ -309,8 +307,8 @@ func (line *cmdLine) getOption(opts []command.Options, cmdType int) (*command.Cm
 	case -1:
 		return nil, errors.New("unknown option: " + name)
 	case command.OptionSwitch:
-		if last != 0 && line.line[line.pos] != ' ' {
-			break
+		if !line.isEOL() && !unicode.IsSpace(rune(line.getCurrent())) {
+			return nil, errors.New("switch options must be followed by separator: " + name)
 		}
 		return nil, errors.New("switch option can't have arguments: " + name)
 	case command.OptionFile:
@@ -320,30 +318,31 @@ func (line *cmdLine) getOption(opts []command.Options, cmdType int) (*command.Cm
 		}
 		opt.EqualOpt = file
 	case command.OptionNumber:
-		if last != '=' {
+		if line.getCurrent() != '=' {
 			return nil, errors.New("number options must be followed by number: " + name)
 		}
 		num, err := line.getNumber()
 		if err != nil {
 			return nil, errors.New("number options must be followed by number: " + name)
 		}
-		opt.Value = int(num)
+		opt.Value = num
 
 	case command.OptionHex:
-		if last != '=' {
+		if line.getCurrent() != '=' {
 			return nil, errors.New("hex options must be followed by hexdecimal numbe: " + name)
 		}
 		num, err := line.getHex()
 		if err != nil {
 			return nil, errors.New("hex options must be followed by hexdecimal number: " + name)
 		}
-		opt.Value = int(num)
+		opt.Value = num
+
 	case command.OptionList:
-		if last != '=' {
+		if line.getCurrent() != '=' {
 			return nil, errors.New("number options must be followed by name: " + name)
 		}
-		listStr, end := line.getWord(false)
-		if end != 0 || !unicode.IsSpace(rune(last)) {
+		listStr := line.getWord(false)
+		if !line.isEOL() && !unicode.IsSpace(rune(line.getCurrent())) {
 			return nil, errors.New("number options must be followed by name: " + name)
 		}
 		opt.EqualOpt = listStr
@@ -372,12 +371,12 @@ func (line *cmdLine) getShowOptions(device command.Command) ([]*command.CmdOptio
 	}
 
 	for {
-		name, last := line.getWord(false)
+		name := line.getWord(false)
 
 		if name == "" {
 			break
 		}
-		if last != 0 && !unicode.IsSpace(rune(last)) {
+		if !line.isEOL() && !unicode.IsSpace(rune(line.getCurrent())) {
 			return nil, errors.New("set command does not take modifies")
 		}
 		// Get a word, stoping at equal or space.

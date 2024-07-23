@@ -40,7 +40,7 @@ import (
 var cmdList = []cmd{
 	{Name: "attach", Min: 2, Process: attach, Complete: attachComplete},
 	{Name: "detach", Min: 2, Process: detach, Complete: func(line *cmdLine) []string {
-		return matchDevice(true, *line, command.ValidAttach, false)
+		return line.matchDevice(command.ValidAttach, false)
 	}},
 	{Name: "set", Min: 3, Process: set, Complete: setComplete},
 	{Name: "unset", Min: 4, Process: unset, Complete: setComplete},
@@ -49,11 +49,13 @@ var cmdList = []cmd{
 	{Name: "continue", Min: 1, Process: cont},
 	{Name: "start", Min: 3, Process: start},
 	{Name: "show", Min: 2, Process: show, Complete: showComplete},
+	{Name: "examine", Min: 2, Process: examine},
+	{Name: "deposit", Min: 2, Process: deposit},
 	{Name: "ipl", Min: 1, Process: ipl, Complete: func(line *cmdLine) []string {
-		return matchDevice(true, *line, command.ValidIPL, false)
+		return line.matchDevice(command.ValidIPL, false)
 	}},
 	{Name: "rewind", Min: 3, Process: rewind, Complete: func(line *cmdLine) []string {
-		return matchDevice(true, *line, command.ValidRewind, false)
+		return line.matchDevice(command.ValidRewind, false)
 	}},
 	{Name: "reset", Min: 5, Process: reset, Complete: DeviceComplete},
 }
@@ -179,8 +181,8 @@ func show(line *cmdLine, _ *core.Core) (bool, error) {
 	// Get device number make sure it is valid.
 	devNum, err := line.getHex()
 	if err != nil || line.isEOL() {
-		name, last := line.getWord(false)
-		if last != 0 || name != "all" {
+		name := line.getWord(false)
+		if name != "all" {
 			return false, errors.New("set must be device number, empty or all")
 		}
 
@@ -191,13 +193,13 @@ func show(line *cmdLine, _ *core.Core) (bool, error) {
 				continue
 			}
 
-			device, err := ch.GetCommand(uint16(devNum))
-			if err != nil {
+			device, nfnd := ch.GetCommand(uint16(devNum))
+			if nfnd != nil {
 				continue
 			}
 
-			out, err := device.Show(optList)
-			if err != nil {
+			out, noOpt := device.Show(optList)
+			if noOpt != nil {
 				continue
 			}
 			fmt.Println(out)
@@ -227,13 +229,12 @@ func show(line *cmdLine, _ *core.Core) (bool, error) {
 
 // Set/Unset command completion.
 func showComplete(line *cmdLine) []string {
-	devices := matchDevice(true, *line, command.ValidShow, false)
+	devices := line.matchDevice(command.ValidShow, false)
 	if len(devices) != 1 {
 		return devices
 	}
 
 	device, err := line.getDevice()
-
 	if err != nil {
 		return devices
 	}
@@ -269,8 +270,8 @@ func reset(line *cmdLine, _ *core.Core) (bool, error) {
 	// Get device number make sure it is valid.
 	devNum, err := line.getHex()
 	if err != nil || line.isEOL() {
-		name, last := line.getWord(false)
-		if last != 0 || name != "all" {
+		name := line.getWord(false)
+		if name != "all" {
 			return false, errors.New("set must be device number, empty or all")
 		}
 
@@ -278,8 +279,8 @@ func reset(line *cmdLine, _ *core.Core) (bool, error) {
 		for _, str := range config.ModelList {
 			devNum, ok := strconv.ParseUint(str, 16, 12)
 			if ok == nil {
-				device, err := ch.GetCommand(uint16(devNum))
-				if err == nil {
+				device, deverr := ch.GetCommand(uint16(devNum))
+				if deverr == nil {
 					_ = device.Reset()
 				}
 			}

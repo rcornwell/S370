@@ -106,6 +106,7 @@ func PutWordMask(addr, data, mask uint32) bool {
 	return false
 }
 
+// Get access key for address.
 func GetKey(addr uint32) uint8 {
 	if addr >= memory.size {
 		return 0
@@ -113,8 +114,36 @@ func GetKey(addr uint32) uint8 {
 	return memory.key[addr>>11]
 }
 
+// Update access key for address.
 func PutKey(addr uint32, key uint8) {
 	if addr < memory.size {
 		memory.key[addr>>11] = key
+	}
+}
+
+// Get number of bytes starting at address.
+func GetBytes(addr uint32, num int) []byte {
+	result := []byte{}
+
+	word := GetMemory(addr)
+	for range num {
+		by := (word >> (8 * (3 - addr&3))) & 0xff
+		result = append(result, byte(by))
+		addr++
+		if (addr & 3) == 0 {
+			word = GetMemory(addr)
+		}
+	}
+	return result
+}
+
+// Set number of bytes into memory starting at address.
+func SetBytes(addr uint32, data []byte) {
+	for i := range data {
+		var mask uint32 = 0x000000ff
+
+		offset := 8 * (3 - (addr & 0x3))
+		SetMemoryMask(addr, uint32(data[i])<<offset, mask<<offset)
+		addr++
 	}
 }

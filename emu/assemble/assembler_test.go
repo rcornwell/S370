@@ -75,7 +75,6 @@ func TestAssemble(t *testing.T) {
 	if len(inst) != 0 {
 		t.Error("Inst: '" + test + "' Got: " + printBytes(inst) + " Expected empty")
 	}
-
 }
 
 func TestAssembleRR(t *testing.T) {
@@ -911,5 +910,4 @@ func TestAssembleRRE2(t *testing.T) {
 	if len(inst) != 0 {
 		t.Error("Inst: '" + test + "' Got: " + printBytes(inst) + " Expected empty")
 	}
-
 }

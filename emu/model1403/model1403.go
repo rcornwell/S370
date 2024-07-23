@@ -68,8 +68,8 @@ type Model1403ctx struct {
 	file     *os.File    // Printer file.
 	fcb      [100]uint16 // FCB tape.
 	fcbName  string      // Name of current FCB.
-	lpp      int         // Lines per page
-	lineNum  int         // Current line number.
+	lpp      uint32      // Lines per page
+	lineNum  uint32      // Current line number.
 	detachk  bool        // Don't return data-check.
 	ch12     bool        // Channel 12 sense.
 	buffer   [140]uint8  // buffer.
@@ -618,7 +618,7 @@ func create(devNum uint16, _ string, options []config.Option) error {
 			if errx != nil {
 				return errors.New("lines per page not a number")
 			}
-			device.lpp = int(lines)
+			device.lpp = uint32(lines)
 		case "FILE":
 			if device.file != nil {
 				return errors.New("file option duplicated")

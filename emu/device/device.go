@@ -76,3 +76,14 @@ const (
 	SenseOVRRUN  uint8 = 0x02 // Data Overrun
 	SenseOPRCHK  uint8 = 0x01 // Invalid operation to device
 )
+
+// Values to retrieve or set CPU registers.
+const (
+	Register = 1 + iota
+	FPRegister
+	CtlRegister
+	PSWRegister
+	PCRegister
+	Symbolic
+	Memory
+)

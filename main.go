@@ -46,7 +46,6 @@ import (
 var Logger *slog.Logger
 
 func main() {
-
 	defaultConfig := filepath.Base(os.Args[0]) + ".cfg"
 	optConfig := getopt.StringLong("config", 'c', defaultConfig, "Configuration file")
 	optLogFile := getopt.StringLong("log", 'l', "", "Log file")

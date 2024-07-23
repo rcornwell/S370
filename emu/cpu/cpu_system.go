@@ -456,6 +456,97 @@ func (cpu *cpuState) opSTxSM(step *stepInfo) uint16 {
 	return 0
 }
 
+// Load individual control register.
+func (cpu *cpuState) loadControl(reg uint8, value uint32) {
+	switch reg {
+	case 0: // General control register
+		/* CR0 values
+			|    |     |     |   |   |   |   |
+		0 0 0 00000 00 1 11 111 1111222222222231|
+		0 1 2 34567 89 0 12 345 6789012345678901|
+		b s t xxxxx ps 0 ss xxx iiiiiixxiiixxxxx|
+		m s d                   mmmmct  iIE     |
+		*/
+		if (value & 0x80000000) != 0 {
+			ch.SetBMUXenable(true)
+		} else {
+			ch.SetBMUXenable(false)
+		}
+		cpu.pageShift = 0
+		cpu.segShift = 0
+		switch (value >> 22) & 3 {
+		default: // Generate translation exception
+		case 1: // 2K page
+			cpu.pageShift = 11
+			cpu.pageMask = 0x7ff
+			cpu.pteAvail = 4
+			cpu.pteMBZ = 2
+			cpu.pteShift = 3
+			cpu.pteLenShift = 1
+		case 2: // 4K page
+			cpu.pageShift = 12
+			cpu.pageMask = 0xfff
+			cpu.pteAvail = 8
+			cpu.pteMBZ = 6
+			cpu.pteShift = 4
+			cpu.pteLenShift = 0
+		}
+
+		switch (value >> 19) & 0x7 {
+		default: // Generate translation exception
+		case 0: // 64K segments
+			cpu.segShift = 16
+			cpu.segMask = AMASK >> 16
+		case 2: // 1M segments
+			cpu.segShift = 20
+			cpu.segMask = AMASK >> 20
+			cpu.pteLenShift += 4
+		}
+		// Generate PTE index mask
+		cpu.pageIndex = ((^(cpu.segMask << cpu.segShift) &
+			^cpu.pageMask) & AMASK) >> cpu.pageShift
+		cpu.intEnb = (value & 0x400) != 0
+		cpu.todEnb = (value & 0x800) != 0
+
+	case 1: // Segment table address and length
+		for i := range 256 {
+			cpu.tlb[i] = 0
+		}
+		cpu.segAddr = value & AMASK
+		cpu.segLen = (((value >> 24) & 0xff) + 1) << 4
+
+	case 2: // Masks
+		if cpu.ecMode {
+			if cpu.irqEnb {
+				cpu.sysMask = uint16(value >> 16)
+			} else {
+				cpu.sysMask = 0
+			}
+			ch.IrqPending = true
+		}
+
+	case 6: // Assist function control
+		if cpu.vmAssist && (value&0xc0000000) == 0x80000000 {
+			cpu.vmaEnb = true
+		} else {
+			cpu.vmaEnb = false
+		}
+
+	case 8: // Monitor masks
+
+	case 9: // PER general register masks
+		cpu.perBranch = (value & 0x80000000) != 0
+		cpu.perFetch = (value & 0x40000000) != 0
+		cpu.perStore = (value & 0x20000000) != 0
+		cpu.perReg = (value & 0x10000000) != 0
+	case 10: // PER staring address
+	case 11: // PER ending address
+	case 14: // Machine Check handleing
+	case 15: // Machine check address
+	default:
+	}
+}
+
 // Load control registers.
 func (cpu *cpuState) opLCTL(step *stepInfo) uint16 {
 	if (cpu.flags & problem) != 0 {
@@ -473,93 +564,7 @@ func (cpu *cpuState) opLCTL(step *stepInfo) uint16 {
 			return err
 		}
 		cpu.cregs[step.R1] = temp
-		switch step.R1 {
-		case 0: // General control register
-			/* CR0 values
-				|    |     |     |   |   |   |   |
-			0 0 0 00000 00 1 11 111 1111222222222231|
-			0 1 2 34567 89 0 12 345 6789012345678901|
-			b s t xxxxx ps 0 ss xxx iiiiiixxiiixxxxx|
-			m s d                   mmmmct  iIE     |
-			*/
-			if (temp & 0x80000000) != 0 {
-				ch.SetBMUXenable(true)
-			} else {
-				ch.SetBMUXenable(false)
-			}
-			cpu.pageShift = 0
-			cpu.segShift = 0
-			switch (temp >> 22) & 3 {
-			default: // Generate translation exception
-			case 1: // 2K page
-				cpu.pageShift = 11
-				cpu.pageMask = 0x7ff
-				cpu.pteAvail = 4
-				cpu.pteMBZ = 2
-				cpu.pteShift = 3
-				cpu.pteLenShift = 1
-			case 2: // 4K page
-				cpu.pageShift = 12
-				cpu.pageMask = 0xfff
-				cpu.pteAvail = 8
-				cpu.pteMBZ = 6
-				cpu.pteShift = 4
-				cpu.pteLenShift = 0
-			}
-
-			switch (temp >> 19) & 0x7 {
-			default: // Generate translation exception
-			case 0: // 64K segments
-				cpu.segShift = 16
-				cpu.segMask = AMASK >> 16
-			case 2: // 1M segments
-				cpu.segShift = 20
-				cpu.segMask = AMASK >> 20
-				cpu.pteLenShift += 4
-			}
-			// Generate PTE index mask
-			cpu.pageIndex = ((^(cpu.segMask << cpu.segShift) &
-				^cpu.pageMask) & AMASK) >> cpu.pageShift
-			cpu.intEnb = (temp & 0x400) != 0
-			cpu.todEnb = (temp & 0x800) != 0
-
-		case 1: // Segment table address and length
-			for i := range 256 {
-				cpu.tlb[i] = 0
-			}
-			cpu.segAddr = temp & AMASK
-			cpu.segLen = (((temp >> 24) & 0xff) + 1) << 4
-
-		case 2: // Masks
-			if cpu.ecMode {
-				if cpu.irqEnb {
-					cpu.sysMask = uint16(temp >> 16)
-				} else {
-					cpu.sysMask = 0
-				}
-				ch.IrqPending = true
-			}
-
-		case 6: // Assist function control
-			if cpu.vmAssist && (temp&0xc0000000) == 0x80000000 {
-				cpu.vmaEnb = true
-			} else {
-				cpu.vmaEnb = false
-			}
-
-		case 8: // Monitor masks
-
-		case 9: // PER general register masks
-			cpu.perBranch = (temp & 0x80000000) != 0
-			cpu.perFetch = (temp & 0x40000000) != 0
-			cpu.perStore = (temp & 0x20000000) != 0
-			cpu.perReg = (temp & 0x10000000) != 0
-		case 10: // PER staring address
-		case 11: // PER ending address
-		case 14: // Machine Check handleing
-		case 15: // Machine check address
-		default:
-		}
+		cpu.loadControl(step.R1, temp)
 
 		if step.R1 == step.R2 {
 			break

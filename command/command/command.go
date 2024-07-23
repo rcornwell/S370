@@ -31,7 +31,7 @@ import "errors"
 type CmdOption struct {
 	Name     string // Name of option.
 	EqualOpt string // Value of string after =.
-	Value    int    // Numberic value.
+	Value    uint32 // Numberic value.
 }
 
 // List of option types.

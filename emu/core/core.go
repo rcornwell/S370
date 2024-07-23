@@ -121,6 +121,11 @@ func (core *Core) SendDeviceEnd(devNum uint16) {
 	core.Master <- master.Packet{DevNum: devNum, Msg: master.DeviceEnd}
 }
 
+// Tell if CPU is currently running.
+func (core *Core) IsRunning() bool {
+	return core.running
+}
+
 // Process a packet sent to system simulation.
 func (core *Core) processPacket(packet master.Packet) {
 	switch packet.Msg {
